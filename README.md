@@ -1,4 +1,4 @@
-**Headset Simulation Endpoints**
+#**Headset Simulation Endpoints**
 
 To assist in development, we'll need to develop backend endpoints to simulate brain waves from a headset. Since in reality we are getting real-time data from the headsets, the simulator should be implemented in Rust/Golang due to their speed and ability to deal with real-time environments. With each of these, we'll need them to send out vectors/arrays of length 64 as fast as possible with upper limits we can set when the endpoints are called. We'll also need end commands and start commands. These APIs need to be able to handle multiple clients and not have any CORS issues (a globally-accessible, static vector)
 
