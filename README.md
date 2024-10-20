@@ -5,11 +5,11 @@ To assist in development, we'll need to develop backend endpoints to simulate br
 
 Example workflow: 
 
-start command
+    start command
 
-endpoint starts sending out vectors of data: Eg. [1,1,1,1,1,1,1] 
+    endpoint starts sending out vectors of data: Eg. [1,1,1,1,1,1,1] 
 
-end command and endpoint stops sending data
+    end command and endpoint stops sending data
 
 
 Tasks (These endpoints should have the same behaviour):
