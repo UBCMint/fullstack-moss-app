@@ -3,7 +3,7 @@ use actix_web::{ web, App, HttpServer, Responder, HttpResponse };
 async fn start_simulation() -> impl Responder {
     HttpResponse::Ok().body("Simulation started")
 }
-
+            
 async fn end_simulation() -> impl Responder {
     HttpResponse::Ok().body("Simulation stopped")
 }
