@@ -29,25 +29,28 @@ func startSimulation(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-
-	// Check for a limit parameter in the request query
-	// "r.URL.Query()["limit"]" Retrives any query parameter named "limit"
-	// "l" is assigned as the query paramter associated with "limit"
-	if l, ok := r.URL.Query()["limit"]; ok {
-		// "strconv.Atoi(l[0])" Converst the paramter value from a string to an integer (first item in l)
-		if val, err := strconv.Atoi(l[0]); err == nil {
-			running = true // Running variable is now set to true because the simulation is running
-			limit = val
-			fmt.Fprintln(w, "Simulation started with limit:", limit)
-		} else {
-			fmt.Fprintln(w, "Invalid limit value")
-			return
-		}
+	// Check if the simulation is already running
+	if running {
+		fmt.Fprintln(w, "Simulation is already running")
 	} else {
-		running = true // Running variable is now set to true because the simulation is running
-		fmt.Fprintln(w, "Simulation started with default limit of 100")
+		// Check for a limit parameter in the request query
+		// "r.URL.Query()["limit"]" Retrives any query parameter named "limit"
+		// "l" is assigned as the query paramter associated with "limit"
+		if l, ok := r.URL.Query()["limit"]; ok {
+			// "strconv.Atoi(l[0])" Converst the paramter value from a string to an integer (first item in l)
+			if val, err := strconv.Atoi(l[0]); err == nil {
+				running = true // Running variable is now set to true because the simulation is running
+				limit = val
+				fmt.Fprintln(w, "Simulation started with limit:", limit)
+			} else {
+				fmt.Fprintln(w, "Invalid limit value")
+				return
+			}
+		} else {
+			running = true // Running variable is now set to true because the simulation is running
+			fmt.Fprintln(w, "Simulation started with default limit of 100")
+		}
 	}
-
 	// Start sending data as JSON arrays continuously
 	go func() {
 		for running {
@@ -98,3 +101,6 @@ func main() {
 		fmt.Println("Error starting server:", err)
 	}
 }
+
+// http://localhost:8080/start
+// http://localhost:8080/end
