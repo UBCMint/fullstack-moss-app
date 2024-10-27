@@ -25,43 +25,48 @@ func generateData(limit int) []int {
 // Handles the /start endpoint to begin the simulation
 // r is an instance of http.Request, which contains details about the incoming HTTP request
 func startSimulation(w http.ResponseWriter, r *http.Request) {
-	if running {
-		fmt.Fprintln(w, "Simulation is already running!")
-		return
-	} else {
-		// Check for a limit parameter in the request query
-		// "r.URL.Query()["limit"]" Retrives any query parameter named "limit"
-		// "l" is assigned as the query paramter associated with "limit"
-		if l, ok := r.URL.Query()["limit"]; ok {
-			// "strconv.Atoi(l[0])" Converst the paramter value from a string to an integer (first item in l)
-			if val, err := strconv.Atoi(l[0]); err == nil {
-				running = true // Running variable is now set to true because the simulation is running
-				limit = val
-				fmt.Fprintln(w, "Simulation started with limit:", limit)
-			} else {
-				fmt.Fprintln(w, "Invalid limit value")
-				return
-			}
-		} else {
-			running = true // Running variable is now set to true because the simulation is running
-			fmt.Fprintln(w, "Simulation has started with default limit of 100")
-		}
+	// Set headers for SSE
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
 
-		// Start sending data as JSON arrays continuously
-		go func() {
-			for running {
-				data := generateData(limit)
-				jsonData, err := json.Marshal(data) // converts the data array to JSON format
-				// Marshalling is used for serialization - converts into a byte stream (JSON) that can be sent over the network
-				if err != nil {
-					fmt.Println("Error marshaling data:", err) // Error handling for JSON marshaling
-					continue
-				}
-				fmt.Println(string(jsonData))
-				time.Sleep(500 * time.Millisecond) // Pauses for 500 milliseconds between data sends
-			}
-		}()
+	// Check for a limit parameter in the request query
+	// "r.URL.Query()["limit"]" Retrives any query parameter named "limit"
+	// "l" is assigned as the query paramter associated with "limit"
+	if l, ok := r.URL.Query()["limit"]; ok {
+		// "strconv.Atoi(l[0])" Converst the paramter value from a string to an integer (first item in l)
+		if val, err := strconv.Atoi(l[0]); err == nil {
+			running = true // Running variable is now set to true because the simulation is running
+			limit = val
+			fmt.Fprintln(w, "Simulation started with limit:", limit)
+		} else {
+			fmt.Fprintln(w, "Invalid limit value")
+			return
+		}
+	} else {
+		running = true // Running variable is now set to true because the simulation is running
+		fmt.Fprintln(w, "Simulation started with default limit of 100")
 	}
+
+	// Start sending data as JSON arrays continuously
+	go func() {
+		for running {
+			data := generateData(limit)
+			jsonData, err := json.Marshal(data) // converts the data array to JSON format
+			// Marshalling is used for serialization - converts into a byte stream (JSON) that can be sent over the network
+			if err != nil {
+				fmt.Println("Error marshaling data:", err)
+				continue
+			}
+			fmt.Fprintf(w, "data: %s\n\n", jsonData) // Send data in SSE format
+			w.(http.Flusher).Flush()                 // Flush the response writer to ensure data is sent immediately
+			time.Sleep(500 * time.Millisecond)       // Pause before sending the next data
+		}
+	}()
+
+	// Keep the connection open
+	<-r.Context().Done() // Wait for the request context to be done
+	running = false      // Stop the simulation when the context is done
 }
 
 // Handles the /end endpoint to end the simulation
