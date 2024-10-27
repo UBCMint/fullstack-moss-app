@@ -2,12 +2,18 @@
 name = "rust_backend"
 version = "0.1.0"
 edition = "2021"
-      
+
 [dependencies]
-actix-cors = "0.7.0"
-actix-web = "4.9.0"
-async-trait = "0.1.83"
-json = "0.12.4"
-rand = "0.8.5"
-serde = "1.0.210"
-tokio = { version = "1.40.0", features = ["full"] }
+actix-web = "4"
+actix-cors = "0.6"
+tokio = { version = "1", features = ["full"] }
+rand = "0.8"
+futures-util = "0.3"
+async-stream = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+env_logger = "0.9" # For logging
+log = "0.4" # For log macros
+
+
+
