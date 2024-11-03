@@ -29,6 +29,7 @@ func startSimulation(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+
 	// Check if the simulation is already running
 	if running {
 		fmt.Fprintln(w, "Simulation is already running")
@@ -63,7 +64,7 @@ func startSimulation(w http.ResponseWriter, r *http.Request) {
 			}
 			fmt.Fprintf(w, "data: %s\n\n", jsonData) // Send data in SSE format
 			w.(http.Flusher).Flush()                 // Flush the response writer to ensure data is sent immediately
-			time.Sleep(500 * time.Millisecond)       // Pause before sending the next data
+			time.Sleep(20 * time.Millisecond)        // Pause before sending the next data
 		}
 	}()
 
