@@ -73,6 +73,32 @@ export default function Form() {
         }
     };
 
+    const addTimeSeriesData = async () => {
+        try {
+            const timestamp = new Date().toISOString();
+            const value = Math.random() * 100;
+            const metadata = "Sample metadata";
+    
+            const result = await invoke<string>("add_time_series_data", {
+                timestamp,
+                value,
+                metadata,
+            });
+            console.log(result);
+        } catch (error) {
+            console.error("Failed to add time series data", error);
+        }
+    };
+    
+    const fetchTimeSeriesData = async () => {
+        try {
+            const data = await invoke<[number, string, number, string][]>("get_time_series_data");
+            console.log("Fetched time series data:", data);
+        } catch (error) {
+            console.error("Failed to fetch time series data", error);
+        }
+    };
+
     return (
         <div className="max-w-md mx-auto p-5 border border-gray-300 rounded-lg bg-gray-800">
             <button
@@ -153,6 +179,19 @@ export default function Form() {
                     Get Users
                 </button>
             </form>
+
+            <button
+                onClick={addTimeSeriesData}
+                className="w-full mt-4 px-5 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-700 transition duration-300 ease-in-out"
+            >
+                Add Time Series Data
+            </button>
+            <button
+                onClick={fetchTimeSeriesData}
+                className="w-full mt-4 px-5 py-2 bg-teal-500 text-white rounded-md hover:bg-teal-700 transition duration-300 ease-in-out"
+            >
+                Fetch Time Series Data
+            </button>
 
             {users.length > 0 && (
                 <ul className="w-full text-white mt-2 space-y-2">
