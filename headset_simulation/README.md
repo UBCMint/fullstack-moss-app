@@ -17,3 +17,45 @@ To assist in development, we'll need to develop backend endpoints to simulate br
     1. An endpoint in Rust that fulfills the above requirements
 
     2. An endpoint in Golang that fulfills the above requirements
+# TO PULL THE DATA FROM EEG HEADSETS - 
+** Clone this repository 
+**Clone the `liblsl` repository within the base branch:**
+   ```sh
+   git clone https://github.com/sccn/liblsl.git
+   cd liblsl
+   ```
+
+3. **Install required dependencies:**
+   ```sh
+   sudo apt-get install cmake build-essential
+   ```
+
+4. **Build `liblsl`:**
+   ```sh
+   mkdir build
+   cd build
+   cmake ..
+   make
+   ```
+
+5. **Compile the `stream.cpp` file:**
+   ```sh
+   g++ -shared -o libstream.so -fPIC stream.cpp -llsl -lpthread
+   ```
+
+6. **Run the Go file:**
+   ```sh
+   export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
+   go run main.go
+   ```
+
+## Notes
+- Make sure the compiled `libstream.so` file is in the same directory as your Go file.
+- If you encounter permission issues, try running commands with `sudo`.
+- Ensure your Go environment is set up correctly before running `main.go`.
+
+## Troubleshooting
+If you experience issues, consider:
+- Verifying that `liblsl` is correctly built (`ls build` should list compiled files).
+- Checking that the correct dependencies are installed.
+- Ensuring `LD_LIBRARY_PATH` includes the necessary shared libraries.
