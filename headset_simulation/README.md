@@ -19,6 +19,7 @@ To assist in development, we'll need to develop backend endpoints to simulate br
     2. An endpoint in Golang that fulfills the above requirements
 # TO PULL THE DATA FROM EEG HEADSETS - 
 ** Clone this repository 
+
 **Clone the `liblsl` repository within the base branch:**
    ```sh
    git clone https://github.com/sccn/liblsl.git
