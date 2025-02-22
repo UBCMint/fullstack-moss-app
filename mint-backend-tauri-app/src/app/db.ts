@@ -2,7 +2,9 @@
 // npm install @tauri-apps/api
 // or
 // yarn add @tauri-apps/api
-import { invoke } from '@tauri-apps/api;
+
+// Patrick: I had to change this to /core to get the invoke method 
+import { invoke } from '@tauri-apps/api/core';
 interface TimeSeriesData {
   id: number;
   timestamp: string;
@@ -51,6 +53,16 @@ export async function getTimeSeriesDataRange(
     throw error;
   }
 }
+
+export async function transferDataToPostgres(): Promise<void> {
+    try {
+      await invoke('transfer_data_to_postgres');
+      console.log('Users and time-series data transferred successfully to PostgreSQL');
+    } catch (error) {
+      console.error('Failed to transfer data:', error);
+      throw error;
+    }
+  }
 
 // Example usage in a component:
 // App.tsx or similar

@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { User } from './types'; // Adjust the path as necessary
+import { transferDataToPostgres } from './db';
 
 export default function Form() {
     const [name, setName] = useState("");
@@ -10,6 +11,7 @@ export default function Form() {
     const [response, setResponse] = useState("");
     const [users, setUsers] = useState<User[]>([]);
     const [dbStatus, setDbStatus] = useState("");
+    const [transferDbStatus, setTransferDbStatus] = useState("")
 
     const handleNameSubmit = (event: React.FormEvent) => {
         event.preventDefault();
@@ -96,6 +98,15 @@ export default function Form() {
             console.log("Fetched time series data:", data);
         } catch (error) {
             console.error("Failed to fetch time series data", error);
+        }
+    };
+
+    const handleDbTransfer = async () => {
+        try {
+            await transferDataToPostgres();
+            setTransferDbStatus("Users and time-series data successfully transferred to PostgreSQL");
+        } catch (error) {
+            setTransferDbStatus("Failed to transfer data");
         }
     };
 
@@ -192,6 +203,14 @@ export default function Form() {
             >
                 Fetch Time Series Data
             </button>
+
+            <button
+                onClick={handleDbTransfer}
+                className="w-full mt-4 px-5 py-2 bg-teal-500 text-white rounded-md hover:bg-teal-700 transition duration-300 ease-in-out"
+            >
+                Transfer Data to PostgreSQL
+            </button>
+            {transferDbStatus && <p>{transferDbStatus}</p>}
 
             {users.length > 0 && (
                 <ul className="w-full text-white mt-2 space-y-2">
