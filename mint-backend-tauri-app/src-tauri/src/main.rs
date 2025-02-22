@@ -52,8 +52,18 @@ async fn start_websocket_server() {
                             };
                             write.send(Message::Text(response)).await.unwrap();
                         }
+                        else{
+                            // for now send invalid command but we need to discuss what are potential commands for users
+                            if let Err(e) = write.send(Message::Text("Invalid command".into())).await {
+                                println!("Error sending invalid command response: {}", e);
+                            }
+                        }
                     }
-                    Ok(_) => { /* Handle other message types need some discussion on that */ },
+                    Ok(_) => {  
+                        if let Err(e) = write.send(Message::Text("Invalid command".into())).await {
+                            println!("Error sending invalid command response: {}", e);
+                        }
+                    },
                     Err(e) => {
                         println!("Error receiving message: {}", e);
                         break;
