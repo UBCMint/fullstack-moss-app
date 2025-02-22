@@ -99,6 +99,12 @@ export default function Form() {
         }
     };
 
+    const runPythonScript = async () => {
+        invoke<string>("run_python_script")
+            .then(result => console.log(result))
+            .catch(console.error);
+    };
+
     return (
         <div className="max-w-md mx-auto p-5 border border-gray-300 rounded-lg bg-gray-800">
             <button
@@ -191,6 +197,13 @@ export default function Form() {
                 className="w-full mt-4 px-5 py-2 bg-teal-500 text-white rounded-md hover:bg-teal-700 transition duration-300 ease-in-out"
             >
                 Fetch Time Series Data
+            </button>
+
+            <button
+                onClick={runPythonScript}
+                className="w-full mt-4 px-5 py-2 bg-teal-500 text-white rounded-md hover:bg-teal-700 transition duration-300 ease-in-out"
+            >
+                Run Python Script
             </button>
 
             {users.length > 0 && (
