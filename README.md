@@ -58,7 +58,7 @@ CREATE TABLE user_ml_selections (
   parameters JSONB
 );
 
--- Create EEG_Data table (to store time-series EEG data) didnt run this yet
+-- Create EEG_Data table (to store time-series EEG data)
 CREATE TABLE eeg_data (
   time TIMESTAMPTZ NOT NULL,
   session_id INTEGER NOT NULL REFERENCES sessions(id),
