@@ -63,7 +63,7 @@ async fn start_websocket_server() {
                             // Spawn a task that sends EEG data every second.
                             let write_clone = Arc::clone(&write);
                             tokio::spawn(async move {
-                                let mut interval = tokio::time::interval(Duration::from_secs(1));
+                                let mut interval = tokio::time::interval(Duration::from_millis(10));
                                 loop {
                                     interval.tick().await;
                                     let eeg_data = simulate_eeg_data();
