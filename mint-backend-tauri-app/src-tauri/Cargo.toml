@@ -28,3 +28,5 @@ rusqlite = { version = "0.32.0", features = ["bundled"] }
 tokio = { version = "1", features = ["full"] }
 tokio-tungstenite = "0.21"
 futures-util = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.8"
