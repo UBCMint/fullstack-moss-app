@@ -32,9 +32,9 @@ async fn select_model(filter: String, model_type: String) -> Result<String, Stri
 fn simulate_eeg_data() -> String {
     let mut rng = rand::thread_rng();
     let data = vec![
-        json!({"timestamp": Utc::now().timestamp(), "channel": "1", "value": rng.gen_range(10.0..20.0)}),
-        json!({"timestamp": Utc::now().timestamp(), "channel": "2", "value": rng.gen_range(10.0..20.0)}),
-        json!({"timestamp": Utc::now().timestamp(), "channel": "3", "value": rng.gen_range(10.0..20.0)}),
+        json!({"timestamp": Utc::now().timestamp_millis(), "channel": "1", "value": rng.gen_range(10.0..20.0)}),
+        json!({"timestamp": Utc::now().timestamp_millis(), "channel": "2", "value": rng.gen_range(10.0..20.0)}),
+        json!({"timestamp": Utc::now().timestamp_millis(), "channel": "3", "value": rng.gen_range(10.0..20.0)}),
     ];
     serde_json::to_string(&data).unwrap()
 }
