@@ -10,7 +10,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.0.2",
+    "@tauri-apps/api": "^2.3.0",
     "@tauri-apps/plugin-sql": "^2.0.1",
     "next": "14.2.15",
     "react": "^18",
