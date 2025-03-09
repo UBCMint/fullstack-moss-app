@@ -25,4 +25,4 @@ tauri = { version = "2.1.1", features = [] }
 tauri-plugin-log = "2.0.0-rc"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 rusqlite = { version = "0.32.0", features = ["bundled"] }
-pyo3 = { version = "0.18", features = ["extension-module", "auto-initialize"] }
+pyo3 = { version = "0.18", features = ["auto-initialize"] }
