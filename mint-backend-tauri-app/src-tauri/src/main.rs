@@ -10,6 +10,7 @@ use pyo3::types::PyModule;
 use std::fs;
 use std::env;
 use pyo3::prelude::*;
+use pyo3::types::PyTuple;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -29,18 +30,27 @@ fn run_python_script() {
         let script = fs::read_to_string("scripts/hello.py")
             .expect("Failed to read Python script");
 
-        // Execute the Python script
-        let result = PyModule::from_code(py, &script, "hello.py", "hello");
+        // Compile the Python script into a module
+        let module = PyModule::from_code(py, &script, "hello.py", "hello")
+            .expect("Failed to create Python module");
 
-        match result {
-            Ok(module) => {
-                println!("Python script executed successfully!");
-            }
-            Err(e) => {
-                println!("Failed to execute Python script!");
-                e.print(py);
-            }
-        }
+        let greet_func = module.getattr("test")
+            .expect("Failed to get 'test' function")
+            .to_object(py);
+
+        // Define the arguments to pass to the 'test' function
+        let args = PyTuple::new(py, &[20, 30]);
+
+        // Call the 'test' function with the arguments
+        let result = greet_func.call1(py, args)
+            .expect("Failed to call 'test' function");
+
+        // Extract the result as a Rust string
+        let result_str: String = result.extract(py)
+            .expect("Failed to extract result as String");
+
+        // Print the result
+        println!("Result from Python: {}", result_str);
     });
 }
 
