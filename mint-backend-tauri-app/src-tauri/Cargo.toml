@@ -30,3 +30,4 @@ tokio-tungstenite = "0.21"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
+pyo3 = { version = "0.18", features = ["auto-initialize"] }
