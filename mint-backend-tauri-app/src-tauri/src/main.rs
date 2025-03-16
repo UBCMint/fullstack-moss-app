@@ -5,6 +5,11 @@ mod db;
 use tauri::State;
 use std::sync::Mutex;
 use db::{initialize_connection, AppState, initialize_db, add_user, get_users, add_time_series_data, get_time_series_data};
+use pyo3::types::PyModule;
+use std::fs;
+use std::env;
+use pyo3::prelude::*;
+use pyo3::types::PyTuple;
 use tokio::net::TcpListener;
 use tokio_tungstenite::{accept_async, tungstenite::protocol::Message};
 use futures_util::{SinkExt, StreamExt};
@@ -19,6 +24,42 @@ use chrono::Utc;
 fn greet(name: &str) -> String {
     println!("inside rust code");
     format!("hello {}!", name)
+}
+
+#[tauri::command]
+fn run_python_script() {
+    println!("inside rust code");
+    let current_dir = env::current_dir().expect("Failed to get current directory");
+    println!("Current directory: {:?}", current_dir);
+
+    // Initialize the Python interpreter
+    Python::with_gil(|py| {
+        // Read the Python script as a string
+        let script = fs::read_to_string("scripts/hello.py")
+            .expect("Failed to read Python script");
+
+        // Compile the Python script into a module
+        let module = PyModule::from_code(py, &script, "hello.py", "hello")
+            .expect("Failed to create Python module");
+
+        let greet_func = module.getattr("test")
+            .expect("Failed to get 'test' function")
+            .to_object(py);
+
+        // Define the arguments to pass to the 'test' function
+        let args = PyTuple::new(py, &[20, 30]);
+
+        // Call the 'test' function with the arguments
+        let result = greet_func.call1(py, args)
+            .expect("Failed to call 'test' function");
+
+        // Extract the result as a Rust string
+        let result_str: String = result.extract(py)
+            .expect("Failed to extract result as String");
+
+        // Print the result
+        println!("Result from Python: {}", result_str);
+    });
 }
 
 /// TODO: implement the actual logic to select a model.
@@ -118,6 +159,7 @@ fn main() {
             get_users, 
             add_time_series_data, 
             get_time_series_data, 
+            run_python_script,
             select_model])
         .setup(|_app| {
             tauri::async_runtime::spawn(start_websocket_server());
