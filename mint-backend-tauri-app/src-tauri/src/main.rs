@@ -4,7 +4,6 @@
 mod db;
 use tauri::State;
 use std::sync::Mutex;
-use db::{initialize_connection, AppState, initialize_db, add_user, get_users, add_time_series_data, get_time_series_data};
 use pyo3::types::PyModule;
 use std::fs;
 use std::env;
@@ -19,6 +18,70 @@ use std::sync::Arc;
 use tokio::sync::Mutex as AsyncMutex;
 use rand::Rng;
 use chrono::Utc;
+use db::{
+    initialize_connection, 
+    AppState, 
+    initialize_db, 
+    add_user, 
+    get_users, 
+    add_time_series_data, 
+    get_time_series_data,
+    DbClient,
+    add_testtime_series_data,
+    get_testtime_series_data,
+};
+
+/// Command wrapper for adding a user.
+#[tauri::command]
+async fn add_user_command(state: tauri::State<'_, DbClient>, name: String, email: String) -> Result<String, String> {
+    add_user(state.inner().clone(), name, email)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Command wrapper for initializing the database.
+#[tauri::command]
+async fn initialize_db_command(state: tauri::State<'_, DbClient>) -> Result<String, String> {
+    initialize_db(state.inner().clone())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Command wrapper for retrieving users.
+#[tauri::command]
+async fn get_users_command(state: tauri::State<'_, DbClient>) -> Result<Vec<(i32, String, String)>, String> {
+    get_users(state.inner().clone())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Command wrapper for adding test time series data.
+/// Expects a timestamp in milliseconds.
+#[tauri::command]
+async fn add_testtime_series_data_command(
+    state: tauri::State<'_, DbClient>, 
+    timestamp: i64, 
+    value: f64, 
+    metadata: String
+) -> Result<String, String> {
+    // Convert timestamp (milliseconds) to chrono::DateTime<Utc>
+    let dt = chrono::DateTime::<Utc>::from_utc(
+        chrono::NaiveDateTime::from_timestamp(timestamp / 1000, ((timestamp % 1000) * 1_000_000) as u32),
+        Utc
+    );
+    add_testtime_series_data(state.inner().clone(), dt, value, metadata)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Command wrapper for retrieving test time series data.
+#[tauri::command]
+async fn get_testtime_series_data_command(state: tauri::State<'_, DbClient>) -> Result<Vec<(i32, chrono::DateTime<Utc>, f64, String)>, String> {
+    get_testtime_series_data(state.inner().clone())
+        .await
+        .map_err(|e| e.to_string())
+}
+
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -147,20 +210,35 @@ async fn start_websocket_server() {
 }
 
 fn main() {
-    let conn = initialize_connection().expect("Failed to initialize db");
+    // let conn = initialize_connection().expect("Failed to initialize db");
+    // Since initialize_connection() is asynchronous, we block on it at startup.
+    let db_client = tauri::async_runtime::block_on(async {
+        initialize_connection().await.expect("Failed to initialize db")
+    });
     tauri::Builder::default()
-        .manage(AppState {
-            conn: Mutex::new(conn),
-        })
+        // .manage(AppState {
+        //     conn: Mutex::new(conn),
+        // })
+        .manage(db_client)
+        // .invoke_handler(tauri::generate_handler![
+        //     greet, 
+        //     initialize_db, 
+        //     add_user, 
+        //     get_users, 
+        //     add_time_series_data, 
+        //     get_time_series_data, 
+        //     run_python_script,
+        //     select_model])
         .invoke_handler(tauri::generate_handler![
             greet, 
-            initialize_db, 
-            add_user, 
-            get_users, 
-            add_time_series_data, 
-            get_time_series_data, 
             run_python_script,
-            select_model])
+            select_model,
+            add_user_command,
+            initialize_db_command,
+            get_users_command,
+            add_testtime_series_data_command,
+            get_testtime_series_data_command,
+        ])
         .setup(|_app| {
             tauri::async_runtime::spawn(start_websocket_server());
             Ok(())
