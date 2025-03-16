@@ -7,9 +7,7 @@ I've set up the TimeScaleDB database with tables:
  CREATE TABLE users (
    id SERIAL PRIMARY KEY,
    username VARCHAR(50) NOT NULL UNIQUE,
-   email VARCHAR(100) NOT NULL UNIQUE,
-   created_at TIMESTAMPTZ DEFAULT NOW(),
-   updated_at TIMESTAMPTZ DEFAULT NOW()
+   email VARCHAR(100) NOT NULL UNIQUE
  );
  
  -- Create User_Settings table
@@ -17,9 +15,7 @@ I've set up the TimeScaleDB database with tables:
    id SERIAL PRIMARY KEY,
    user_id INTEGER NOT NULL REFERENCES users(id),
    filter_config JSONB,
-   interface_prefs JSONB,
-   created_at TIMESTAMPTZ DEFAULT NOW(),
-   updated_at TIMESTAMPTZ DEFAULT NOW()
+   interface_prefs JSONB
  );
  
  -- Create Sessions table
@@ -45,8 +41,7 @@ I've set up the TimeScaleDB database with tables:
    name VARCHAR(100) NOT NULL,
    version VARCHAR(50),
    description TEXT,
-   config JSONB,
-   created_at TIMESTAMPTZ DEFAULT NOW()
+   config JSONB
  );
  
  -- Create User_ML_Selections table
@@ -54,7 +49,6 @@ I've set up the TimeScaleDB database with tables:
    id SERIAL PRIMARY KEY,
    user_id INTEGER NOT NULL REFERENCES users(id),
    ml_model_id INTEGER NOT NULL REFERENCES ml_models(id),
-   selected_at TIMESTAMPTZ DEFAULT NOW(),
    parameters JSONB
  );
  
