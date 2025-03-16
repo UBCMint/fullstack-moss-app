@@ -41,7 +41,7 @@ export default function Form() {
 
     const initializeDatabase = async () => {
         try {
-            const result = await invoke<string>("initialize_db");
+            const result = await invoke<string>("initialize_db_command");
             setDbStatus(result);
         } catch (error) {
             console.error("Failed to initialize database", error);
@@ -56,7 +56,7 @@ export default function Form() {
         }
 
         try {
-            const result = await invoke<string>("add_user", { name, email });
+            const result = await invoke<string>("add_user_command", { name, email });
             console.log(result);
             setResponse(result);
         } catch (error) {
@@ -66,7 +66,7 @@ export default function Form() {
 
     const fetchUsers = async () => {
         try {
-            const users = await invoke<[number, string, string][]>("get_users");
+            const users = await invoke<[number, string, string][]>("get_users_command");
             console.log("Fetched users:", users);
         } catch (error) {
             console.error("Failed to fetch users", error);
@@ -75,11 +75,13 @@ export default function Form() {
 
     const addTimeSeriesData = async () => {
         try {
-            const timestamp = new Date().toISOString();
+            // const timestamp = new Date().toISOString();
+            const timestamp = new Date().getTime(); // returns a number (milliseconds)
+
             const value = Math.random() * 100;
             const metadata = "Sample metadata";
     
-            const result = await invoke<string>("add_time_series_data", {
+            const result = await invoke<string>("add_testtime_series_data_command", {
                 timestamp,
                 value,
                 metadata,
@@ -92,7 +94,7 @@ export default function Form() {
     
     const fetchTimeSeriesData = async () => {
         try {
-            const data = await invoke<[number, string, number, string][]>("get_time_series_data");
+            const data = await invoke<[number, string, number, string][]>("get_testtime_series_data_command");
             console.log("Fetched time series data:", data);
         } catch (error) {
             console.error("Failed to fetch time series data", error);
