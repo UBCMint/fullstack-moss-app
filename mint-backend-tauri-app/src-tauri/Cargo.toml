@@ -26,6 +26,7 @@ tauri-plugin-log = "2.0.0-rc"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 rusqlite = { version = "0.32.0", features = ["bundled"] }
 tokio = { version = "1", features = ["full"] }
+tokio-postgres = "0.7.13"
 tokio-tungstenite = "0.21"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
