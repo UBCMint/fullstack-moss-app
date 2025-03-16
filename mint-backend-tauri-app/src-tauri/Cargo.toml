@@ -26,10 +26,11 @@ tauri-plugin-log = "2.0.0-rc"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 rusqlite = { version = "0.32.0", features = ["bundled"] }
 tokio = { version = "1", features = ["full"] }
-tokio-postgres = "0.7.13"
+tokio-postgres = { version="0.7.13", features = ["with-serde_json-1", "with-chrono-0_4"] }
 tokio-tungstenite = "0.21"
 futures-util = "0.3"
-chrono = { version = "0.4", features = ["serde"] }
+chrono = "0.4.40"
 rand = "0.8"
 pyo3 = { version = "0.18", features = ["auto-initialize"] }
 dotenvy = "0.15.7"
+dotenv = "0.15.0"
