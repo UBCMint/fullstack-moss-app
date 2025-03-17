@@ -44,10 +44,9 @@ To assist in development, we'll need to develop backend endpoints to simulate br
    g++ -shared -o libstream.so -fPIC stream.cpp -llsl -lpthread
    ```
 
-6. **Run the Go file:**
+6. **Run the C++ file:**
    ```sh
-   export LD_LIBRARY_PATH=.:$LD_LIBRARY_PATH
-   go run main.go
+   ./stream
    ```
 
 ## Notes
