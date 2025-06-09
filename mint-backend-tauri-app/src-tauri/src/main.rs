@@ -186,7 +186,7 @@ async fn start_websocket_server() {
 fn main() {
     dotenv().ok();
     let db_client = tauri::async_runtime::block_on(async {
-        initialize_connection().await.expect("Failed to initialize db")
+        // initialize_connection().await.expect("Failed to initialize db")
     });
     tauri::Builder::default()
         .manage(db_client)
