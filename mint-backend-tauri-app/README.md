@@ -24,6 +24,22 @@ To start the application, run:
 npm run tauri dev
 ```
 
+### Starting the Connection
+- By starting the application the connection also starts
+
+#### Only Starting the connection
+- If you want to only start the connection and not the entire app
+```sh
+cd ./src-tauri
+```
+
+```sh
+cargo run --bin connection
+```
+- To manually stop sending data: Ctrl + c
+
+
+*Note: * 
 ## Future Plans
 
 - Process and transform data.
