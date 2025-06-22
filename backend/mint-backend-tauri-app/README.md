@@ -8,7 +8,8 @@ This is a simple project that demonstrates different functions to show communica
 
 1. Clone the repository:
     ```sh
-    git clone https://github.com/UBCMint/backend-product.git
+    git clone https://github.com/UBCMint/fullstack-moss-app.git
+    cd backend
     cd mint-backend-tauri-app
     ```
 
