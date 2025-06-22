@@ -33,4 +33,5 @@ Backend:
 
 ### Docker:
 - Todo!
+- Created a docker file for frontend so far, still need to dockerize backend and database.
 - Eventually, will just need to run `docker-compose up --build` to run whole full stack application
