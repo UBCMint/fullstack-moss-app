@@ -13,6 +13,7 @@ use tokio_tungstenite::{
 };
 use futures_util::stream::SplitSink;
 
+
 #[derive(Serialize)]
 struct Data {
     time: u128,
@@ -51,19 +52,36 @@ async fn handle_ws(stream: TcpStream) {
 }
 
 // handle_connection, does stuff with the WebSocket connection
-// Right now, it only use the write steam to send random data
-// NOTE*: This is where you would want to read too.
-async fn handle_connection(mut ws_stream: WebSocketStream<TcpStream>){
+// Right now, it sets up a asynchronous write task to send random data.
+// It also listens for incoming websocket closing request with the read stream inorder to stop the write task.
+async fn handle_connection(ws_stream: WebSocketStream<TcpStream>){
     let (mut write, mut read) = ws_stream.split();
 
+    let sender = tokio::spawn(async move {
     if let Err(e) = send_random_data(&mut write).await {
-    eprintln!("Error sending data: {}", e);
-}
+        eprintln!("{}", e);
+        }
+    });
 
+     while let Some(msg) = read.next().await {
+        match msg {
+            Ok(Message::Close(_)) => {
+                println!("Received a close request from the client");
+                break;
+            }
+            Ok(_) => continue, 
+            Err(e) => {
+                eprintln!("Read error (client likely disconnected): {}", e);
+                break;
+            }
+        }
+    }
+
+    sender.abort();
 }
 
 // sendRandomData takes the write stream, and loops to send random data
-async fn send_random_data(write: &mut SplitSink<WebSocketStream<TcpStream>, Message>) -> Result<(), tungstenite::Error> {
+async fn send_random_data(write: &mut SplitSink<WebSocketStream<TcpStream>, Message>) -> Result<(), tungstenite::Error>{
     let mut ticker = interval(Duration::from_millis(3));
 
     loop {
