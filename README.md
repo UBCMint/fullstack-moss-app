@@ -1,7 +1,5 @@
 # Full Stack MOSS App
 ## Setup
-### Local:
-
 
 Frontend:
 - Run these commands on terminal:
