@@ -21,17 +21,13 @@ Backend:
     cd mint-backend-tauri-app
     npm install
     ```
-- To start server:
+- To start server (still in mint-backend-tauri-app directory):
     ```sh
-    cd backend
-    cd mint-backend-tauri-app
     npm run tauri dev
     ```
 - Currently, the rust server is too tightly coupled with Tauri app, causing unnecessary dependencies and bloat. Will work on refactoring to separate Tauri from Rust Server
-- To run just the web socket:
+- To start just the web socket:
     ```sh
-    cd backend
-    cd mint-backend-tauri-app
     cd src-tauri
     cargo run --bin connection
     ```
