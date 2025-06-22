@@ -7,9 +7,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyModule, PyTuple};
 use std::fs;
 use std::env;
-use tokio::net::TcpListener;
-use tokio_tungstenite::{accept_async, tungstenite::protocol::Message};
-use futures_util::{SinkExt, StreamExt};
+
 use serde_json::json;
 use std::time::Duration;
 use std::sync::Arc;
