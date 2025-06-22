@@ -54,7 +54,7 @@ async fn handle_ws(stream: TcpStream) {
 // handle_connection, does stuff with the WebSocket connection
 // Right now, it sets up a asynchronous write task to send random data.
 // It also listens for incoming websocket closing request with the read stream inorder to stop the write task.
-async fn handle_connection(mut ws_stream: WebSocketStream<TcpStream>){
+async fn handle_connection(ws_stream: WebSocketStream<TcpStream>){
     let (mut write, mut read) = ws_stream.split();
 
     let sender = tokio::spawn(async move {
