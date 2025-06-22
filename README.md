@@ -25,12 +25,12 @@ Backend:
     ```sh
     npm run tauri dev
     ```
-- Currently, the rust server is too tightly coupled with Tauri app, causing unnecessary dependencies and bloat. Will work on refactoring to separate Tauri from Rust Server
 - To start just the web socket:
     ```sh
     cd src-tauri
     cargo run --bin connection
     ```
+- Currently, the rust server is too tightly coupled with Tauri app, causing unnecessary dependencies and bloat. Will work on refactoring to separate Tauri from Rust Server
 ---
 
 ### Docker:
