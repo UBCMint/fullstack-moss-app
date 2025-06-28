@@ -1,6 +1,8 @@
 'use client';
 import { Button } from '@/components/ui/button';
 import { ExternalLinkIcon, ChevronUpIcon } from '@radix-ui/react-icons';
+import { MoveUpRight } from 'lucide-react';
+
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -33,14 +35,14 @@ export default function AppHeader() {
                     className="flex items-center space-x-1 px-3 py-2"
                 >
                     <span>Update</span>
-                    <ExternalLinkIcon className="h-4 w-4" />
+                    <MoveUpRight style={{ height: '10px', width: '10px', marginLeft: '-5px'}} />
                 </Button>
                 <Button
                     variant="link"
                     className="flex items-center space-x-1 px-3 py-2"
                 >
                     <span>Issues</span>
-                    <ExternalLinkIcon className="h-4 w-4" />
+                    <MoveUpRight style={{ height: '10px', width: '10px', marginLeft: '-5px'}} />
                 </Button>
 
                 {/* help */}
