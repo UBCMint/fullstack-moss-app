@@ -7,8 +7,13 @@ import {
 } from '@/components/ui/resizable';
 import Cross1 from '@/components/radix/cross1';
 import { Categories } from './categories-collapsible';
+import NodeButton from './node-button';
+import React, { useState } from 'react';
+import { Input } from '@/components/ui/input';
+
 
 export default function Sidebar() {
+
     const AvailableNodes = [
         {
             id: 'source-node',
@@ -30,6 +35,12 @@ export default function Sidebar() {
         },
     ];
 
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredNodes = AvailableNodes.filter((node) =>
+        node.label.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
     const uniqueCategories = [
         ...new Set(AvailableNodes.map((node) => node.category)),
     ];
@@ -42,6 +53,30 @@ export default function Sidebar() {
                         <CardTitle>Nodes</CardTitle>
                         <Cross1 />
                     </CardHeader>
+
+                    <div className='pb-2'>
+                        <Input
+                            type="text"
+                            placeholder="Search"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="items-center px-7 py-2 mx-4"
+                        />
+                    </div>
+
+                    <CardContent className="overflow-y-auto flex-1 flex flex-col gap-1">
+                        {searchTerm &&
+                            filteredNodes.map((node) => (
+                                <NodeButton
+                                    key={node.id}
+                                    id={node.id}
+                                    label={node.label}
+                                    description={node.description}
+                                />
+                            ))}
+                    </CardContent>
+
+                    <CardHeader className="pt-0 pb-2">Recent</CardHeader>
 
                     <CardContent className="overflow-y-auto flex-1">
                         <div>
