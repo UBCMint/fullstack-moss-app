@@ -4,7 +4,7 @@
 mod db;
 mod connection;
 use pyo3::prelude::*;
-use pyo3::types::{PyModule, PyTuple};
+use pyo3::types::{PyModule, PyTuple, PyList};
 use std::fs;
 use std::env;
 
@@ -85,6 +85,29 @@ fn run_python_script() {
     println!("Current directory: {:?}", current_dir);
 
     Python::with_gil(|py| {
+
+        // Run script 
+        let sys = py.import("sys").expect("Failed to import sys");
+        let paths: &PyList = sys.getattr("path")
+            .expect("Failed to get sys.path")
+            .downcast()
+            .expect("sys.path is not a list");
+        paths.insert(0, "./python/EyeBlink/src")
+            .expect("Failed to insert path into sys.path");
+
+        let path = "./python/EyeBlink/src/test.py";
+        let src  = fs::read_to_string(path)
+            .expect("couldn’t read test.py");
+
+        // 2) Compile & run it as a module named "__main__" so top‐level code runs
+
+        // Currently the script is not linked to the database which is why it fails and a panic is propagated
+        // to the main thread. So for now I am not putting a .expect() here to indeed run the script
+        // successfully. Late on, we should put the following line back:
+        // PyModule::from_code(py, &src, "test.py", "__main__").expect("Failed to create Python module");
+        PyModule::from_code(py, &src, "test.py", "__main__");
+    
+
         let script = fs::read_to_string("scripts/hello.py")
             .expect("Failed to read Python script");
 
@@ -103,7 +126,10 @@ fn run_python_script() {
             .expect("Failed to extract result as String");
 
         println!("Result from Python: {}", result_str);
+
+        Ok::<(), PyErr>(())
     });
+    println!("Python script executed successfully");
 }
 
 #[tauri::command]
@@ -139,6 +165,9 @@ fn main() {
             get_testtime_series_data_command,
         ])
         .setup(|_app| {
+            // Run python script
+            run_python_script();
+
              tauri::async_runtime::spawn(async {connection::run_server().await;});
             Ok(())
         })
