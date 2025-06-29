@@ -1,7 +1,49 @@
 https://www.figma.com/board/4UUXdzNg0rMLQoMUcc5R3e/ubcmint_backend?node-id=0-1&t=NO81CLSnXEB2WoHj-1
 
-I've set up the TimeScaleDB database with tables:
- 
+For more info on set up: https://docs.tigerdata.com/self-hosted/latest/install/installation-docker/
+
+# Prerequisites
+- docker, https://www.docker.com/get-started/
+
+# Setup Docker container 
+- Pull the timescaleDB image
+```
+docker pull timescale/timescaledb:latest-pg17
+```
+
+- Run the container, replace `C:\Users\local_folder` with the folder location on your computer
+```
+docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=my_secure_password_123 -v C:\Users\local_folder:/var/lib/postgresql/data timescale/timescaledb:latest-pg17
+```
+
+# Setting up Database
+
+- Access the database 
+```sql
+docker exec -it timescaledb psql -U postgres
+```
+
+*Note: to copy and paste, Ctr + Shift+ C*
+
+- Set up Mint User
+```sql
+CREATE USER team_user WITH PASSWORD 'ubcmintpw';
+\du --to check user is created
+CREATE DATABASE ubcmint;
+\l --to check the database was created
+GRANT ALL PRIVILEGES ON DATABASE ubcmint TO team_user; 
+
+SET ROLE team_user;
+SELECT CURRENT_USER; --to check the current role is team_user
+```
+
+- Go into the created ubcmint database
+```sql
+\c ubcmint
+```
+
+- Creating the tables
+
  ```
  -- Create Users table
  CREATE TABLE users (
@@ -61,13 +103,15 @@ I've set up the TimeScaleDB database with tables:
    channel2 DOUBLE PRECISION,
    channel3 DOUBLE PRECISION,
    channel4 DOUBLE PRECISION,
-   channel5 DOUBLE PRECISION,
-   channel6 DOUBLE PRECISION,
-   channel7 DOUBLE PRECISION,
-   channel8 DOUBLE PRECISION,
    PRIMARY KEY (time, session_id)
  );
  
  -- Convert the eeg_data table into a hypertable
  SELECT create_hypertable('eeg_data', 'time');
  ```
+ 
+- to escape
+```sql
+exit
+```
+
