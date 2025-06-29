@@ -2,13 +2,16 @@ import { Handle, Position } from '@xyflow/react';
 import { useState } from 'react';
 
 export default function SourceNode() {
-    // For demo: toggle this to see connected/disconnected states
-    const [isConnected] = useState(false); // set to true for connected state
+    const [isConnected, setIsConnected] = useState(false);
+
+    function toggleSourceNode() {
+        setIsConnected(prevState => !prevState);
+    }
 
     return (
-        <div className="relative w-[370px] h-[120px] flex items-center justify-center bg-white rounded-[2.5rem] border-2 border-[#D3D3D3] shadow-none p-0">
+        <div onClick={toggleSourceNode} className="relative w-[370px] h-[120px] flex items-center justify-center bg-white rounded-[2.5rem] border-2 border-[#D3D3D3] shadow-none p-0">
             {/* React Flow handle */}
-            <Handle type="source" position={Position.Bottom} style={{ left: '50%', background: 'transparent', border: 'none' }} />
+            <Handle type="source" position={Position.Bottom} />
             {/* Status dot */}
             <span
                 className={`absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full border border-[#D3D3D3] ${isConnected ? 'bg-teal-500 border-teal-500' : 'bg-[#D3D3D3]'}`}
