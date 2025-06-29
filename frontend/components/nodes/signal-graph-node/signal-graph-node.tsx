@@ -29,18 +29,18 @@ export default function SignalGraphNode() {
     const nodes = getNodes();
     const edges = getEdges();
 
-    const areNodeTypesConnected = (nodes: any[], edges: any[], typeA: string, typeB: string) => {
+    const areNodeTypesConnected = (nodes: any[], edges: any[], typeA: string, typeB: string, typeC: string) => {
         const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
       
         return edges.some((edge) => {
           const sourceNode = nodeMap[edge.source];
           const targetNode = nodeMap[edge.target];
       
-          return (sourceNode?.type === typeA && targetNode?.type === typeB);
+          return ((sourceNode?.type === typeA || sourceNode?.type === typeC) && targetNode?.type === typeB);
         });
     };
 
-    const connected = areNodeTypesConnected(nodes, edges, 'source-node', 'signal-graph-node');
+    const connected = areNodeTypesConnected(nodes, edges, 'source-node', 'signal-graph-node', 'filter-node');
 
     if (connected) {
         console.log('At least one inputNode is connected to an outputNode');

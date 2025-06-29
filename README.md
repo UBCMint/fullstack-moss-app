@@ -1,15 +1,32 @@
 # Full Stack MOSS App
 ## Setup
 
-Frontend:
-- Run these commands on terminal:
+### Frontend Setup
+
+Follow the steps below to run the frontend locally:
+
+1. Open your terminal and navigate to the `frontend` directory:
     ```sh
     cd frontend
-    npm install
+    ```
+
+2. Install project dependencies:
+    ```sh
+    npm i
+    ```
+
+3. Start the development server:
+    ```sh
     npm run dev
     ```
-- Website should be available at: http://localhost:3000
 
+4. Open a new terminal and start a server to feed mock brain signal:
+    ```sh
+    node server.js
+    ```
+
+5. Open the link on browser:  
+    [http://localhost:3000](http://localhost:3000)
 ---
 
 Backend:

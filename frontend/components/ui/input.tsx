@@ -7,7 +7,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, type, ...props }, ref) => {
     return (
         <div className="relative flex items-center">
-            <MagnifyingGlassIcon className="absolute left-3 text-[#96bdba]" />
+            <MagnifyingGlassIcon className="absolute left-6 text-[#96bdba]" />
             <input
                 type={type}
                 className={cn(
