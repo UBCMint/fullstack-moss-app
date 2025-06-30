@@ -20,6 +20,10 @@ import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-n
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
 
+import { useState } from "react";
+import { X } from 'lucide-react';
+import { Ellipsis } from 'lucide-react';
+
 const nodeTypes = {
     'source-node': SourceNode,
     'filter-node': FilterNode,
@@ -33,6 +37,7 @@ const ReactFlowInterface = () => {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const { screenToFlowPosition } = useReactFlow();
+    const [isControlsOpen, setIsControlsOpen] = useState(false);
 
     const onConnect = (params: Connection) => {
         setEdges((eds) => addEdge(params, eds));
@@ -41,6 +46,10 @@ const ReactFlowInterface = () => {
     const onDragOver = (event: React.DragEvent<HTMLDivElement>) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = 'move';
+    };
+
+    const toggleControls = () => {
+        setIsControlsOpen((prev) => !prev);
     };
 
     const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
@@ -88,7 +97,20 @@ const ReactFlowInterface = () => {
                 style={{ backgroundColor: '#F7F9FB' }}
                 nodeTypes={nodeTypes}
             >
-                <Controls position="top-right" />
+                <Panel position="top-right">
+                    <button
+                        onClick={toggleControls}
+                        className="p-2 rounded-full bg-white border "
+                    >
+                        {isControlsOpen ? <X size={20} /> : <Ellipsis size={20} />}
+                    </button>
+                    {isControlsOpen && (
+                        <Controls position="top-right" style={{
+                            top: '90%',
+                            left: '-25%',
+                        }} />
+                    )}
+                </Panel>
                 <Panel position="top-left">
                     <Sidebar />
                 </Panel>
