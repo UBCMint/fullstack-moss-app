@@ -103,7 +103,7 @@ async fn main() {
     // Define the address and port for the server to listen on.
     let host = std::env::var("API_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port = std::env::var("API_PORT")
-        .unwrap_or_else(|_| "8080".to_string())
+        .unwrap_or_else(|_| "9000".to_string())
         .parse::<u16>()
         .expect("Invalid API_PORT");
     let addr = format!("{}:{}", host, port);

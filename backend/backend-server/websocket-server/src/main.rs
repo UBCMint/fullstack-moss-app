@@ -34,7 +34,7 @@ async fn main() {
 pub async fn run_server() {
     // Get host and port from environment variables, with fallbacks
     let host = std::env::var("WS_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let port = std::env::var("WS_PORT").unwrap_or_else(|_| "9000".to_string()).parse::<u16>()
+    let port = std::env::var("WS_PORT").unwrap_or_else(|_| "8080".to_string()).parse::<u16>()
         .expect("Invalid WS_PORT environment variable. Must be a valid port number.");
 
     let addr = format!("{}:{}", host, port);
