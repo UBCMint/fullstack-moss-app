@@ -1,5 +1,5 @@
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration};
 
 use futures_util::{SinkExt, StreamExt};
 use rand::Rng;
@@ -12,11 +12,11 @@ use tokio_tungstenite::{
     WebSocketStream,
 };
 use futures_util::stream::SplitSink;
-
+use chrono::{DateTime, Utc};
 
 #[derive(Serialize)]
 struct Data {
-    time: u128,
+    time: DateTime<Utc>,
     signals: Vec<u8>,
 }
 
@@ -96,10 +96,7 @@ async fn send_random_data(write: &mut SplitSink<WebSocketStream<TcpStream>, Mess
 
 fn generate_random_data() -> Data {
     Data {
-        time: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis(),
+        time: Utc::now(),
         signals: (0..5).map(|_| rand::thread_rng().gen_range(0..100)).collect(),
     }
 }
