@@ -1,0 +1,12 @@
+# C:\Users\alexl\Documents\CPSC Projects\fullstack-moss-app\backend\backend-server\Cargo.toml
+[workspace]
+members = [
+    "shared-logic",
+    "api-server",
+    "websocket-server",
+    # If you still have db-initializer, include it:
+    # "db-initializer",
+    # This path is relative to the workspace root (backend-server)
+    "../../mint-backend-tauri-app/src-tauri",
+]
+resolver = "2"

@@ -3,4 +3,31 @@ name = "api-server"
 version = "0.1.0"
 edition = "2024"
 
+
 [dependencies]
+# Web Framework built on Tokio and Tower
+axum = { version = "0.7", features = ["macros"] }
+# Tower for HTTP services (used by Axum)
+tower-http = { version = "0.5", features = ["cors"] } # For CORS, logging, etc.
+
+# Serialization/Deserialization for JSON
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0" # JSON format implementation for Serde
+
+# Asynchronous Runtime (Tokio)
+tokio = { version = "1", features = ["full"] } # "full" includes tokio's runtime, async I/O, etc.
+
+# Database client library for TimescaleDB
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-chrono-0_4"] }
+
+# Utilities
+log = "0.4"          # Logging library
+chrono = "0.4"       # date and time library (e.g. timestamps)
+dotenvy = "0.15"     # loading environment variables
+
+pyo3 = { version = "0.18", features = ["auto-initialize"] }
+
+env_logger = "0.11"
+
+# Shared logic crate
+shared-logic = { path = "../shared-logic" }
