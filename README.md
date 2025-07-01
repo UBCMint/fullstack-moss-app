@@ -75,7 +75,7 @@ $env:RUST_LOG="info"
 cd backend/backend-server/websocket-server
 cargo run
 ```
-- Expost to port 8080
+- Exposed to port 8080
 - Endpoint: ws://127.0.0.1:8080
 
 ---
