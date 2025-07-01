@@ -1,174 +1,209 @@
-// src/main.rs
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod db;
-mod connection;
-use pyo3::prelude::*;
-use pyo3::types::{PyModule, PyTuple, PyList};
-use std::fs;
-use std::env;
-
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::time::Duration;
-use std::sync::Arc;
-use tokio::sync::Mutex as AsyncMutex;
-use rand::Rng;
-use chrono::{Utc, TimeZone, DateTime};
-use dotenv::dotenv;
-use db::{
-    initialize_connection, 
-    initialize_db, 
-    add_user, 
-    get_users, 
-    DbClient,
-    add_testtime_series_data,
-    get_testtime_series_data,
-};
+use log::{info, error};
+use dotenvy::dotenv;
+use std::path::PathBuf;
+use reqwest;
+use chrono::TimeZone;
 
-#[tauri::command]
-async fn add_user_command(state: tauri::State<'_, DbClient>, name: String, email: String) -> Result<String, String> {
-    add_user(state.inner().clone(), name, email)
-        .await
-        .map_err(|e| e.to_string())
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct User {
+    pub id: i32,
+    pub username: String,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewUser {
+    pub username: String,
+    pub email: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TimeSeriesData {
+    pub id: i32,
+    pub timestamp: String,
+    pub value: f64,
+    pub metadata: Option<String>,
 }
 
 #[tauri::command]
-async fn initialize_db_command(state: tauri::State<'_, DbClient>) -> Result<String, String> {
-    initialize_db(state.inner().clone())
+async fn run_python_script() -> Result<String, String> {
+    let api_base_url = std::env::var("API_SERVER_URL").unwrap_or_else(|_| "http://localhost:9000".to_string());
+    let client = reqwest::Client::new();
+
+    info!("Tauri: Sending GET request to {}/run-python-script", api_base_url);
+
+    let res = client.get(&format!("{}/run-python-script", api_base_url))
+        .send()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+
+    if res.status().is_success() {
+        let data: serde_json::Value = res.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+        let python_output = data["python_output"].as_str().unwrap_or("").to_string();
+        info!("Tauri: Python script executed successfully via API. Output: {}", python_output);
+        Ok(format!("Python script output: {}", python_output))
+    } else {
+        let status = res.status();
+        let error_text = res.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        error!("Tauri: API returned error status {}: {}", status, error_text);
+        Err(format!("API error: {}", error_text))
+    }
+}
+
+
+#[tauri::command]
+async fn add_user_command(username: String, email: String) -> Result<User, String> {
+    println!("Testing");
+    let api_base_url = std::env::var("API_SERVER_URL").unwrap_or_else(|_| "http://localhost:9000".to_string());
+    let client = reqwest::Client::new();
+    let new_user_data = NewUser { username, email };
+
+    info!("Tauri: Sending POST request to {}/users with {:?}", api_base_url, new_user_data);
+
+    let res = client.post(&format!("{}/users", api_base_url))
+        .json(&new_user_data)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+
+    if res.status().is_success() {
+        let user: User = res.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+        info!("Tauri: User added successfully via API: {:?}", user);
+        Ok(user)
+    } else {
+        let status = res.status();
+        let error_text = res.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        error!("Tauri: API returned error status {}: {}", status, error_text);
+        Err(format!("API error: {}", error_text))
+    }
 }
 
 #[tauri::command]
-async fn get_users_command(state: tauri::State<'_, DbClient>) -> Result<Vec<(i32, String, String)>, String> {
-    get_users(state.inner().clone())
+async fn get_users_command() -> Result<Vec<User>, String> {
+    let api_base_url = std::env::var("API_SERVER_URL").unwrap_or_else(|_| "http://localhost:9000".to_string());
+    let client = reqwest::Client::new();
+
+    info!("Tauri: Sending GET request to {}/users", api_base_url);
+
+    let res = client.get(&format!("{}/users", api_base_url))
+        .send()
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+
+    if res.status().is_success() {
+        let users: Vec<User> = res.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+        info!("Tauri: Retrieved {} users via API.", users.len());
+        Ok(users)
+    } else {
+        let status = res.status();
+        let error_text = res.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        error!("Tauri: API returned error status {}: {}", status, error_text);
+        Err(format!("API error: {}", error_text))
+    }
 }
 
-/// Expects a timestamp in milliseconds, converts it to DateTime<Utc>, and inserts the data.
 #[tauri::command]
-async fn add_testtime_series_data_command(
-    state: tauri::State<'_, DbClient>, 
-    timestamp: i64, 
-    value: f64, 
+async fn add_time_series_data_command(
+    timestamp_millis: i64,
+    value: f64,
     metadata: String
 ) -> Result<String, String> {
-    let dt: DateTime<Utc> = Utc
-        .timestamp_opt(timestamp / 1000, ((timestamp % 1000) * 1_000_000) as u32)
+    let api_base_url = std::env::var("API_SERVER_URL").unwrap_or_else(|_| "http://localhost:9000".to_string());
+    let client = reqwest::Client::new();
+
+
+    let dt: chrono::DateTime<chrono::Utc> = chrono::Utc
+        .timestamp_millis_opt(timestamp_millis)
         .single()
-        .ok_or("Invalid timestamp")?;
-    add_testtime_series_data(state.inner().clone(), dt, value, metadata)
-        .await
-        .map_err(|e| e.to_string())
-}
+        .ok_or_else(|| "Invalid timestamp".to_string())?;
 
-/// Retrieves the time series data and returns DateTime<Utc> as an RFC3339 string.
-#[tauri::command]
-async fn get_testtime_series_data_command(state: tauri::State<'_, DbClient>) -> Result<Vec<(i32, String, f64, String)>, String> {
-    let data = get_testtime_series_data(state.inner().clone())
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(data.into_iter().map(|(id, dt, value, meta)| (id, dt.to_rfc3339(), value, meta)).collect())
-}
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    println!("inside rust code");
-    format!("hello {}!", name)
-}
-
-#[tauri::command]
-fn run_python_script() {
-    println!("inside rust code");
-    let current_dir = env::current_dir().expect("Failed to get current directory");
-    println!("Current directory: {:?}", current_dir);
-
-    Python::with_gil(|py| {
-
-        // Run script 
-        let sys = py.import("sys").expect("Failed to import sys");
-        let paths: &PyList = sys.getattr("path")
-            .expect("Failed to get sys.path")
-            .downcast()
-            .expect("sys.path is not a list");
-        paths.insert(0, "./python/EyeBlink/src")
-            .expect("Failed to insert path into sys.path");
-
-        let path = "./python/EyeBlink/src/test.py";
-        let src  = fs::read_to_string(path)
-            .expect("couldn’t read test.py");
-
-        // 2) Compile & run it as a module named "__main__" so top‐level code runs
-
-        // Currently the script is not linked to the database which is why it fails and a panic is propagated
-        // to the main thread. So for now I am not putting a .expect() here to indeed run the script
-        // successfully. Late on, we should put the following line back:
-        // PyModule::from_code(py, &src, "test.py", "__main__").expect("Failed to create Python module");
-        PyModule::from_code(py, &src, "test.py", "__main__");
-    
-
-        let script = fs::read_to_string("scripts/hello.py")
-            .expect("Failed to read Python script");
-
-        let module = PyModule::from_code(py, &script, "hello.py", "hello")
-            .expect("Failed to create Python module");
-
-        let greet_func = module.getattr("test")
-            .expect("Failed to get 'test' function")
-            .to_object(py);
-
-        let args = PyTuple::new(py, &[20, 30]);
-        let result = greet_func.call1(py, args)
-            .expect("Failed to call 'test' function");
-
-        let result_str: String = result.extract(py)
-            .expect("Failed to extract result as String");
-
-        println!("Result from Python: {}", result_str);
-
-        Ok::<(), PyErr>(())
+    let payload = json!({
+        "timestamp": dt.to_rfc3339(),
+        "value": value,
+        "metadata": metadata,
     });
-    println!("Python script executed successfully");
+
+    info!("Tauri: Sending POST request to {}/timeseries with {:?}", api_base_url, payload);
+
+    let res = client.post(&format!("{}/timeseries", api_base_url))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+
+    if res.status().is_success() {
+        info!("Tauri: Time series data added successfully via API.");
+        Ok("Time series data added successfully".to_string())
+    } else {
+        let status = res.status();
+        let error_text = res.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        error!("Tauri: API returned error status {}: {}", status, error_text);
+        Err(format!("API error: {}", error_text))
+    }
 }
 
+#[tauri::command]
+async fn get_time_series_data_command() -> Result<Vec<TimeSeriesData>, String> {
+    let api_base_url = std::env::var("API_SERVER_URL").unwrap_or_else(|_| "http://localhost:9000".to_string());
+    let client = reqwest::Client::new();
+
+    info!("Tauri: Sending GET request to {}/timeseries", api_base_url);
+
+    let res = client.get(&format!("{}/timeseries", api_base_url))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to send request: {}", e))?;
+
+    if res.status().is_success() {
+        let data: Vec<TimeSeriesData> = res.json().await.map_err(|e| format!("Failed to parse response: {}", e))?;
+        info!("Tauri: Retrieved {} time series data points via API.", data.len());
+        Ok(data)
+    } else {
+        let status = res.status();
+        let error_text = res.text().await.unwrap_or_else(|_| "Unknown error".to_string());
+        error!("Tauri: API returned error status {}: {}", status, error_text);
+        Err(format!("API error: {}", error_text))
+    }
+}
+
+// used in websocket_code.rs (legacy code)
 #[tauri::command]
 async fn select_model(filter: String, model_type: String) -> Result<String, String> {
     Ok(format!("Selected model with filter '{}' and type '{}'", filter, model_type))
 }
 
-fn simulate_eeg_data() -> String {
-    let mut rng = rand::thread_rng();
-    let data = vec![
-        json!({"timestamp": Utc::now().timestamp_millis(), "channel": "1", "value": rng.gen_range(10.0..20.0)}),
-        json!({"timestamp": Utc::now().timestamp_millis(), "channel": "2", "value": rng.gen_range(10.0..20.0)}),
-        json!({"timestamp": Utc::now().timestamp_millis(), "channel": "3", "value": rng.gen_range(10.0..20.0)}),
-    ];
-    serde_json::to_string(&data).unwrap()
-}
-
 fn main() {
-    dotenv().ok();
-    let db_client = tauri::async_runtime::block_on(async {
-        // initialize_connection().await.expect("Failed to initialize db")
-    });
+    // Load environment variables for the Tauri app
+    let mut app_env_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    app_env_path.push(".env");
+
+    if app_env_path.exists() {
+        dotenvy::from_path(app_env_path.as_path()).ok();
+        println!("Loaded environment variables from {:?}", app_env_path);
+    } else {
+        dotenv().ok();
+        println!("No specific .env found at {:?}, falling back to default dotenv search.", app_env_path);
+    }
+
+    // Initialize logging AFTER loading .env
+    env_logger::init();
+    info!("Starting Tauri application...");
+    info!("Environment variables loaded for Tauri app.");
+
     tauri::Builder::default()
-        .manage(db_client)
         .invoke_handler(tauri::generate_handler![
-            greet, 
-            run_python_script,
             select_model,
-            add_user_command, 
-            initialize_db_command,
+            add_user_command,
             get_users_command,
-            add_testtime_series_data_command,
-            get_testtime_series_data_command,
+            add_time_series_data_command,
+            get_time_series_data_command,
+            run_python_script,
         ])
         .setup(|_app| {
-            // Run python script
-            run_python_script();
-
-             tauri::async_runtime::spawn(async {connection::run_server().await;});
             Ok(())
         })
         .run(tauri::generate_context!())
