@@ -2,74 +2,53 @@
 
 import React, { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { User } from './types'; // Adjust the path as necessary
+import { User } from './types';
 
 export default function Form() {
-    const [name, setName] = useState("");
+    const [username, setUsername] = useState("");
     const [email, setEmail] = useState("");
     const [response, setResponse] = useState("");
     const [users, setUsers] = useState<User[]>([]);
-    const [dbStatus, setDbStatus] = useState("");
-
-    const handleNameSubmit = (event: React.FormEvent) => {
-        event.preventDefault();
-        if (name) {
-            invoke<string>("greet", { name })
-                .then(result => console.log(result))
-                .catch(console.error);
-        }
-    };
-
-    const handleSubmit = async (event: React.FormEvent) => {
-        event.preventDefault();
-
-        try {
-            const response = await fetch('/users');  //MOCK ENDPOINT - pretend this is our backend
-            if (response.ok) {
-                console.log("REQ success");
-                const data = await response.json();
-                setResponse(data.message);
-                setUsers(data); // Updated this line to handle an array directly
-                console.log('Fetched users:', data);
-            } else {
-                throw new Error('Network Response Error');
-            }
-        } catch (error) {
-            console.log(error);
-        }
-    };
-
-    const initializeDatabase = async () => {
-        try {
-            const result = await invoke<string>("initialize_db_command");
-            setDbStatus(result);
-        } catch (error) {
-            console.error("Failed to initialize database", error);
-        }
-    }
 
     const addUserToDatabase = async (event: React.FormEvent) => {
         event.preventDefault();
-        if (!name || !email) {
-            console.error("Name and email are required");
+        if (!username || !email) {
+            console.error("Username and email are required");
             return;
         }
 
         try {
-            const result = await invoke<string>("add_user_command", { name, email });
-            console.log(result);
-            setResponse(result);
+            const result: User = await invoke("add_user_command", { username, email });
+            console.log("User added:", result);
+            setResponse(`User ${result.username} (ID: ${result.id}) added successfully!`);
+            setUsername("");
+            setEmail("");
+            fetchUsers();
         } catch (error) {
             console.error("Failed to add user to database", error);
+            setResponse(`Error adding user: ${error}`);
         }
     }
 
     const fetchUsers = async () => {
         try {
-            const users = await invoke<[number, string, string][]>("get_users_command");
-            console.log("Fetched users:", users);
+            const fetchedUsers: User[] = await invoke("get_users_command");
+            console.log("Fetched users:", fetchedUsers);
+            setUsers(fetchedUsers);
+            setResponse(`Fetched ${fetchedUsers.length} users.`);
         } catch (error) {
             console.error("Failed to fetch users", error);
+            setResponse(`Error fetching users: ${error}`);
+        }
+    };
+
+    const runPythonScript = async () => {
+        try {
+        const result = await invoke<string>("run_python_script")
+        setResponse(`${result}`);
+        } catch (error) {
+            console.error("Failed to run Python script", error);
+            setResponse(`Error running Python script: ${error}`);
         }
     };
 
@@ -101,21 +80,11 @@ export default function Form() {
         }
     };
 
-    const runPythonScript = async () => {
-        invoke<string>("run_python_script")
-            .then(result => console.log(result))
-            .catch(console.error);
-    };
-
     return (
         <div className="max-w-md mx-auto p-5 border border-gray-300 rounded-lg bg-gray-800">
-            <button
-                onClick={initializeDatabase}
-                className="w-full px-5 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-700 transition duration-300 ease-in-out mb-4"
-            >
-                Initialize Database
-            </button>
-            {dbStatus && <p className="text-white mb-4">{dbStatus}</p>}
+            <div className="mb-2">
+                {response}
+            </div>
             <form onSubmit={addUserToDatabase}>
                 <div className="mb-2">
                     <label htmlFor="name" className="block mb-2 font-bold">
@@ -124,8 +93,8 @@ export default function Form() {
                     <input
                         type="text"
                         id="name"
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
                         required
                         className="w-full p-2 border border-gray-300 rounded-md bg-gray-700"
                     />
@@ -157,36 +126,26 @@ export default function Form() {
                 Fetch Users
             </button>
 
-            <form onSubmit={handleNameSubmit} className="">
-                <div className="mb-2">
-                    <label htmlFor="name" className="block mb-2 font-bold">
-                        Name
-                    </label>
-                    <input
-                        type="text"
-                        id="name"
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                        required
-                        className="w-full p-2 border border-gray-300 rounded-md bg-gray-700"
-                    />
-                </div>
-                <button
-                    type="submit"
-                    className="w-full px-5 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-700 transition duration-300 ease-in-out mb-4"
-                >
-                    Submit
-                </button>
-            </form>
+            {users.length > 0 && (
+                <ul className="w-full text-white mt-2 space-y-2">
+                    {users.map(user => (
+                        <li key={user.id} className="border-b border-gray-600 pb-2 text-gray-200">
+                            {user.username} - {user.email}
+                        </li>
+                    ))}
+                </ul>
+            )}
 
-            <form onSubmit={handleSubmit}>
-                <button
-                    type="submit"
-                    className="w-full px-5 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-700 transition duration-300 ease-in-out"
-                >
-                    Get Users
-                </button>
-            </form>
+            <button
+                 onClick={runPythonScript}
+                 className="w-full mt-4 px-5 py-2 bg-teal-500 text-white rounded-md hover:bg-teal-700 transition duration-300 ease-in-out"
+             >
+                 Run Python Script
+             </button>
+            
+            <div className="mt-[30px]">
+                {"Buttons below aren't working yet!"}
+            </div>
 
             <button
                 onClick={addTimeSeriesData}
@@ -200,23 +159,6 @@ export default function Form() {
             >
                 Fetch Time Series Data
             </button>
-
-            <button
-                 onClick={runPythonScript}
-                 className="w-full mt-4 px-5 py-2 bg-teal-500 text-white rounded-md hover:bg-teal-700 transition duration-300 ease-in-out"
-             >
-                 Run Python Script
-             </button>
-
-            {users.length > 0 && (
-                <ul className="w-full text-white mt-2 space-y-2">
-                    {users.map(user => (
-                        <li key={user.id} className="border-b border-gray-600 pb-2 text-gray-200">
-                            {user.name} - {user.email}
-                        </li>
-                    ))}
-                </ul>
-            )}
         </div>
     );
 }

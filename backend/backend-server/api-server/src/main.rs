@@ -10,6 +10,12 @@ use serde_json::{json, Value};
 use tokio::net::TcpListener;
 use log::{info, error};
 use dotenvy::dotenv;
+use std::env;
+use std::fs;
+use pyo3::Python;
+use pyo3::types::{PyList, PyModule, PyTuple};
+use pyo3::PyResult;
+use pyo3::{IntoPy, ToPyObject};
 
 // shared logic library
 use shared_logic::db::{initialize_connection, DbClient};
@@ -70,6 +76,59 @@ async fn get_all_users(
     }
 }
 
+async fn run_python_script_handler() -> Result<Json<Value>, (StatusCode, String)> {
+    info!("Received request to run Python script.");
+
+    // Python::with_gil needs to be run in a blocking context for async Rust
+    let result = tokio::task::spawn_blocking(move || {
+        Python::with_gil(|py| {
+            // Get the current working directory of the API server executable
+            let current_dir = env::current_dir()?;
+            info!("API Server CWD for Python scripts: {:?}", current_dir);
+
+            // Adjust Python script directory to sys.path
+            // Assuming 'python' and 'scripts' folders are at the workspace root level
+            // relative to the `api-server` crate, it would be `../python` and `../scripts`.
+            // When running `cargo run -p api-server` from `backend-server`,
+            // the CWD is `backend-server`. So paths are relative to that.
+            let sys = py.import("sys")?;
+            let paths: &PyList = sys.getattr("path")?.downcast()?;
+            
+            // Add the directory containing your EyeBlink Python source
+            // This path is relative to the backend-server/ directory
+            paths.insert(0, "./python/EyeBlink/src")?; 
+            info!("Added './python/EyeBlink/src' to Python sys.path");
+
+            // Read and execute test.py
+            let test_py_path = "./python/EyeBlink/src/test.py";
+            let test_py_src = fs::read_to_string(test_py_path)?;
+            PyModule::from_code(py, &test_py_src, "test.py", "__main__")?;
+            info!("Executed test.py");
+
+            // Read and execute hello.py
+            let hello_py_path = "./scripts/hello.py";
+            let hello_py_src = fs::read_to_string(hello_py_path)?;
+            let module = PyModule::from_code(py, &hello_py_src, "hello.py", "hello")?;
+            info!("Loaded hello.py module");
+
+            // Call the 'test' function from hello.py
+            let greet_func = module.getattr("test")?.to_object(py);
+            let args = PyTuple::new(py, &[20_i32.into_py(py), 30_i32.into_py(py)]);
+            let py_result = greet_func.call1(py, args)?;
+
+            let result_str: String = py_result.extract(py)?;
+            info!("Result from Python: {}", result_str);
+
+            Ok(result_str) as PyResult<String>
+        })
+    }).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Python blocking task failed: {}", e)))?;
+
+    match result {
+        Ok(s) => Ok(Json(json!({"python_output": s}))),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Python script execution failed: {}", e))),
+    }
+}
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
@@ -97,6 +156,7 @@ async fn main() {
     let app = Router::new()
         .route("/users", post(create_user))
         .route("/users", get(get_all_users))
+        .route("/run-python-script", get(run_python_script_handler))
         // Share application state with all handlers
         .with_state(app_state);
 
