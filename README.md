@@ -103,7 +103,9 @@ cargo run
 ---
 
 **Run websocket server:**
+- start the docker database 
 ```
+$env:DATABASE_URL="postgres://postgres:my_secure_password_123@localhost:5432/postgres"
 $env:RUST_LOG="info"
 cd backend/backend-server/websocket-server
 cargo run
