@@ -56,6 +56,21 @@ These instructions were tested on Windows and not guarnateed to work on Macs
     ```
     sqlx migrate run
     ```
+
+    **if migrations already exist and need to reset migrations**
+        - run the database and connect to it
+        ```
+        docker exec -it timescaledb psql -U postgres
+        ```
+        - remove the old one from database
+        ```
+        DELETE FROM _sqlx_migrations WHERE version = 20250630230435;
+        ```
+        - go back and re-run
+        ```
+        sqlx migrate run
+        ```
+
 6. cd to shared-logic folder:
     ```
     cd shared-logic
@@ -64,6 +79,16 @@ These instructions were tested on Windows and not guarnateed to work on Macs
     ```
     cargo sqlx prepare
     ```
+
+**clean up database after testing(optional):**
+1. connect to the database
+```
+ docker exec -it timescaledb psql -U postgres
+```
+2. clear all data in the table
+```sql
+ TRUNCATE TABLE eeg_data;
+```
 ---
 
 **Run api server:**
