@@ -5,6 +5,7 @@ use tokio::time::interval;
 use serde::{Serialize, Deserialize};
 use std::time::{Duration};
 use tokio_util::sync::CancellationToken;
+use log::{info, error};
 
 #[derive(Serialize, Deserialize)]
 pub struct Data {
@@ -25,17 +26,17 @@ pub async fn generate_mock_data_json(tx: Sender<String>, cancel_token: Cancellat
                     count += 1;
                 } else {
                     drop += 1;
-                     eprintln!("Send error!");
+                     error!("Send error!");
                 }
             }
 
         _ = cancel_token.cancelled() => {
-                println!("Mock data generator cancelled.");
+                info!("Mock data generator cancelled.");
                 break;
             }   
         }
     }
-    println!("number of data generated and sent: {}, data droped: {}", count, drop);
+    info!("number of data generated and sent: {}, data droped: {}", count, drop);
 }
 
 fn generate_random_data() -> Data {
