@@ -1,24 +1,19 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
+use std::{sync::Arc};
+use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
-use rand::Rng;
-use serde::Serialize;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::time::interval;
+use tokio::sync::Mutex;
 use tokio_tungstenite::{
     accept_async,
-    tungstenite::{self, Message},
+    tungstenite::{Message},
     WebSocketStream,
 };
-use futures_util::stream::SplitSink;
+use tokio_util::sync::CancellationToken;
+use shared_logic::bc::{start_broadcast};
+use shared_logic::db::{initialize_connection};
 use dotenvy::dotenv;
 use log::{info, error};
 
-#[derive(Serialize)]
-struct Data {
-    time: u128,
-    signals: Vec<u8>,
-}
 
 #[tokio::main]
 async fn main() {
@@ -27,7 +22,7 @@ async fn main() {
 
     dotenv().ok();
     info!("Environment variables loaded.");
-
+    initialize_connection().await.expect("Failed to initialize db");
     run_server().await;
 }
 
@@ -77,22 +72,36 @@ async fn handle_ws(stream: TcpStream) {
     }
 }
 
-// handle_connection, does stuff with the WebSocket connection
-// Right now, it sets up an asynchronous write task to send random data.
-// It also listens for incoming websocket closing request with the read stream in order to stop the write task.
+// handle_connection, starts a async broadcast task, 
+// then listens for incoming websocket closing request with the read stream in order to stop the broadcast task.
 async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
-    let (mut write, mut read) = ws_stream.split();
+    let ( write, mut read) = ws_stream.split();
+    // set up for the broadcast task
+    let write = Arc::new(Mutex::new(write)); 
+    let write_clone = write.clone();
+    let cancel_token = CancellationToken::new();
+    let cancel_clone = cancel_token.clone();
+    // spawns the broadcast task
+    let mut broadcast = Some(tokio::spawn(async move {
+        start_broadcast(write_clone, cancel_clone).await;
+    }));
 
-    let sender = tokio::spawn(async move {
-        if let Err(e) = send_random_data(&mut write).await {
-            error!("Error sending random data: {}", e);
-        }
-    });
 
+    //listens for incoming messages 
     while let Some(msg) = read.next().await {
         match msg {
-            Ok(Message::Close(_)) => {
+            Ok(msg) if msg.is_text() => { //prep for closing, this currently will not be called, waiting for frontend
+                let text = msg.to_text().unwrap();
+                info!("Received request: {}", text);
+                if text == "prep close" {
+                    handle_prep_close(&mut broadcast,&cancel_token, &write.clone()).await;
+                }
+            }
+            Ok(Message::Close(frame)) => { //handles closing.
                 info!("Received a close request from the client");
+                cancel_token.cancel(); // remove after frontend updates
+                let mut write = write.lock().await;
+                let _ = write.send(Message::Close(frame)).await;
                 break;
             }
             Ok(_) => continue,
@@ -102,31 +111,30 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
             }
         }
     }
-
-    sender.abort();
     info!("Client disconnected.");
 }
 
-// send_random_data takes the write stream, and loops to send random data
-async fn send_random_data(write: &mut SplitSink<WebSocketStream<TcpStream>, Message>) -> Result<(), tungstenite::Error> {
-    let mut ticker = interval(Duration::from_millis(3));
+// handle_prep_close uses the cancel_token to stop the broadcast sender task, and sends a "prep close complete" message to the client
+async fn handle_prep_close(
+    broadcast_task: &mut Option<tokio::task::JoinHandle<()>>,
+    cancel_token: &CancellationToken,
+    write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>
+) {
+    cancel_token.cancel();
 
-    loop {
-        ticker.tick().await;
+    //wait for Broadcast task to finish before sending the message
+    if let Some(task) = broadcast_task.take() {
+        match task.await {
+            Ok(_) => info!("Broadcast task finished successfully"),
+            Err(e) => error!("Broadcast task panicked: {:?}", e),
+        }
+    }
 
-        let data = generate_random_data();
-        let json = serde_json::to_string(&data).unwrap(); // In a real app, handle unwrap()
-        info!("data sent: {}", json);
-        write.send(Message::Text(json)).await?;
+    let mut write_guard = write.lock().await;
+    if let Err(e) = write_guard.send(Message::Text("prep close complete".into())).await {
+        log::error!("Failed to send message: {}", e);
+    }else {
+        info!("Notified client prep close is complete.");
     }
 }
 
-fn generate_random_data() -> Data {
-    Data {
-        time: SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap() // In a real app, handle unwrap() for duration_since
-            .as_millis(),
-        signals: (0..5).map(|_| rand::thread_rng().gen_range(0..100)).collect(),
-    }
-}
