@@ -56,13 +56,9 @@ These instructions were tested on Windows and not guarnateed to work on Macs
     ```
     sqlx migrate run
     ```
-6. cd to shared-logic folder:
+6. Generate sqlx-data.json schema snapshot:
     ```
-    cd shared-logic
-    ```
-7. Generate sqlx-data.json schema snapshot:
-    ```
-    cargo sqlx prepare
+    cargo sqlx prepare --workspace
     ```
 ---
 
