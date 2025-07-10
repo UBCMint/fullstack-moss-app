@@ -53,21 +53,25 @@ These instructions were tested on Windows and not guarnateed to work on Macs
     ```
     $env:DATABASE_URL="postgres://postgres:my_secure_password_123@localhost:5432/postgres"
     ```
-3. Navigate to Rust Workspace Root
+3. Set up sqlx-cli
+    ```
+    # Install
+    cargo install sqlx-cli  
+
+    # Check Installed 
+    sqlx --version
+    ```
+4. Navigate to Rust Workspace Root
     ```
     cd backend/backend-server
     ```
-4. if /migrations/ folder does not exist or schemas are updated:
+5. if /migrations/ folder does not exist or schemas are updated:
     ```
     sqlx migrate run
     ```
-5. cd to shared-logic folder:
-    ```
-    cd shared-logic
-    ```
 6. Generate sqlx-data.json schema snapshot:
     ```
-    cargo sqlx prepare
+    cargo sqlx prepare --workspace
     ```
 ---
 
@@ -78,7 +82,7 @@ cd backend/backend-server/api-server
 cargo run
 ```
 - Exposed to port 9000
-- Endpoint: http://localhost:8080/
+- Endpoint: http://localhost:9000/
 
 ---
 
