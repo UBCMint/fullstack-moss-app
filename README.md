@@ -69,7 +69,7 @@ cd backend/backend-server/api-server
 cargo run
 ```
 - Exposed to port 9000
-- Endpoint: http://localhost:8080/
+- Endpoint: http://localhost:9000/
 
 ---
 
