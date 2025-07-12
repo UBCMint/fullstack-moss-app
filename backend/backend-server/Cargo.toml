@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "shared-logic",
+    "api-server",
+    "websocket-server",
+]
+resolver = "2"

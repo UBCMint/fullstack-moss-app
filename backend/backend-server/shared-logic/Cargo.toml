@@ -1,7 +1,11 @@
 [package]
 name = "shared-logic"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
+[lib]
+name = "shared_logic"
+path = "src/lib.rs"
 
 [dependencies]
 # Asynchronous Runtime - needed for database operations

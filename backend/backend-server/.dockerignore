@@ -1,0 +1,26 @@
+# Rust build artifacts
+target/
+
+# Cargo cache and metadata
+.cargo/
+
+# Editor/IDE specific files
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Environment files
+.env
+.env.*
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Test/temporary files (if not needed in the build context)
+*.bak
+*.tmp
+*.log

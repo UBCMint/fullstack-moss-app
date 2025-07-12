@@ -1,4 +1,19 @@
 # Full Stack MOSS App
+
+## Docker Setup:
+- Make sure you have installed Docker
+- Run command
+    ```sh
+    docker compose up --build
+    ```
+- Navigate to http://localhost:3000
+- It till take 5-10 minutes to run at first, but will be significantly faster afterwards
+    - This is because it will cache some of the layers so it won't have to build again.
+- URLS:
+    - Frontend:  http://localhost:3000
+    - Websocket: ws://0.0.0.0:8080
+    - API: 0.0.0.0:9000
+
 ## Local Setup
 
 ### Frontend Setup
@@ -94,9 +109,3 @@ cargo run
     ```sh
     npm run tauri dev
     ```
----
-
-## Docker Setup:
-- Todo!
-- Created a docker file for frontend so far, still need to dockerize backend and database.
-- Eventually, will just need to run `docker-compose up --build` to run whole full stack application
