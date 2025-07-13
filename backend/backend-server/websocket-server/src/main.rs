@@ -93,13 +93,13 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
             Ok(msg) if msg.is_text() => { //prep for closing, this currently will not be called, waiting for frontend
                 let text = msg.to_text().unwrap();
                 info!("Received request: {}", text);
-                if text == "prep close" {
+                if text == "clientClosing" {
                     handle_prep_close(&mut broadcast,&cancel_token, &write.clone()).await;
                 }
             }
             Ok(Message::Close(frame)) => { //handles closing.
                 info!("Received a close request from the client");
-                cancel_token.cancel(); // remove after frontend updates
+                // cancel_token.cancel(); // remove after frontend updates
                 let mut write = write.lock().await;
                 let _ = write.send(Message::Close(frame)).await;
                 break;
@@ -131,7 +131,7 @@ async fn handle_prep_close(
     }
 
     let mut write_guard = write.lock().await;
-    if let Err(e) = write_guard.send(Message::Text("prep close complete".into())).await {
+    if let Err(e) = write_guard.send(Message::Text("confirmed closing".into())).await {
         log::error!("Failed to send message: {}", e);
     }else {
         info!("Notified client prep close is complete.");
