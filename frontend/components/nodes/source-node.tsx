@@ -10,7 +10,7 @@ export default function SourceNode() {
 
     return (
         <div onClick={toggleSourceNode} className="relative w-[370px] h-[120px] flex items-center justify-center bg-white rounded-[2.5rem] border-2 border-[#D3D3D3] shadow-none p-0">
-            {/* React Flow handle */}
+            {/* React Flow handle (bottom source) */}
             <Handle type="source" position={Position.Bottom} />
             {/* Status dot */}
             <span
