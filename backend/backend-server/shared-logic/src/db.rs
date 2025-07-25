@@ -7,8 +7,14 @@ use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
 use super::models::{User, NewUser, TimeSeriesData};
+use crate::mockeeg::{Data};
+use once_cell::sync::OnceCell;
+use std::sync::Arc;
 
-pub type DbClient = PgPool;
+pub static DB_POOL: OnceCell<Arc<PgPool>> = OnceCell::new();
+
+pub type DbClient = Arc<PgPool>;
+
 pub async fn initialize_connection() -> Result<DbClient, Error> {
     dotenv().ok();
     let database_url = std::env::var("DATABASE_URL")
@@ -25,8 +31,14 @@ pub async fn initialize_connection() -> Result<DbClient, Error> {
             .await
         {
             Ok(pool) => {
+                 let arc_pool = Arc::new(pool);
+
+                // Set the global DB_POOL once
+                if DB_POOL.set(arc_pool.clone()).is_err() {
+                    warn!("DB_POOL was already initialized.");
+                }
                 info!("Successfully connected to the database.");
-                return Ok(pool);
+                return Ok(arc_pool);
             }
             Err(e) => {
                 error!("Failed to connect to database (attempt {}/{})!: {}", attempts + 1, max_attempts, e);
@@ -42,6 +54,10 @@ pub async fn initialize_connection() -> Result<DbClient, Error> {
     }
 }
 
+pub fn get_db_client() -> DbClient {
+    DB_POOL.get().expect("DB not initialized").clone()
+}
+
 pub async fn add_user(client: &DbClient, new_user: NewUser) -> Result<User, Error> {
     info!("Adding user: {} ({})", new_user.username, new_user.email);
     let user = sqlx::query_as!(
@@ -50,7 +66,7 @@ pub async fn add_user(client: &DbClient, new_user: NewUser) -> Result<User, Erro
         new_user.username,
         new_user.email,
     )
-    .fetch_one(client)
+    .fetch_one(&**client)
     .await?;
     info!("User added successfully: {:?}", user);
     Ok(user)
@@ -59,7 +75,7 @@ pub async fn add_user(client: &DbClient, new_user: NewUser) -> Result<User, Erro
 pub async fn get_users(client: &DbClient) -> Result<Vec<User>, Error> {
     info!("Retrieving users...");
     let users = sqlx::query_as!(User, "SELECT id, username, email FROM users")
-        .fetch_all(client)
+        .fetch_all(&**client)
         .await?;
     info!("Retrieved {} users.", users.len());
     Ok(users)
@@ -80,7 +96,7 @@ pub async fn add_testtime_series_data(
         value,
         metadata
     )
-    .fetch_one(client)
+    .fetch_one(&**client)
     .await?;
     info!("Time series data added successfully: {:?}", data);
     Ok(data)
@@ -94,8 +110,29 @@ pub async fn get_testtime_series_data(client: &DbClient) -> Result<Vec<TimeSerie
         TimeSeriesData,
         "SELECT id, timestamp, value, metadata FROM test_time_series"
     )
-    .fetch_all(client)
+    .fetch_all(&**client)
     .await?;
     info!("Retrieved {} time series data points.", data.len());
     Ok(data)
+}
+
+/// Insert a batch of records into eeg_data.
+pub async fn insert_batch_eeg(client: &DbClient, batch: &[Data]) -> Result<(), sqlx::Error> {
+    // Construct a single SQL insert statement
+    let mut query_builder = sqlx::QueryBuilder::new(
+        "INSERT INTO eeg_data (time, channel1, channel2, channel3, channel4) "
+    );
+    
+    // inputting the values of the batch into the SQL insert statement
+    query_builder.push_values(batch, |mut b, item| {
+        b.push_bind(item.time)
+            .push_bind(item.signals[0])
+            .push_bind(item.signals[1])
+            .push_bind(item.signals[2])
+            .push_bind(item.signals[3]);
+    });
+
+    query_builder.build().execute(&**client).await?;
+    info!("Batch EEG data added successfully, Size: {}", batch.len());
+    Ok(())
 }

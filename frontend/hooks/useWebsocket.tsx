@@ -6,20 +6,82 @@ export default function useWebsocket(
     batchesPerSecond: number
 ) {
     const { dataStreaming } = useGlobalContext();
-    const [renderData, setRenderData] = useState<any[] | []>([]); //  batch data here
-    const bufferRef = useRef<any[]>([]); // all data here
+    const [renderData, setRenderData] = useState<any[] | []>([]);
+    const bufferRef = useRef<any[]>([]);
+    const wsRef = useRef<WebSocket | null>(null);
+    const closingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const [isClosingGracefully, setIsClosingGracefully] = useState(false);
+
     const intervalTime = 1000 / batchesPerSecond;
 
     useEffect(() => {
         console.log('data streaming:', dataStreaming);
-        if (!dataStreaming) return;
 
-        const ws = new WebSocket('ws://localhost:8080');
+        if (!dataStreaming && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            if (!isClosingGracefully) {
+                console.log("Initiating graceful close...");
+                setIsClosingGracefully(true);
+                wsRef.current.send('clientClosing');
 
-        ws.onmessage = (event) => {
-            const parsedData = JSON.parse(event.data);
-            bufferRef.current.push(parsedData);
-        };
+                closingTimeoutRef.current = setTimeout(() => {
+                    console.warn("Timeout: No 'confirmed closing' received. Forcing WebSocket close.");
+                    if (wsRef.current) {
+                        wsRef.current.close();
+                    }
+                    setIsClosingGracefully(false);
+                }, 5000);
+            }
+            return;
+        }
+
+        if (!dataStreaming && (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED)) {
+            return;
+        }
+
+        if (dataStreaming && (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED)) {
+            console.log("Opening new WebSocket connection...");
+            const ws = new WebSocket('ws://localhost:8080');
+            wsRef.current = ws;
+
+            ws.onopen = () => {
+                console.log('WebSocket connection opened.');
+            };
+
+            ws.onmessage = (event) => {
+                const message = event.data;
+                if (message === 'confirmed closing') {
+                    console.log("Received 'confirmed closing' from server. Proceeding to close.");
+                    if (closingTimeoutRef.current) {
+                        clearTimeout(closingTimeoutRef.current);
+                    }
+                    if (wsRef.current) {
+                        wsRef.current.close();
+                    }
+                    setIsClosingGracefully(false);
+                } else {
+                    try {
+                        const parsedData = JSON.parse(message);
+                        bufferRef.current.push(parsedData);
+                    } catch (e) {
+                        console.error("Failed to parse non-confirmation message as JSON:", e, message);
+                    }
+                }
+            };
+
+            ws.onclose = (event) => {
+                console.log('WebSocket connection closed:', event.code, event.reason);
+                wsRef.current = null;
+                setIsClosingGracefully(false);
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                if (closingTimeoutRef.current) {
+                    clearTimeout(closingTimeoutRef.current);
+                }
+                setIsClosingGracefully(false);
+            };
+        }
 
         const updateRenderData = () => {
             if (bufferRef.current.length > 0) {
@@ -28,18 +90,43 @@ export default function useWebsocket(
                     Math.min(bufferRef.current.length, chartSize)
                 );
                 setRenderData((prevData) =>
-                    [...prevData, ...nextBatch].slice(-chartSize)
+                    [...(Array.isArray(prevData) ? prevData : []), ...nextBatch].slice(-chartSize)
                 );
             }
         };
 
-        const intervalId = setInterval(updateRenderData, intervalTime);
+        let intervalId: NodeJS.Timeout | null = null;
+        if (dataStreaming) {
+            intervalId = setInterval(updateRenderData, intervalTime);
+        }
 
         return () => {
-            ws.close();
-            clearInterval(intervalId);
+            console.log("Cleanup function running.");
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+
+            if (closingTimeoutRef.current) {
+                clearTimeout(closingTimeoutRef.current);
+            }
+
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN && !isClosingGracefully) {
+                console.log("Component unmounting or dependencies changed: Initiating graceful close during cleanup.");
+                wsRef.current.send('clientClosing');
+                closingTimeoutRef.current = setTimeout(() => {
+                    console.warn("Timeout: No 'confirmed closing' received during cleanup. Forcing WebSocket close.");
+                    if (wsRef.current) {
+                        wsRef.current.close();
+                    }
+                }, 5000);
+            } else if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+                console.log("Forcing immediate WebSocket close during cleanup.");
+                wsRef.current.close();
+            }
+            wsRef.current = null;
+            setIsClosingGracefully(false);
         };
-    }, [chartSize, batchesPerSecond, dataStreaming]); // re-run when either parameter changes
+    }, [chartSize, batchesPerSecond, dataStreaming, isClosingGracefully]);
 
     return { renderData };
 }
