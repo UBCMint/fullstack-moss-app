@@ -3,4 +3,5 @@ pub mod db;
 pub mod models;
 pub mod bc;
 pub mod mockeeg;
+pub mod lsl;
 pub use models::{User, TimeSeriesData, NewUser};
