@@ -13,10 +13,13 @@ import {
     Panel,
     Connection,
     ConnectionMode,
+    Node,
+    Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import SourceNode from '@/components/nodes/source-node';
 import FilterNode from '@/components/nodes/filter-node/filter-node';
+import MachineLearningNode from '@/components/nodes/machine-learning-node/machine-learning-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
@@ -28,6 +31,7 @@ import { Ellipsis } from 'lucide-react';
 const nodeTypes = {
     'source-node': SourceNode,
     'filter-node': FilterNode,
+    'machine-learning-node': MachineLearningNode,
     'signal-graph-node': SignalGraphNode,
 };
 
@@ -35,8 +39,8 @@ let id = 0;
 const getId = () => `node_${id++}`;
 
 const ReactFlowInterface = () => {
-    const [nodes, setNodes, onNodesChange] = useNodesState([]);
-    const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+    const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
     const { screenToFlowPosition } = useReactFlow();
     const [isControlsOpen, setIsControlsOpen] = useState(false);
 
