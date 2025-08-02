@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { getIncomers, Handle, Node, Position, useReactFlow } from '@xyflow/react';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
 import SignalGraphPreview from './signal-graph-preview';
 import useWebsocket from '@/hooks/useWebsocket';
 
