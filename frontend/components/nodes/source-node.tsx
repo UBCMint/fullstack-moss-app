@@ -17,7 +17,7 @@ export default function SourceNode() {
             />
             {/* Texts */}
             <div className="flex flex-col items-start justify-center ml-14">
-                <span className="font-geist text-[25px] font-[550] leading-tight text-black">
+                <span className="font-geist text-[25px] font-[550] leading-tight text-black tracking-wider">
                     EEG Headset
                 </span>
                 <span className="font-geist text-[14px] font-light leading-tight text-black mt-0">
