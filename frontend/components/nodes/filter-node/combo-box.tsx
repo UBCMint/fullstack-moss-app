@@ -28,14 +28,6 @@ export default function ComboBox({
 }: ComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const titleRef = React.useRef<HTMLSpanElement>(null);
-    const [titleWidth, setTitleWidth] = React.useState(0);
-
-    // Measure title width when component mounts or value changes
-    React.useEffect(() => {
-        if (titleRef.current) {
-            setTitleWidth(titleRef.current.offsetWidth);
-        }
-    }, [value]);
 
     const toggleExpanded = () => {
         setIsExpanded(!isExpanded);

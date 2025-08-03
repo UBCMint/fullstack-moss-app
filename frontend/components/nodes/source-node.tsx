@@ -8,7 +8,7 @@ export default function SourceNode() {
 
     return (
         <div
-        onClick={() => setIsConnected(!isConnected)}
+            onClick={() => setIsConnected(!isConnected)}
             className="relative w-[396px] h-[96px] flex bg-white rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0"
         >
             {/* Status dot */}
@@ -34,7 +34,16 @@ export default function SourceNode() {
                 <Handle
                     type="source"
                     position={Position.Right}
-                    className="absolute mr-2 h-3 w-3 !bg-white rounded-full"
+                    id="source-node-input"
+                    style={{
+                        transform: 'translateY(-50%)',
+                        width: '18px',
+                        height: '18px',
+                        backgroundColor: 'transparent',
+                        border: '2px solid transparent',
+                        borderRadius: '50%',
+                        zIndex: 10,
+                    }}
                     onConnect={() => setIsConnected(!isConnected)}
                 />
             </span>
