@@ -6,10 +6,10 @@ import ComboBox from './combo-box';
 
 interface FilterNodeProps {
     id?: string;
-    data?: any;
+    // data?: any;
 }
 
-export default function FilterNode({ id, data }: FilterNodeProps) {
+export default function FilterNode({ id }: FilterNodeProps) {
     const [selectedFilter, setSelectedFilter] = React.useState('lowpass');
     const [isConnected, setIsConnected] = React.useState(false);
     
