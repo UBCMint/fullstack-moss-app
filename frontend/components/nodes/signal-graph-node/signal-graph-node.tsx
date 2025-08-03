@@ -1,7 +1,8 @@
 import { Card } from '@/components/ui/card';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
-import SignalGraphPreview from './signal-graph-preview';
+import { Edge, Handle, Node, Position, useReactFlow } from '@xyflow/react';
 import useWebsocket from '@/hooks/useWebsocket';
+import { useState } from 'react';
+import { useGlobalContext } from '@/context/GlobalContext';
 
 import {
     Dialog,
@@ -29,7 +30,7 @@ export default function SignalGraphNode() {
     const nodes = getNodes();
     const edges = getEdges();
 
-    const areNodeTypesConnected = (nodes: any[], edges: any[], typeA: string, typeB: string, typeC: string) => {
+    const areNodeTypesConnected = (nodes: Node[], edges: Edge[], typeA: string, typeB: string, typeC: string) => {
         const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
       
         return edges.some((edge) => {
