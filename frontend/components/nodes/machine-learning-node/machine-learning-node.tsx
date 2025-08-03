@@ -2,15 +2,15 @@
 import React from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
-import ComboBox from './combo-box';
+import MLComboBox from './ml-combo-box';
 
-interface FilterNodeProps {
+interface MachineLearningNodeProps {
     id?: string;
     data?: any;
 }
 
-export default function FilterNode({ id, data }: FilterNodeProps) {
-    const [selectedFilter, setSelectedFilter] = React.useState('lowpass');
+export default function MachineLearningNode({ id, data }: MachineLearningNodeProps) {
+    const [selectedPrediction, setSelectedPrediction] = React.useState('stress');
     const [isConnected, setIsConnected] = React.useState(false);
     
     // Get React Flow instance
@@ -85,7 +85,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
             <Handle 
                 type="target" 
                 position={Position.Left}
-                id="filter-input"
+                id="ml-input"
                 style={{ 
                     left: '20px', // Align with left circle position
                     top: '30px',
@@ -104,7 +104,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
             <Handle 
                 type="source" 
                 position={Position.Right}
-                id="filter-output"
+                id="ml-output"
                 style={{ 
                     right: '20px', // Align with right circle position
                     top: '30px',
@@ -119,13 +119,13 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                 className="hover:border-blue-500"
             />
 
-            {/* Just the ComboBox without Card wrapper */}
-            <ComboBox 
-                value={selectedFilter}
-                onValueChange={setSelectedFilter}
+            {/* Just the MLComboBox without Card wrapper */}
+            <MLComboBox 
+                value={selectedPrediction}
+                onValueChange={setSelectedPrediction}
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
             />
         </div>
     );
-}
+} 

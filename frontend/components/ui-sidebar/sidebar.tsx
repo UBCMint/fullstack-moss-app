@@ -28,6 +28,12 @@ export default function Sidebar() {
             category: 'Filters',
         },
         {
+            id: 'machine-learning-node',
+            label: 'Machine Learning',
+            description: 'ML prediction node for stress, focus, and mood analysis.',
+            category: 'Machine Learning',
+        },
+        {
             id: 'signal-graph-node',
             label: 'Signal Graph',
             description: 'Drag this node anywhere on the page.',

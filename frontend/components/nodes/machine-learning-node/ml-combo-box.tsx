@@ -2,30 +2,34 @@ import * as React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const filters = [
+const mlPredictions = [
     {
-        value: 'lowpass',
-        label: 'Low Pass Filter',
+        value: 'stress',
+        label: 'Stress Prediction',
     },
     {
-        value: 'highpass',
-        label: 'High Pass Filter',
+        value: 'focus',
+        label: 'Focus Prediction',
+    },
+    {
+        value: 'mood',
+        label: 'Mood Prediction',
     },
 ];
 
-interface ComboBoxProps {
+interface MLComboBoxProps {
     value?: string;
     onValueChange?: (value: string) => void;
     isConnected?: boolean;
     isDataStreamOn?: boolean;
 }
 
-export default function ComboBox({ 
-    value = 'lowpass', 
+export default function MLComboBox({ 
+    value = 'stress', 
     onValueChange,
     isConnected = false,
     isDataStreamOn = false
-}: ComboBoxProps) {
+}: MLComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const titleRef = React.useRef<HTMLSpanElement>(null);
     const [titleWidth, setTitleWidth] = React.useState(0);
@@ -91,12 +95,12 @@ export default function ComboBox({
                         )}
                     />
                     
-                    {/* Filter text - larger, bold font with ref for measurement */}
+                    {/* ML prediction text - larger, bold font with ref for measurement */}
                     <span 
                         ref={titleRef}
                         className="text-xl font-bold text-gray-900 whitespace-nowrap"
                     >
-                        {filters.find((filter) => filter.value === value)?.label || 'Low Pass Filter'}
+                        {mlPredictions.find((prediction) => prediction.value === value)?.label || 'Stress Prediction'}
                     </span>
                 </div>
                 
@@ -141,23 +145,23 @@ export default function ComboBox({
                         paddingBottom: '8px'
                     }}
                 >
-                    {filters.map((filter) => (
+                    {mlPredictions.map((prediction) => (
                         <button
-                            key={filter.value}
-                            onClick={() => handleOptionSelect(filter.value)}
+                            key={prediction.value}
+                            onClick={() => handleOptionSelect(prediction.value)}
                             className={cn(
                                 "text-left px-3 py-0 text-xs font-normal rounded-lg transition-colours",
                                 "block w-full", // Full width within the constrained container
-                                value === filter.value 
+                                value === prediction.value 
                                     ? "bg-gray-100 text-gray-900" 
                                     : "text-gray-600 hover:bg-gray-50"
                             )}
                         >
-                            {filter.label}
+                            {prediction.label}
                         </button>
                     ))}
                 </div>
             </div>
         </div>
     );
-}
+} 
