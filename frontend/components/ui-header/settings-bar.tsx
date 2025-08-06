@@ -19,7 +19,10 @@ export default function SettingsBar() {
         if (dataStreaming) {
             // Start the timer
             intervalRef.current = setInterval(() => {
-                setLeftTimerSeconds(prev => prev + 1);
+                setLeftTimerSeconds(prev => {
+                    if (prev >= 300) return 300; // Cap at 300 seconds (5 minutes)
+                    return prev + 1;
+                });
             }, 1000);
         } else {
             // Stop the timer
@@ -28,7 +31,6 @@ export default function SettingsBar() {
                 intervalRef.current = null;
             }
         }
-
         // Cleanup on unmount
         return () => {
             if (intervalRef.current) {
@@ -36,9 +38,28 @@ export default function SettingsBar() {
             }
         };
     }, [dataStreaming]);
+
+    // Stop the stream if timer hits 300 seconds (5 minutes)
+    useEffect(() => {
+        if (leftTimerSeconds >= 300 && dataStreaming) {
+            setDataStreaming(false);
+        }
+    }, [leftTimerSeconds, dataStreaming]);
+
+
     const handleStartStop = () => {
         setDataStreaming(!dataStreaming);
     };
+
+    const handleReset = () => {
+        if (intervalRef.current) {
+            clearInterval(intervalRef.current)
+            intervalRef.current = null
+        }
+        setLeftTimerSeconds(0)
+        setDataStreaming(false)
+    }
+
 
     // Format seconds to MM:SS
     const formatTime = (seconds: number) => {
@@ -64,16 +85,22 @@ export default function SettingsBar() {
 
             {/* slider */}
             <div className="flex-1 mx-4">
-                <Slider defaultValue={[50]} max={100} step={1}/>
+                <Slider
+                    value={[(leftTimerSeconds / 300) * 100]}
+                    max={100}
+                    step={1}
+                    disabled
+                />
             </div>
 
             {/* Timer */}
             <div className="mx-4">
                 <Timer
                     leftTime={formatTime(leftTimerSeconds)}
-                    rightTime="00:00"
+                    rightTime="05:00"
                 />
             </div>
+
 
             {/* start/stop, load, save */}
             <div className="flex space-x-2">
@@ -83,7 +110,7 @@ export default function SettingsBar() {
                 >
                     {dataStreaming ? 'Stop Data Stream' : 'Start Data Stream'}
                 </Button>
-                <Button variant="outline">Reset</Button>
+                <Button variant="outline" onClick={handleReset}>Reset</Button>
                 <Button variant="outline">Save</Button>
             </div>
         </div>
