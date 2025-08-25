@@ -12,6 +12,7 @@ const config: Config = {
       fontFamily: {
         geist: ['Geist', 'sans-serif'],
         'geist-mono': ['GeistMono', 'monospace'],
+        ibmplex: ['var(--font-ibm-plex-sans-hebrew)', 'sans-serif'],
       },			
   		colors: {
   			background: 'hsl(var(--background))',

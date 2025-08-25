@@ -15,6 +15,45 @@ export default function SourceNode() {
             <span
                 className={`absolute left-6 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full  ${dataStreaming && isConnected ? 'bg-[#509693]' : 'bg-[#D3D3D3]'}`}
             />
+            {/* Left target handle (for visual/optional incoming connections) */}
+            <Handle
+                type="target"
+                position={Position.Left}
+                id="source-node-left"
+                style={{
+                    left: '24px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: '28px',
+                    height: '28px',
+                    backgroundColor: 'transparent',
+                    border: '2px solid transparent',
+                    borderRadius: '50%',
+                    zIndex: 20,
+                    cursor: 'crosshair',
+                    pointerEvents: 'all',
+                }}
+            />
+            {/* Bottom center source handle (small black dot) */}
+            <Handle
+                type="source"
+                position={Position.Bottom}
+                id="source-bottom"
+                style={{
+                    left: '50%',
+                    bottom: '-6px',
+                    transform: 'translateX(-50%)',
+                    width: '10px',
+                    height: '10px',
+                    backgroundColor: '#000',
+                    border: '2px solid #ffffff',
+                    borderRadius: '50%',
+                    zIndex: 30,
+                    cursor: 'crosshair',
+                    pointerEvents: 'all',
+                }}
+                onConnect={() => setIsConnected(!isConnected)}
+            />
             {/* Texts */}
             <div className="flex flex-col items-start justify-center ml-14">
                 <span className="font-geist text-[25px] font-[550] leading-tight text-black tracking-wider">
@@ -31,21 +70,6 @@ export default function SourceNode() {
                 {isConnected && (
                     <span className="w-3 h-3 rounded-full bg-white" />
                 )}
-                <Handle
-                    type="source"
-                    position={Position.Right}
-                    id="source-node-input"
-                    style={{
-                        transform: 'translateY(-50%)',
-                        width: '18px',
-                        height: '18px',
-                        backgroundColor: 'transparent',
-                        border: '2px solid transparent',
-                        borderRadius: '50%',
-                        zIndex: 10,
-                    }}
-                    onConnect={() => setIsConnected(!isConnected)}
-                />
             </span>
         </div>
     );
