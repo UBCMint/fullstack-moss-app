@@ -1,8 +1,8 @@
 # Stage 1: Build the Rust application
-FROM rust:1.85-slim-bookworm AS builder
+FROM rust:1.85-bullseye AS builder
 
 RUN apt-get update && \
-    apt-get install -y libpython3.11-dev python3-pip python3-venv pkg-config && \
+    apt-get install -y libpython3.9-dev python3-pip python3-venv pkg-config build-essential cmake && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/backend-server
@@ -27,14 +27,14 @@ RUN cargo install sqlx-cli --no-default-features --features postgres
 
 
 # Stage 2: Create the final minimal image
-FROM debian:bookworm-slim
+FROM debian:bullseye-slim
 
 RUN apt-get update && \
-    apt-get install -y ca-certificates postgresql-client python3 libpython3.11 && \
+    apt-get install -y ca-certificates postgresql-client python3 libpython3.9 && \
     rm -rf /var/lib/apt/lists/*
 
 RUN ldconfig
-ENV LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu/:/usr/local/lib:/usr/lib/python3.11/:/opt/venv/lib:$LD_LIBRARY_PATH"
+ENV LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu/:/usr/local/lib:/usr/lib/python3.9/:/opt/venv/lib:$LD_LIBRARY_PATH"
 
 WORKDIR /app
 
