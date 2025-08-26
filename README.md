@@ -88,6 +88,10 @@ These instructions were tested on Windows and not guarnateed to work on Macs
 
 6. Generate sqlx-data.json schema snapshot:
     ```
+    cd shared-logic
+    ```
+7. Generate sqlx-data.json schema snapshot:
+    ```
     cargo sqlx prepare --workspace
     ```
 
@@ -136,3 +140,31 @@ cargo run
     ```sh
     npm run tauri dev
     ```
+---
+
+**Set up LSL**
+- The "lsl" Rust crate uses the C/C++ compiler and Cmake, make sure those are setup 
+```
+cmake --version  #Verify Installation of cmake
+```
+
+- Install Muse LSL
+```
+pip install muselsl
+```
+
+---
+**Connect to the Muse Headset**
+- Comment out the mock data generator in backend/backend-server/shared-logic/src/bc.rs
+
+- To print a list of available muses:
+```
+$ muselsl list
+```
+
+- To connect to the first available Muse Headset and begin a stream:
+```
+$ muselsl stream  
+```
+
+---
