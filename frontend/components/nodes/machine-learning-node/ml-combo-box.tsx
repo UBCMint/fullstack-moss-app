@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AlertCircle } from 'lucide-react';
 
 const mlPredictions = [
     {
@@ -32,6 +33,7 @@ export default function MLComboBox({
 }: MLComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const titleRef = React.useRef<HTMLSpanElement>(null);
+    const [dismissedError, setDismissedError] = React.useState(false);
 
     const toggleExpanded = () => {
         setIsExpanded(!isExpanded);
@@ -45,11 +47,18 @@ export default function MLComboBox({
         }, 100);
     };
 
+    // Reset local dismissal whenever the node reconnects/disconnects
+    React.useEffect(() => {
+        if (isConnected) {
+            setDismissedError(false);
+        }
+    }, [isConnected]);
+
     return (
         <div
             className={cn('w-full flex flex-col')}
             style={{
-                height: isExpanded ? 'auto' : '90px',
+                height: isExpanded || (!isConnected && !dismissedError) ? 'auto' : '90px',
                 transition: 'height 0.3s ease-in-out',
             }}
         >
@@ -116,6 +125,33 @@ export default function MLComboBox({
                     ></div>
                 </div>
             </button>
+
+            {/* In-card error message when not properly connected */}
+            {!isConnected && !dismissedError && (
+                <div className="px-5 pb-4 -mt-1">
+                    <div className="w-full bg-white rounded-2xl border border-gray-200 px-4 pt-3 pb-4 shadow-sm">
+                        <div className="flex items-start space-x-3">
+                            <div className="mt-0.5">
+                                <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center">
+                                    <AlertCircle className="w-4 h-4 text-red-600" />
+                                </div>
+                            </div>
+                            <div className="flex-1 text-left">
+                                <div className="text-[18px] font-semibold text-gray-900 leading-6">Error: Expected filtered input but received raw input.</div>
+                                <div className="text-[16px] text-gray-800 mt-2">Please attach the prediction node to a filter node.</div>
+                                <div className="mt-4 flex justify-center">
+                                    <button
+                                        onClick={() => setDismissedError(true)}
+                                        className="px-4 py-2 rounded-xl bg-[#2B6C66] text-white font-semibold text-[16px]"
+                                    >
+                                        okay
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Expandable options section */}
             <div

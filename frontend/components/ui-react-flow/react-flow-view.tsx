@@ -49,9 +49,48 @@ const ReactFlowInterface = () => {
     const { screenToFlowPosition } = useReactFlow();
     const [isControlsOpen, setIsControlsOpen] = useState(false);
 
+    // Helper to notify components that edges have changed
+    const dispatchEdgesChanged = () => {
+        try {
+            window.dispatchEvent(new Event('reactflow-edges-changed'));
+        } catch (_) {
+            // no-op if window is unavailable
+        }
+    };
+
     const onConnect: OnConnect = useCallback(
-        (connection) => setEdges((eds) => addEdge(connection, eds)),
-        [setEdges]
+        (connection) => {
+            // Validate new connections before adding the edge
+            const sourceNode = nodes.find((n) => n.id === connection.source);
+            const targetNode = nodes.find((n) => n.id === connection.target);
+
+            // Disallow self-connections or missing nodes
+            if (
+                !connection.source ||
+                !connection.target ||
+                connection.source === connection.target ||
+                !sourceNode ||
+                !targetNode
+            ) {
+                return;
+            }
+
+            // Enforce: ML node must have a Filter as immediate predecessor
+            if (targetNode.type === 'machine-learning-node') {
+                if (sourceNode.type !== 'filter-node') {
+                    // block Source → ML or anything else → ML
+                    return;
+                }
+            }
+
+            setEdges((eds) => {
+                const updated = addEdge(connection, eds);
+                return updated;
+            });
+            // dispatch immediately after scheduling state update
+            dispatchEdgesChanged();
+        },
+        [nodes, setEdges]
     );
 
     const onNodesChange: OnNodesChange = useCallback(
@@ -60,7 +99,11 @@ const ReactFlowInterface = () => {
     );
 
     const onEdgesChange: OnEdgesChange = useCallback(
-        (changes) => setEdges((eds) => applyEdgeChanges(changes, eds)),
+        (changes) =>
+            setEdges((eds) => {
+                const updated = applyEdgeChanges(changes, eds);
+                return updated;
+            }),
         [setEdges]
     );
 
@@ -107,9 +150,27 @@ const ReactFlowInterface = () => {
         });
     };
 
-    const isValidConnection = useCallback((connection: Connection | Edge) => {
-        return connection.source !== connection.target;
-    }, []);
+    const isValidConnection = useCallback(
+        (connection: Connection | Edge) => {
+            if (connection.source === connection.target) return false;
+            const sourceNode = nodes.find((n) => n.id === connection.source);
+            const targetNode = nodes.find((n) => n.id === connection.target);
+            if (!sourceNode || !targetNode) return false;
+
+            // Enforce: ML node requires Filter as immediate predecessor
+            if (targetNode.type === 'machine-learning-node') {
+                return sourceNode.type === 'filter-node';
+            }
+
+            // Allow Source → Filter; block Source → ML handled above
+            if (targetNode.type === 'filter-node') {
+                return sourceNode.type === 'source-node';
+            }
+
+            return true;
+        },
+        [nodes]
+    );
 
     return (
         <div
@@ -169,6 +230,11 @@ const ReactFlowInterface = () => {
                     <div className="bg-white p-2 rounded border text-xs">
                         <div>Nodes: {nodes.length}</div>
                         <div>Edges: {edges.length}</div>
+                        <div className="mt-1 max-w-[260px]">
+                            {edges.map((e) => (
+                                <div key={e.id || `${e.source}-${e.target}`}>{`${e.source} → ${e.target}`}</div>
+                            ))}
+                        </div>
                     </div>
                 </Panel>
 
