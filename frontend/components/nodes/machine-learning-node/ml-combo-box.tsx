@@ -88,15 +88,14 @@ export default function MLComboBox({
                         className={cn(
                             'w-2 h-2 rounded-full',
                             isConnected && isDataStreamOn
-                                ? 'bg-teal-500'
-                                : 'bg-gray-400'
+                                ? "bg-[#509693]" : "bg-[#D3D3D3]"
                         )}
                     />
 
                     {/* ML prediction text - larger, bold font with ref for measurement */}
                     <span
                         ref={titleRef}
-                        className="text-xl font-bold text-gray-900 whitespace-nowrap"
+                        className="font-geist text-[25px] font-[550] leading-tight text-black tracking-wider"
                     >
                         {mlPredictions.find(
                             (prediction) => prediction.value === value
@@ -116,7 +115,7 @@ export default function MLComboBox({
                     <div
                         className={cn(
                             'w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white',
-                            isConnected && isDataStreamOn
+                            isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
                                   ? 'border-gray-300' // Connected to source: gray border (non-activated)
