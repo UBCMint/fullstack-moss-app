@@ -1,6 +1,6 @@
 'use client';
 import { Button } from '@/components/ui/button';
-import { ExternalLinkIcon, ChevronUpIcon } from '@radix-ui/react-icons';
+import { ChevronUpIcon } from '@radix-ui/react-icons';
 import { MoveUpRight } from 'lucide-react';
 
 import {
