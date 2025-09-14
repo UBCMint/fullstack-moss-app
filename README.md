@@ -65,7 +65,7 @@ These instructions were tested on Windows and not guarnateed to work on Macs
     ```
 4. Navigate to Rust Workspace Root
     ```
-    cd backend/backend-server
+    cd backend
     ```
 5. if /migrations/ folder does not exist or schemas are updated:
     ```
@@ -109,7 +109,7 @@ These instructions were tested on Windows and not guarnateed to work on Macs
 **Run api server:**
 ```
 $env:RUST_LOG="info"
-cd backend/backend-server/api-server
+cd backend/api-server
 cargo run
 ```
 - Exposed to port 9000
@@ -122,24 +122,12 @@ cargo run
 ```
 $env:DATABASE_URL="postgres://postgres:my_secure_password_123@localhost:5432/postgres"
 $env:RUST_LOG="info"
-cd backend/backend-server/websocket-server
+cd backend/websocket-server
 cargo run
 ```
 - Exposed to port 8080
 - Endpoint: ws://127.0.0.1:8080
 
----
-**Tauri App to test backend endpoints:**
-- Run these commands on terminal:
-    ```sh
-    cd backend
-    cd mint-backend-tauri-app
-    npm install
-    ```
-- To start server (still in mint-backend-tauri-app directory):
-    ```sh
-    npm run tauri dev
-    ```
 ---
 
 **Set up LSL**
