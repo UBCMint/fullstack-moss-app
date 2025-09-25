@@ -49,6 +49,24 @@ export default function SignalGraphNode() {
 
     const [isConnected, setIsConnected] = useState(false);
     const { dataStreaming } = useGlobalContext()
+
+    function getRandomSignal(base: number) {
+        // base value ±10, clamped to 0-100
+        const val = base + (Math.random() * 20 - 10);
+        return Math.min(100, Math.max(0, Math.round(val)));
+      }
+      
+      const mockData = Array.from({ length: 11 }, (_, i) => {
+        const time = (i * 10).toString();
+        return {
+          time,
+          signal1: getRandomSignal(i * 10 + 10),
+          signal2: getRandomSignal(i * 10 + 20),
+          signal3: getRandomSignal(i * 10 + 30),
+          signal4: getRandomSignal(i * 10 + 40),
+          signal5: getRandomSignal(i * 10 + 50),
+        };
+      });
     
     return (
         <Dialog>
@@ -126,13 +144,13 @@ export default function SignalGraphNode() {
                         Here is a preview of the signal graph.
                     </DialogDescription>
                 </DialogHeader>
-                <Card>
                     <div className="w-full h-full">
-                        <SignalGraphView data={connected? processedData : []} />
-                    </div>
-                </Card>
+                        
+                        <SignalGraphView data={mockData} /> 
+                    </div> 
             </DialogContent>
             </Card>
         </Dialog>
     );
 }
+//connected? processedData : []
