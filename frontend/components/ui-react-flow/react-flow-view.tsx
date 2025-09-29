@@ -32,6 +32,7 @@ import Sidebar from '@/components/ui-sidebar/sidebar';
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Ellipsis } from 'lucide-react';
+import { headers } from 'next/headers';
 
 const nodeTypes = {
     'source-node': SourceNode,
@@ -200,10 +201,18 @@ const ReactFlowInterface = () => {
                 attributionPosition="bottom-left"
                 isValidConnection={isValidConnection}
             >
-                <Panel position="top-right">
+                <Panel position="top-right" style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                }}>
                     <button
                         onClick={toggleControls}
-                        className="p-2 rounded-full bg-white border "
+                        className="p-1 rounded-full bg-white border "
+                        style={{ 
+                            width: 30, 
+                            height: 30, 
+                        }}
                     >
                         {isControlsOpen ? (
                             <X size={20} />
@@ -211,15 +220,19 @@ const ReactFlowInterface = () => {
                             <Ellipsis size={20} />
                         )}
                     </button>
-                    {isControlsOpen && (
+                    <div style={{
+                        transition: 'opacity 0.2s, transform 0.2s',
+                        opacity: isControlsOpen ? 1 : 0,
+                        transform: isControlsOpen ? 'translateY(5px)' : 'translateY(-5px)',
+                        pointerEvents: isControlsOpen ? 'auto' : 'none',
+                    }}>
                         <Controls
                             position="top-right"
                             style={{
-                                top: '90%',
-                                left: '-25%',
+                                position: 'static',
                             }}
                         />
-                    )}
+                    </div>
                 </Panel>
                 <Panel position="top-left">
                     <Sidebar />
