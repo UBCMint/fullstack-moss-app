@@ -227,7 +227,6 @@ const ReactFlowInterface = () => {
                         pointerEvents: isControlsOpen ? 'auto' : 'none',
                     }}>
                         <Controls
-                            position="top-right"
                             style={{
                                 position: 'static',
                             }}
