@@ -2,7 +2,7 @@ use tokio::sync::broadcast;
 use tokio::sync::broadcast::Receiver;
 
 use crate::mockeeg::{generate_mock_data};
-use crate::lsl::{EEGData, receive_eeg};
+use crate::lsl::{EEGDataPacket, receive_eeg};
 use crate::db::{insert_batch_eeg, get_db_client};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt};
@@ -20,7 +20,7 @@ use log::{info, error};
 
 // starts the broadcast by spawning async sender and receiver tasks.
 pub async fn start_broadcast(write: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,  cancel_token: CancellationToken) {
-    let (tx, _rx) = broadcast::channel::<EEGData>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
+    let (tx, _rx) = broadcast::channel::<EEGDataPacket>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
     let rx_ws = tx.subscribe();
     let rx_db = tx.subscribe();
     let generator_token = cancel_token.clone(); 
@@ -58,18 +58,18 @@ pub async fn start_broadcast(write: Arc<Mutex<SplitSink<WebSocketStream<TcpStrea
     }
 }
 
-// ws_broadcast_receiver takes a EEGData struct from the broadcast sender, and converts it to JSON, then send it to the connected websocket client. 
+// ws_broadcast_receiver takes a EEGDataPacket  struct from the broadcast sender, and converts it to JSON, then send it to the connected websocket client. 
 pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>, 
-    mut rx_ws: Receiver<EEGData>) {
+    mut rx_ws: Receiver<EEGDataPacket>) {
     let mut count = 0;  // for debug purposes
     let mut dropped  = 0;  // for debug purposes
 
     // loops to hanle messages coming in from broadcast
     loop {
         match rx_ws.recv().await {
-            Ok(eeg_data) => { // receives the EEGData struct
+            Ok(eeg_packet) => { // receives the EEGData Packet
                 // Serialize to JSON for WebSocket transmission
-                match serde_json::to_string(&eeg_data) {
+                match serde_json::to_string(&eeg_packet) {
                     Ok(msg) => {
                         info!("websocket got: {}", msg);  // debug purposes
                         count += 1; // for debug purposes
@@ -80,7 +80,7 @@ pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>,
                         }
                     }
                     Err(e) => {
-                        error!("Failed to serialize EEGData to JSON: {}", e);
+                        error!("Failed to serialize EEGDataPacket  to JSON: {}", e);
                         dropped += 1;
                     }
                 }
@@ -98,56 +98,43 @@ pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>,
     info!("websocket got {} msg, and dropped {} msg", count, dropped ) // for debug purposes
 }
 
-//db_broadcast_receiver takes EEGData struct from the broadcast sender and inserts it into the database
+//db_broadcast_receiver takes EEGDataPacket  struct from the broadcast sender and inserts it into the database
 // it inserts as a batch of 100.
-pub async fn db_receiver(mut rx_db: Receiver<EEGData>){
-    let mut batch = Vec::new(); 
-    let batch_size = 100; // size of the batch, can change later if database is missing data
+pub async fn db_receiver(mut rx_db: Receiver<EEGDataPacket>){
     let db_client = get_db_client();
 
-    let mut count = 0; // for debug purposes
-    let mut dropped  = 0;// for debug purposes
+    let mut packet_count = 0; // for debug purposes
+    let mut sample_count = 0; // for debug purposes
+    let mut dropped = 0;// for debug purposes
 
     loop {
         match rx_db.recv().await {
-            Ok(eeg_data) => {
-                info!("Database got: {:?}", eeg_data); // debug purposes
-                count += 1; // for debug purposes, no need
-                batch.push(eeg_data);
-                // info!("Current batch size: {}", batch.len()); //debug purposes
-
-                // only spawns the insert task when batch is full
-                if batch.len() >= batch_size {
-                    // info!("Inserting batch of size {}", batch.len());  // for debug purposes
-                    let batch_to_insert = std::mem::take(&mut batch); // empties the batch vector into a batch_to_insert vector
-                    let db_client_clone = db_client.clone(); 
-                    
-                    // spawns the insert task
-                    tokio::spawn(async move {
-                        let now = Instant::now(); // for debug purposes, no need, starts the counter that tells you how long the insert took
-                        if let Err(e) = insert_batch_eeg(&db_client_clone, &batch_to_insert).await {
-                            error!("Batch insert failed: {:?}", e);
-                        }
-                        info!("Batch insert took {:?}", now.elapsed()); // for debug purposes, no need, tells you how long the insert took
-                    });
-                }
+            Ok(eeg_packet) => {
+                let num_samples = eeg_packet.signals.len();
+                info!("Database got packet with {} samples", num_samples); // debug purposes
+                packet_count += 1; // for debug purposes
+                sample_count += num_samples; // for debug purposes
+                
+                let db_client_clone = db_client.clone();
+                
+                // Insert the packet directly
+                tokio::spawn(async move {
+                    let now = Instant::now(); // for debug purposes
+                    if let Err(e) = insert_batch_eeg(&db_client_clone, &eeg_packet).await {
+                        error!("Packet insert failed: {:?}", e);
+                    }
+                    info!("Packet insert took {:?}", now.elapsed()); // for debug purposes
+                });
             }
             Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
                 error!("Receiver lagged, missed {} messages", n);
-                dropped  += 1; // for debug purposes, no need
+                dropped += 1; // for debug purposes
             }
             Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                 info!("Sender closed, finishing remaining work.");
-                 // insert the leftovers before closing
-                if !batch.is_empty() {
-                    info!("Inserting final leftover batch of size {}", batch.len());
-                    if let Err(e) = insert_batch_eeg(&db_client, &batch).await {
-                        error!("Batch insert failed on shutdown: {:?}", e);
-                    }
-                }
                 break;
             }
         }
     }
-    info!("database got {} msg, and droped {} msg", count, dropped )
+    info!("database got {} packets ({} total samples), and dropped {} msg", packet_count, sample_count, dropped)
 }

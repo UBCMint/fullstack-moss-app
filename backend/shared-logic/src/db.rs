@@ -7,7 +7,7 @@ use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
 use super::models::{User, NewUser, TimeSeriesData, UpdateUser};
-use crate::lsl::{EEGData};
+use crate::lsl::{EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 
@@ -117,24 +117,28 @@ pub async fn get_testtime_series_data(client: &DbClient) -> Result<Vec<TimeSerie
 }
 
 /// Insert a batch of records into eeg_data.
-pub async fn insert_batch_eeg(client: &DbClient, batch: &[EEGData]) -> Result<(), sqlx::Error> {
+pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Result<(), sqlx::Error> {
     // Construct a single SQL insert statement
     let mut query_builder = sqlx::QueryBuilder::new(
         "INSERT INTO eeg_data (time, channel1, channel2, channel3, channel4) "
     );
     
-    // inputting the values of the batch into the SQL insert statement
-    query_builder.push_values(batch, |mut b, item| {
-        b.push_bind(item.time)
-            .push_bind(item.signals[0])
-            .push_bind(item.signals[1])
-            .push_bind(item.signals[2])
-            .push_bind(item.signals[3]);
-    });
+    // Iterate through all data in the packet, pairing timestamp to the signal, and insert them
+    query_builder.push_values(
+        packet.timestamps.iter().zip(packet.signals.iter()),
+        |mut b, (timestamp, signals)| {
+            b.push_bind(timestamp)
+                .push_bind(signals[0])
+                .push_bind(signals[1])
+                .push_bind(signals[2])
+                .push_bind(signals[3]);
+        }
+    );
 
     query_builder.build().execute(&**client).await?;
-    info!("Batch EEG data added successfully, Size: {}", batch.len());
+    info!("EEG packet inserted successfully - {} data", packet.signals.len());
     Ok(())
+
 }
 
 /// Update a user by id.
