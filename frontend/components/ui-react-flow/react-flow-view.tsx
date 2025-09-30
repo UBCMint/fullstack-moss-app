@@ -208,10 +208,11 @@ const ReactFlowInterface = () => {
                 }}>
                     <button
                         onClick={toggleControls}
-                        className="p-1 rounded-full bg-white border "
+                        className="p-1 rounded-full bg-white border"
                         style={{ 
                             width: 30, 
-                            height: 30, 
+                            height: 30,
+                            border: '1px solid #ebebeb',
                         }}
                     >
                         {isControlsOpen ? (
@@ -226,9 +227,10 @@ const ReactFlowInterface = () => {
                         transform: isControlsOpen ? 'translateY(5px)' : 'translateY(-5px)',
                         pointerEvents: isControlsOpen ? 'auto' : 'none',
                     }}>
-                        <Controls
-                            style={{
+                        <Controls style={{
                                 position: 'static',
+                                boxShadow: '0 rgba(255, 255, 255, 0)',
+                                border: '1px solid #ebebeb',
                             }}
                         />
                     </div>
