@@ -8,6 +8,7 @@ import {
     useNodesState,
     useEdgesState,
     Controls,
+    ControlButton,
     useReactFlow,
     Background,
     Panel,
@@ -30,8 +31,7 @@ import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-n
 import Sidebar from '@/components/ui-sidebar/sidebar';
 
 import { useState } from 'react';
-import { X } from 'lucide-react';
-import { Ellipsis } from 'lucide-react';
+import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
 import { headers } from 'next/headers';
 
 const nodeTypes = {
@@ -213,12 +213,11 @@ const ReactFlowInterface = () => {
                             width: 30, 
                             height: 30,
                             border: '1px solid #ebebeb',
-                        }}
-                    >
+                    }}>
                         {isControlsOpen ? (
                             <X size={20} />
                         ) : (
-                            <Ellipsis size={20} />
+                            <Ellipsis size={20}/>
                         )}
                     </button>
                     <div style={{
@@ -227,12 +226,18 @@ const ReactFlowInterface = () => {
                         transform: isControlsOpen ? 'translateY(5px)' : 'translateY(-5px)',
                         pointerEvents: isControlsOpen ? 'auto' : 'none',
                     }}>
-                        <Controls style={{
-                                position: 'static',
-                                boxShadow: '0 rgba(255, 255, 255, 0)',
-                                border: '1px solid #ebebeb',
-                            }}
-                        />
+                        <Controls showFitView={false} showInteractive={false} style={{
+                            position: 'static',
+                            boxShadow: '0 1px 1px rgba(255, 255, 255, 0)',
+                            border: '1px solid #ebebeb',
+                        }}>
+                            <ControlButton>                                
+                                <RotateCw strokeWidth={2.5} style={{fill: 'none'}}/>
+                            </ControlButton>
+                            <ControlButton>           
+                                <RotateCcw strokeWidth={2.5} style={{fill: 'none'}}/>
+                            </ControlButton>
+                        </Controls>
                     </div>
                 </Panel>
                 <Panel position="top-left">
