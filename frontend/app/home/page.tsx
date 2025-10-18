@@ -10,8 +10,8 @@ import { useState } from 'react';
 export default function Home() {
 
     // REMOVE LATER: consts for testing pop-up notifications
-    const [showErrorDialog, setShowErrorDialog] = useState(false);
-    const [showPermissionDialog, setShowPermissionDialog] = useState(false);
+    // const [showErrorDialog, setShowErrorDialog] = useState(false);
+    // const [showPermissionDialog, setShowPermissionDialog] = useState(false);
 
     return (
         <GlobalProvider>
@@ -26,7 +26,7 @@ export default function Home() {
                 <div className="flex-1 flex relative">
                     <ReactFlowView />
 
-                    {/* REMOVE LATER: Test pop-up buttons for notifications (positioned top-right corner) */}
+                    {/* REMOVE LATER: Test pop-up buttons for notifications (positioned top-right corner) 
                     <div className="absolute top-4 right-20 flex gap-2">
                         <button
                             onClick={() => setShowErrorDialog(true)}
@@ -41,9 +41,10 @@ export default function Home() {
                             Request Permission
                         </button>
                     </div>
+                    */}
                 </div>
 
-                {/* REMOVE LATER: Test Dialogs for pop-up notifications*/}
+                {/* REMOVE LATER: Test Dialogs for pop-up notifications
                 <ErrorDialog
                     open={showErrorDialog}
                     onOpenChange={setShowErrorDialog}
@@ -61,6 +62,7 @@ export default function Home() {
                         setShowPermissionDialog(false);
                     }}
                 />
+                */}
 
             </div>
         </GlobalProvider>
