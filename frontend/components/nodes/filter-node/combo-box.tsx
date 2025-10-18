@@ -78,7 +78,7 @@ export default function ComboBox({
                     {/* Status dot */}
                     <div 
                         className={cn(
-                            "w-2 h-2 rounded-full",
+                            "w-3 h-3 rounded-full",
                             isConnected && isDataStreamOn ?  "bg-[#509693]" : "bg-[#D3D3D3]"
                         )}
                     />
