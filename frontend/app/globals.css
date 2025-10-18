@@ -127,3 +127,25 @@ body {
         background-position: 0% 50%;
     }
 }
+
+@keyframes toast-in {
+    0% {
+        opacity: 0;
+        transform: translateY(16px) scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes toast-out {
+    0% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    100% {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+}
