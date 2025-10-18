@@ -90,8 +90,8 @@ export default function MLComboBox({
             style={{
                 height:
                     isExpanded ||
-                    (!isConnected && !dismissedError) ||
-                    (isConnected && isDataStreamOn)
+                        (!isConnected && !dismissedError) ||
+                        (isConnected && isDataStreamOn)
                         ? 'auto'
                         : '90px',
                 transition: 'height 0.3s ease-in-out',
@@ -113,10 +113,11 @@ export default function MLComboBox({
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
-                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                  : 'border-gray-300' // Disconnected: gray border
+                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                    : 'border-gray-300' // Disconnected: gray border
                         )}
-                    ></div>
+                    >
+                    </div>
 
                     {/* Status dot */}
                     <div
@@ -153,8 +154,8 @@ export default function MLComboBox({
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
-                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                  : 'border-gray-300' // Disconnected: gray border
+                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                    : 'border-gray-300' // Disconnected: gray border
                         )}
                     ></div>
                 </div>
@@ -163,7 +164,7 @@ export default function MLComboBox({
             {/* In-card error message when not properly connected */}
             {!isConnected && !dismissedError && (
                 <div className="px-5 pb-4 -mt-1">
-                    <div className="w-full bg-white rounded-2xl border border-gray-200 px-4 pt-3 pb-4 shadow-sm">
+                    <div className="w-full bg-white rounded-3xl border border-gray-200 px-4 pt-3 pb-4 shadow-sm">
                         <div className="flex items-start space-x-3">
                             <div className="mt-0.5">
                                 <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center">
@@ -178,7 +179,7 @@ export default function MLComboBox({
                                         onClick={() => setDismissedError(true)}
                                         className="px-4 py-2 rounded-xl bg-[#2B6C66] text-white font-semibold text-[16px]"
                                     >
-                                        okay
+                                        Okay
                                     </button>
                                 </div>
                             </div>
@@ -188,24 +189,24 @@ export default function MLComboBox({
             )}
 
             {/* Predictions display when connected and streaming */}
-            {isConnected && isDataStreamOn && predictionReady && (
-                <div className="px-5 pb-4 -mt-1">
-                    <div className="w-full bg-white rounded-2xl border border-gray-200 px-4 pt-3 pb-4 shadow-sm">
-                        <div className="flex items-center justify-between">
+            {isConnected && predictionReady && (
+                <div className="px-5 pb-4 -mt-3 mb-6 flex justify-center">
+                    <div className="w-[283px] bg-white rounded-3xl border-2 border-gray-300 px-4 pt-3 pb-4 shadow-sm">
+                        <div className="flex items-center justify-between space-x-3">
                             <div
                                 className={cn(
                                     'w-5 h-5 rounded-full border-2 bg-white',
                                     isConnected && isDataStreamOn ? 'border-black' : 'border-gray-300'
                                 )}
                             />
-                            <div className="flex-1 flex items-center justify-center space-x-2">
+                            <div className="flex-1 flex items-center space-x-3">
                                 <div
                                     className={cn(
-                                        'w-2 h-2 rounded-full',
-                                        isDataStreamOn ? 'bg-teal-500' : 'bg-gray-300'
+                                        'w-3 h-3 rounded-full',
+                                        isDataStreamOn ? 'bg-[#509693]' : 'bg-[#D3D3D3]'
                                     )}
                                 />
-                                <div className="text-[22px] font-semibold text-gray-900 leading-6">Predicted</div>
+                                <div className="font-geist text-[23px] font-[550] leading-tight text-black tracking-wider">Predicted</div>
                             </div>
                             <div
                                 className={cn(
@@ -216,78 +217,78 @@ export default function MLComboBox({
                         </div>
                         <div className="mt-2">
 
-                                {/* Stress prediction */}
-                                {value === 'stress' && (
-                                    <div className="mt-3 flex flex-col items-center text-center">
-                                        <div className="text-[16px] text-gray-800">Stress:</div>
-                                        <div className="mt-2 inline-flex items-center">
-                                            <span className="px-2.5 py-1 rounded-full border border-red-300 bg-red-50 text-[14px] font-semibold text-red-700">
-                                                {stressYes ? 'YES' : 'NO'}
-                                            </span>
-                                        </div>
+                            {/* Stress prediction */}
+                            {value === 'stress' && (
+                                <div className="mt-3 flex flex-col items-center text-center">
+                                    <div className="text-[16px] text-gray-800">Stress:</div>
+                                    <div className="mt-2 inline-flex items-center">
+                                        <span className="px-2.5 py-1 rounded-full border border-red-400 bg-red-50 text-[14px]">
+                                            {stressYes ? 'YES' : 'NO'}
+                                        </span>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {/* Focus prediction */}
-                                {value === 'focus' && (
-                                    <div className="mt-3 flex flex-col items-center text-center">
-                                        <div className="text-[16px] text-gray-800">Focus:</div>
-                                        <div className="mt-2">
-                                            <div
-                                                className="relative w-14 h-14 rounded-full"
-                                                style={{
-                                                    background: `conic-gradient(#6DB9B2 0deg ${focusPercent * 3.6}deg, #e5e7eb ${focusPercent * 3.6}deg 360deg)`,
-                                                }}
-                                            >
-                                                <div className="absolute inset-1 bg-white rounded-full flex items-center justify-center text-[14px] font-semibold text-gray-800">
-                                                    {focusPercent}%
-                                                </div>
+                            {/* Focus prediction */}
+                            {value === 'focus' && (
+                                <div className="mt-3 flex flex-col items-center text-center">
+                                    <div className="text-[16px] text-gray-800">Focus:</div>
+                                    <div className="mt-2">
+                                        <div
+                                            className="relative w-14 h-14 rounded-full"
+                                            style={{
+                                                background: `conic-gradient(#6DB9B2 0deg ${focusPercent * 3.6}deg, #e5e7eb ${focusPercent * 3.6}deg 360deg)`,
+                                            }}
+                                        >
+                                            <div className="absolute inset-1 bg-white rounded-full flex items-center justify-center text-[14px] font-semibold text-gray-800">
+                                                {focusPercent}%
                                             </div>
                                         </div>
                                     </div>
-                                )}
+                                </div>
+                            )}
 
-                                {/* Mood prediction */}
-                                {value === 'mood' && (
-                                    <div className="mt-3 flex flex-col items-center text-center">
-                                        <div className="text-[16px] text-gray-800">Mood:</div>
-                                        <div className="mt-2 relative w-44">
-                                            {/* Value chip with pointer */}
-                                            <div
-                                                className="absolute -top-7"
-                                                style={{
-                                                    left: `${((moodScore + 1) / 2) * 100}%`,
-                                                    transform: 'translateX(-50%)',
-                                                }}
-                                            >
-                                                <div className="px-2 py-0.5 rounded-full bg-white border border-[#6DB9B2] text-[#2B6C66] text-[12px] font-semibold shadow-sm">
-                                                    {moodScore > 0 ? '+' : ''}{moodScore.toFixed(2)}
-                                                </div>
-                                                <div
-                                                    className="w-0 h-0 mx-auto"
-                                                    style={{
-                                                        borderLeft: '6px solid transparent',
-                                                        borderRight: '6px solid transparent',
-                                                        borderTop: '6px solid #2B6C66',
-                                                        marginTop: '4px',
-                                                    }}
-                                                />
+                            {/* Mood prediction */}
+                            {value === 'mood' && (
+                                <div className="mt-3 flex flex-col items-center text-center">
+                                    <div className="text-[16px] text-gray-800">Mood:</div>
+                                    <div className="mt-7 relative w-44">
+                                        {/* Value chip with pointer */}
+                                        <div
+                                            className="absolute -top-7"
+                                            style={{
+                                                left: `${((moodScore + 1) / 2) * 100}%`,
+                                                transform: 'translateX(-50%)',
+                                            }}
+                                        >
+                                            <div className="px-2 py-0.5 rounded-full bg-white border border-[#6DB9B2] text-[#2B6C66] text-[12px] font-semibold shadow-sm">
+                                                {moodScore > 0 ? '+' : ''}{moodScore.toFixed(2)}
                                             </div>
-
-                                            {/* Gradient bar */}
                                             <div
-                                                className="h-4 rounded-full shadow-inner"
+                                                className="w-0 h-0 mx-auto"
                                                 style={{
-                                                    background:
-                                                        'linear-gradient(90deg, #E53935 0%, #FBC02D 50%, #43A047 100%)',
+                                                    borderLeft: '6px solid transparent',
+                                                    borderRight: '6px solid transparent',
+                                                    borderTop: '6px solid #2B6C66',
+                                                    marginTop: '4px',
                                                 }}
                                             />
                                         </div>
+
+                                        {/* Gradient bar */}
+                                        <div
+                                            className="h-4 rounded-full shadow-inner"
+                                            style={{
+                                                background:
+                                                    'linear-gradient(90deg, #E53935 0%, #FBC02D 50%, #43A047 100%)',
+                                            }}
+                                        />
                                     </div>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </div>
+                </div>
             )}
 
             {/* Expandable options section */}
