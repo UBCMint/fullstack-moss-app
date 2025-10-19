@@ -26,7 +26,6 @@ FROM debian:bookworm-slim
 WORKDIR /app
 
 # Copy the built websocket-server binary from the builder stage
-# The source path is relative to the WORKDIR in the builder stage (/app/backend)
 COPY --from=builder /app/backend/target/release/websocket-server ./websocket-server
 
 EXPOSE 8080

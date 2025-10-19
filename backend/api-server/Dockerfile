@@ -5,7 +5,7 @@ RUN apt-get update && \
     apt-get install -y libpython3.9-dev python3-pip python3-venv pkg-config build-essential cmake && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app/backend-server
+WORKDIR /app/backend
 
 ENV SQLX_OFFLINE=true
 
@@ -38,14 +38,14 @@ ENV LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu/:/usr/local/lib:/usr/lib/python3.
 
 WORKDIR /app
 
-COPY docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=builder /app/backend/api-server/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
-COPY --from=builder /app/backend-server/target/release/api-server ./api-server
+COPY --from=builder /app/backend/target/release/api-server ./api-server
 
 COPY --from=builder /usr/local/cargo/bin/sqlx /usr/local/bin/sqlx
 
-COPY --from=builder /app/backend-server/migrations ./backend-server/migrations
+COPY --from=builder /app/backend/migrations ./migrations
 
 COPY --from=builder /opt/venv /opt/venv
 

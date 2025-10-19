@@ -19,7 +19,7 @@ services:
 
   api-server:
     build:
-      context: ./backend/backend-server
+      context: ./backend
       dockerfile: api-server/Dockerfile
     container_name: api_server
     ports:
@@ -35,7 +35,7 @@ services:
 
   websocket-server:
     build:
-      context: ./backend/backend-server
+      context: ./backend
       dockerfile: websocket-server/Dockerfile
     container_name: websocket_server
     ports:
