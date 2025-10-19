@@ -87,15 +87,17 @@ export default function FilterNode({ id }: FilterNodeProps) {
                 position={Position.Left}
                 id="filter-input"
                 style={{ 
-                    left: '20px', // Align with left circle position
+                    left: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
-                    width: '16px',
-                    height: '16px',
+                    width: '28px',
+                    height: '28px',
                     backgroundColor: 'transparent',
                     border: '2px solid transparent',
                     borderRadius: '50%',
-                    zIndex: 10
+                    zIndex: 20,
+                    cursor: 'crosshair',
+                    pointerEvents: 'all'
                 }}
                 className="hover:border-blue-500"
             />
@@ -106,15 +108,17 @@ export default function FilterNode({ id }: FilterNodeProps) {
                 position={Position.Right}
                 id="filter-output"
                 style={{ 
-                    right: '20px', // Align with right circle position
+                    right: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
-                    width: '16px',
-                    height: '16px',
+                    width: '28px',
+                    height: '28px',
                     backgroundColor: 'transparent',
                     border: '2px solid transparent',
                     borderRadius: '50%',
-                    zIndex: 10
+                    zIndex: 20,
+                    cursor: 'crosshair',
+                    pointerEvents: 'all'
                 }}
                 className="hover:border-blue-500"
             />

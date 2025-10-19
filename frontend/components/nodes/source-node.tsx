@@ -15,6 +15,7 @@ export default function SourceNode() {
             <span
                 className={`absolute left-6 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full  ${dataStreaming && isConnected ? 'bg-[#509693]' : 'bg-[#D3D3D3]'}`}
             />
+
             {/* Texts */}
             <div className="flex flex-col items-start justify-center ml-14">
                 <span className="font-geist text-[25px] font-[550] leading-tight text-black tracking-wider">
@@ -31,10 +32,12 @@ export default function SourceNode() {
                 {isConnected && (
                     <span className="w-3 h-3 rounded-full bg-white" />
                 )}
+
+                {/* Right source handle */}
                 <Handle
                     type="source"
                     position={Position.Right}
-                    id="source-node-input"
+                    id="source-node-output"
                     style={{
                         transform: 'translateY(-50%)',
                         width: '18px',

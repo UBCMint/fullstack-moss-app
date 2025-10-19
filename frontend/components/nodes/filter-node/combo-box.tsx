@@ -46,7 +46,7 @@ export default function ComboBox({
             className={cn(
                 "bg-white rounded-3xl border-2 overflow-hidden",
                 // Node border stays gray - no change with connection
-                "border-gray-200"
+                "border-[#D3D3D3]"
             )}
             style={{
                 width: 'fit-content',
@@ -58,18 +58,18 @@ export default function ComboBox({
             {/* Main button/header */}
             <button
                 onClick={toggleExpanded}
-                className="w-full h-14 px-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
+                className="w-full h-14 px-4 flex items-center justify-between transition-colors"
             >
                 <div className="flex items-center space-x-3">
                     {/* Left connection circle - changes based on connection and data stream */}
                     <div 
                         className={cn(
                             "w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white",
-                            isConnected && isDataStreamOn
-                                ? "border-black" // Connected to source AND data stream on: black border (activated)
-                                : isConnected 
-                                    ? "border-gray-300" // Connected to source: gray border (non-activated)
-                                    : "border-gray-300" // Disconnected: gray border
+                            isConnected
+                                ? 'border-black' // Connected to source AND data stream on: black border (activated)
+                                : isConnected
+                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                  : 'border-gray-300' // Disconnected: gray border
                         )}
                     >
                         {/* No filled circle - always stay empty */}
@@ -78,15 +78,15 @@ export default function ComboBox({
                     {/* Status dot */}
                     <div 
                         className={cn(
-                            "w-2 h-2 rounded-full",
-                            isConnected && isDataStreamOn ? "bg-teal-500" : "bg-gray-400"
+                            "w-3 h-3 rounded-full",
+                            isConnected && isDataStreamOn ?  "bg-[#509693]" : "bg-[#D3D3D3]"
                         )}
                     />
                     
                     {/* Filter text - larger, bold font with ref for measurement */}
                     <span 
                         ref={titleRef}
-                        className="text-xl font-bold text-gray-900 whitespace-nowrap"
+                        className="font-geist text-[25px] font-[550] leading-tight text-black tracking-wider"
                     >
                         {filters.find((filter) => filter.value === value)?.label || 'Low Pass Filter'}
                     </span>
@@ -104,11 +104,11 @@ export default function ComboBox({
                     <div 
                         className={cn(
                             "w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white",
-                            isConnected && isDataStreamOn
-                                ? "border-black" // Connected to source AND data stream on: black border (activated)
-                                : isConnected 
-                                    ? "border-gray-300" // Connected to source: gray border (non-activated)
-                                    : "border-gray-300" // Disconnected: gray border
+                            isConnected
+                                ? 'border-black' // Connected to source AND data stream on: black border (activated)
+                                : isConnected
+                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                  : 'border-gray-300' // Disconnected: gray border
                         )}
                     >
                         {/* No solid circle inside - always stay empty */}

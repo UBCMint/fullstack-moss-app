@@ -63,13 +63,29 @@ export default function SignalGraphNode() {
                 <Handle
                     type="source"
                     position={Position.Left}
-                    className="absolute mr-2 h-3 w-3 !bg-white rounded-full"
+                    style={{
+                        transform: 'translateY(-50%)',
+                        width: '18px',
+                        height: '18px',
+                        backgroundColor: 'transparent',
+                        border: '2px solid transparent',
+                        borderRadius: '50%',
+                        zIndex: 10,
+                    }}
                     onConnect={() => setIsConnected(!isConnected)}
                 />
                 <Handle
                     type="target"
                     position={Position.Right}
-                    className="absolute mr-2 h-3 w-3 !bg-white rounded-full"
+                    style={{
+                        transform: 'translateY(-50%)',
+                        width: '18px',
+                        height: '18px',
+                        backgroundColor: 'transparent',
+                        border: '2px solid transparent',
+                        borderRadius: '50%',
+                        zIndex: 10,
+                    }}
                     onConnect={() => setIsConnected(!isConnected)}
                 />
             </span>
@@ -77,7 +93,7 @@ export default function SignalGraphNode() {
                 className={`absolute left-16 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full  ${dataStreaming && isConnected ? 'bg-[#509693]' : 'bg-[#D3D3D3]'}`}
             />
             <div className="flex flex-col items-start justify-center ml-24">
-                <span className="font-geist text-[25px] font-[550] leading-tight text-black">
+                <span className="font-geist text-[25px] font-[550] leading-tight text-black tracking-wider">
                     Chart View
                 </span>
                 <DialogTrigger asChild>
