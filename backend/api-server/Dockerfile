@@ -90,5 +90,5 @@ ENV PATH="/opt/venv/bin:$PATH"
 EXPOSE 8080
 EXPOSE 9000
 
-ENTRYPOINT ["./api-server/docker-entrypoint.sh"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["./api-server"]
