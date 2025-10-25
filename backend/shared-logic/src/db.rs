@@ -118,25 +118,43 @@ pub async fn get_testtime_series_data(client: &DbClient) -> Result<Vec<TimeSerie
 
 /// Insert a batch of records into eeg_data.
 pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Result<(), sqlx::Error> {
+
+    let n_samples = packet.timestamps.len();
+
+      // Add validation to prevent empty inserts
+    if n_samples == 0 {
+        info!("Skipping insert - packet has no samples");
+        return Ok(());
+    }
+
     // Construct a single SQL insert statement
     let mut query_builder = sqlx::QueryBuilder::new(
         "INSERT INTO eeg_data (time, channel1, channel2, channel3, channel4) "
     );
-    
+
     // Iterate through all data in the packet, pairing timestamp to the signal, and insert them
+
     query_builder.push_values(
-        packet.timestamps.iter().zip(packet.signals.iter()),
-        |mut b, (timestamp, signals)| {
+        (0..n_samples).map(|sample_idx| {
+            (
+                &packet.timestamps[sample_idx],
+                packet.signals[0][sample_idx],  // Channel 0
+                packet.signals[1][sample_idx],  // Channel 1
+                packet.signals[2][sample_idx],  // Channel 2
+                packet.signals[3][sample_idx],  // Channel 3
+            )
+        }),
+        |mut b, (timestamp, ch0, ch1, ch2, ch3)| {
             b.push_bind(timestamp)
-                .push_bind(signals[0])
-                .push_bind(signals[1])
-                .push_bind(signals[2])
-                .push_bind(signals[3]);
+                .push_bind(ch0)
+                .push_bind(ch1)
+                .push_bind(ch2)
+                .push_bind(ch3);
         }
     );
 
     query_builder.build().execute(&**client).await?;
-    info!("EEG packet inserted successfully - {} data", packet.signals.len());
+    info!("EEG packet inserted successfully - {} data", packet.timestamps.len());
     Ok(())
 
 }

@@ -2,7 +2,7 @@ use tokio::sync::broadcast;
 use tokio::sync::broadcast::Receiver;
 
 use crate::mockeeg::{generate_mock_data};
-use crate::lsl::{EEGDataPacket, receive_eeg};
+use crate::lsl::{EEGDataPacket, ProcessingConfig, receive_eeg};
 use crate::db::{insert_batch_eeg, get_db_client};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt};
@@ -20,7 +20,7 @@ use log::{info, error};
 
 // starts the broadcast by spawning async sender and receiver tasks.
 pub async fn start_broadcast(write: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,  cancel_token: CancellationToken) {
-    let (tx, _rx) = broadcast::channel::<EEGDataPacket>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
+    let (tx, _rx) = broadcast::channel::<Arc<EEGDataPacket>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
     let rx_ws = tx.subscribe();
     let rx_db = tx.subscribe();
     let generator_token = cancel_token.clone(); 
@@ -37,7 +37,7 @@ pub async fn start_broadcast(write: Arc<Mutex<SplitSink<WebSocketStream<TcpStrea
     let tx_clone = tx.clone();
     let sender_token = cancel_token.clone(); 
     let sender = tokio::spawn(async move {
-        receive_eeg(tx_clone, sender_token).await;
+        receive_eeg(tx_clone, sender_token, ProcessingConfig::default()).await;
     });
 
     // Subscribe for websocket Receiver 
@@ -60,7 +60,7 @@ pub async fn start_broadcast(write: Arc<Mutex<SplitSink<WebSocketStream<TcpStrea
 
 // ws_broadcast_receiver takes a EEGDataPacket  struct from the broadcast sender, and converts it to JSON, then send it to the connected websocket client. 
 pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>, 
-    mut rx_ws: Receiver<EEGDataPacket>) {
+    mut rx_ws: Receiver<Arc<EEGDataPacket>>) {
     let mut count = 0;  // for debug purposes
     let mut dropped  = 0;  // for debug purposes
 
@@ -71,7 +71,9 @@ pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>,
                 // Serialize to JSON for WebSocket transmission
                 match serde_json::to_string(&eeg_packet) {
                     Ok(msg) => {
-                        info!("websocket got: {}", msg);  // debug purposes
+                        // info!("websocket got: {}", msg);  // debug purposes
+                         let num_samples = eeg_packet.signals.len();
+                         info!("websocket got packet with {} samples", num_samples);
                         count += 1; // for debug purposes
                         let mut write_guard = write.lock().await;
                         if let Err(e) = write_guard.send(Message::Text(msg)).await {
@@ -100,7 +102,7 @@ pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>,
 
 //db_broadcast_receiver takes EEGDataPacket  struct from the broadcast sender and inserts it into the database
 // it inserts as a batch of 100.
-pub async fn db_receiver(mut rx_db: Receiver<EEGDataPacket>){
+pub async fn db_receiver(mut rx_db: Receiver<Arc<EEGDataPacket>>){
     let db_client = get_db_client();
 
     let mut packet_count = 0; // for debug purposes
@@ -110,7 +112,7 @@ pub async fn db_receiver(mut rx_db: Receiver<EEGDataPacket>){
     loop {
         match rx_db.recv().await {
             Ok(eeg_packet) => {
-                let num_samples = eeg_packet.signals.len();
+                let num_samples = eeg_packet.signals[0].len();
                 info!("Database got packet with {} samples", num_samples); // debug purposes
                 packet_count += 1; // for debug purposes
                 sample_count += num_samples; // for debug purposes
@@ -131,7 +133,7 @@ pub async fn db_receiver(mut rx_db: Receiver<EEGDataPacket>){
                 dropped += 1; // for debug purposes
             }
             Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                info!("Sender closed, finishing remaining work.");
+                info!("DataBase Sender closed, finishing remaining work.");
                 break;
             }
         }
