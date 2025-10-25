@@ -1,9 +1,15 @@
 # Stage 1: Build the Rust application
-FROM rust:1.85-bullseye AS builder
+FROM rust:1.88-bullseye AS builder
 
 # Install build dependencies for lsl-sys (C++ compiler, cmake, and pkg-config)
 RUN apt-get update && \
-    apt-get install -y build-essential cmake pkg-config python3 python3-dev && \
+    apt-get install -y \
+        python3-dev \
+        python3-pip \
+        python3-venv \
+        pkg-config \
+        build-essential \
+        cmake && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app/backend
