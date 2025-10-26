@@ -19,7 +19,7 @@ services:
 
   api-server:
     build:
-      context: ./backend/backend-server
+      context: ./backend
       dockerfile: api-server/Dockerfile
     container_name: api_server
     ports:
@@ -31,11 +31,21 @@ services:
       API_PORT: 9000
     command: ["./api-server"]
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    restart: on-failure
+    develop:
+      watch:
+        - action: rebuild
+          path: ./backend/api-server/src
+        - action: rebuild
+          path: ./backend/shared-logic/src
+        - action: rebuild
+          path: ./backend/api-server/python
 
   websocket-server:
     build:
-      context: ./backend/backend-server
+      context: ./backend
       dockerfile: websocket-server/Dockerfile
     container_name: websocket_server
     ports:
@@ -48,7 +58,15 @@ services:
       WS_PORT: 8080
     command: ["./websocket-server"]
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    restart: on-failure
+    develop:
+      watch:
+        - action: rebuild
+          path: ./backend/websocket-server/src
+        - action: rebuild
+          path: ./backend/shared-logic/src
 
   frontend:
     build:
@@ -66,6 +84,15 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend
+          target: /app
+          ignore:
+            - node_modules/
+            - .next/
+            - .git/
 
 volumes:
   timescale_data:
