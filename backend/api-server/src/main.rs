@@ -1,5 +1,6 @@
 use axum::{
     extract::State,
+    extract::Path,
     http::StatusCode,
     routing::{get, post},
     Json,
@@ -19,7 +20,7 @@ use pyo3::{IntoPy, ToPyObject};
 
 // shared logic library
 use shared_logic::db::{initialize_connection, DbClient};
-use shared_logic::models::{User, NewUser};
+use shared_logic::models::{User, NewUser, UpdateUser};
 
 // Define application state
 #[derive(Clone)]
@@ -72,6 +73,45 @@ async fn get_all_users(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Failed to retrieve users: {}", e),
             ))
+        }
+    }
+}
+
+// Handler for PUT /users/:id
+async fn update_user(
+    State(app_state): State<AppState>,
+    Path(id): Path<i32>,
+    Json(update_data): Json<UpdateUser>,
+) -> Result<Json<User>, (StatusCode, String)> {
+    info!("Received request to update user {}: {:?}", id, update_data);
+
+    match shared_logic::db::update_user(&app_state.db_client, id, update_data).await {
+        Ok(user) => {
+            info!("User updated successfully: {:?}", user);
+            Ok(Json(user))
+        }
+        Err(e) => {
+            error!("Failed to update user: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to update user: {}", e)))
+        }
+    }
+}
+
+// Handler for DELETE /users/:id
+async fn delete_user(
+    State(app_state): State<AppState>,
+    Path(id): Path<i32>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    info!("Received request to delete user {}", id);
+
+    match shared_logic::db::delete_user(&app_state.db_client, id).await {
+        Ok(_) => {
+            info!("User {} deleted", id);
+            Ok(StatusCode::NO_CONTENT)
+        }
+        Err(e) => {
+            error!("Failed to delete user: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to delete user: {}", e)))
         }
     }
 }
@@ -156,6 +196,8 @@ async fn main() {
     let app = Router::new()
         .route("/users", post(create_user))
         .route("/users", get(get_all_users))
+        .route("/users/:id", axum::routing::put(update_user))
+        .route("/users/:id", axum::routing::delete(delete_user))
         .route("/run-python-script", get(run_python_script_handler))
         // Share application state with all handlers
         .with_state(app_state);

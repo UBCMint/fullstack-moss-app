@@ -18,6 +18,13 @@ pub struct NewUser {
     pub email: String,
 }
 
+// Struct for updating a user (partial updates allowed)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateUser { // the fields are optional, allowing you to update them individually if needed
+    pub username: Option<String>,
+    pub email: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct TimeSeriesData {
     pub id: i32,
