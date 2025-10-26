@@ -1,0 +1,42 @@
+[package]
+name = "shared-logic"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "shared_logic"
+path = "src/lib.rs"
+
+[dependencies]
+# Asynchronous Runtime - needed for database operations
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+# SQLx: Asynchronous SQL toolkit for Rust, with compile-time query checking
+sqlx = { version = "0.7", features = ["runtime-tokio", "macros", "postgres", "chrono", "uuid", "migrate"] }
+
+# For handling dates and times in Rust (used with SQLx's chrono feature)
+chrono = { version = "0.4", features = ["serde"] }
+
+# For loading environment variables (e.g., DATABASE_URL)
+dotenvy = "0.15"
+
+# Logging library
+log = "0.4"
+
+# JSON serialization/deserialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"             
+
+# For the websocket parts in boardcast 
+futures-util = "0.3"
+tokio-tungstenite = "0.21"
+tokio-util = "0.7.15"
+
+# For the mockeeg
+rand = "0.8"
+
+# For making a global variable 
+once_cell = "1.18"
+
+#lsl
+lsl = "0.1.1"

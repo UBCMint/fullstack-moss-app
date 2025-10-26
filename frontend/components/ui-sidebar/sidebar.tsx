@@ -56,17 +56,14 @@ export default function Sidebar() {
                         <Cross1 />
                     </CardHeader>
 
-                    <div className='pb-4 px-4'>
-                        <div className="relative">
-                            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-teal-500" />
+                    <div className='pb-4'>
                             <Input
                                 type="text"
                                 placeholder="Search"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 placeholder-gray-500"
+                                className="items-center px-7 py-2 mx-4 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 placeholder-gray-500"
                             />
-                        </div>
                     </div>
 
                     <CardContent className="overflow-y-auto flex-1 px-4 pb-4 space-y-3">
