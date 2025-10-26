@@ -6,11 +6,21 @@ import { Button } from '@/components/ui/button';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { Timer } from '@/components/ui/timer';
 import { useEffect, useRef, useState } from 'react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+    DialogClose,
+} from '@/components/ui/dialog';
 
 export default function SettingsBar() {
     const { dataStreaming, setDataStreaming } = useGlobalContext();
     const [leftTimerSeconds, setLeftTimerSeconds] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+    const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
     // useEffect(() => {
     //     console.log('dataStreaming:', dataStreaming);
     // });
@@ -51,15 +61,20 @@ export default function SettingsBar() {
         setDataStreaming(!dataStreaming);
     };
 
-    const handleReset = () => {
-        if (intervalRef.current) {
-            clearInterval(intervalRef.current)
-            intervalRef.current = null
-        }
-        setLeftTimerSeconds(0)
-        setDataStreaming(false)
-    }
+    const handleConfirmReset = () => {
+        // Stop the data stream and reset the timer
+        setDataStreaming(false);
+        setLeftTimerSeconds(0);
 
+        // Broadcast a reset event so the flow view can clear nodes/edges
+        try {
+            window.dispatchEvent(new Event('pipeline-reset'));
+        } catch (_) {
+            // no-op if window is unavailable
+        }
+
+        setIsResetDialogOpen(false);
+    };
 
     // Format seconds to MM:SS
     const formatTime = (seconds: number) => {
@@ -110,7 +125,25 @@ export default function SettingsBar() {
                 >
                     {dataStreaming ? 'Stop Data Stream' : 'Start Data Stream'}
                 </Button>
-                <Button variant="outline" onClick={handleReset}>Reset</Button>
+                <Dialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+                    <DialogTrigger asChild>
+                        <Button variant="outline">Reset</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Clear current pipeline?</DialogTitle>
+                            <DialogDescription>
+                                This will stop the running stream and remove all nodes and edges. This action cannot be undone.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <div className="flex justify-end gap-2 mt-4">
+                            <DialogClose asChild>
+                                <Button variant="outline">Cancel</Button>
+                            </DialogClose>
+                            <Button className="bg-red-500" onClick={handleConfirmReset}>Confirm Reset</Button>
+                        </div>
+                    </DialogContent>
+                </Dialog>
                 <Button variant="outline">Save</Button>
             </div>
         </div>

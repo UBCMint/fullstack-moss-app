@@ -30,7 +30,8 @@ import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-n
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Ellipsis } from 'lucide-react';
 import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
 import { headers } from 'next/headers';
 
@@ -49,6 +50,20 @@ const ReactFlowInterface = () => {
     const [edges, setEdges] = useEdgesState<Edge>([]);
     const { screenToFlowPosition } = useReactFlow();
     const [isControlsOpen, setIsControlsOpen] = useState(false);
+
+    // Listen for global pipeline reset to clear nodes/edges
+    useEffect(() => {
+        const listener = () => {
+            try {
+                setNodes([]);
+                setEdges([]);
+            } catch (_) {
+                // no-op
+            }
+        };
+        window.addEventListener('pipeline-reset', listener);
+        return () => window.removeEventListener('pipeline-reset', listener);
+    }, [setNodes, setEdges]);
 
     // Helper to notify components that edges have changed
     const dispatchEdgesChanged = () => {
