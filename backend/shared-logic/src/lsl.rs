@@ -111,7 +111,7 @@ fn run_eeg_collection(inlet: StreamInlet, tx: Sender<Arc<EEGDataPacket>>, cancel
         if cancel_token.is_cancelled() {
             info!("EEG data receiver cancelled.");
             // Send any remaining samples before exiting
-             if !packet.signals.is_empty() {
+             if !packet.timestamps.is_empty() {
                  let num_samples = packet.timestamps.len();
                 match process_and_send(&mut packet, &processor, &config, &tx) {
                     Ok(_) => count += 1,
@@ -138,8 +138,6 @@ fn run_eeg_collection(inlet: StreamInlet, tx: Sender<Arc<EEGDataPacket>>, cancel
                                 drop += 1;
                             }
                         }
-                        // Reset packet for next batch
-                        
                         packet.timestamps.clear();
                         for channel in &mut packet.signals {
                             channel.clear();  
@@ -149,8 +147,13 @@ fn run_eeg_collection(inlet: StreamInlet, tx: Sender<Arc<EEGDataPacket>>, cancel
                         // Sample added, but packet not full yet
                     }
                     Err(e) => {
-                        drop += 1;
-                        error!("Sample processing error: {}", e);
+                         let error_msg = e.to_string();
+                        if error_msg.contains("Invalid sample length: got 0 channels") {
+                            info!("Received empty sample from LSL stream (likely during shutdown) - ignoring");
+                        } else {
+                            drop += 1;
+                            error!("Sample processing error (drop #{}): {}", drop, e);
+                        }
                     }
                 }
             }
@@ -183,7 +186,7 @@ fn accumulate_sample(
     // Convert timestamp
     let timestamp_dt = DateTime::from_timestamp(
         timestamp as i64, 
-        ((timestamp.fract() * 1_000_000_000.0) as u32)
+        (timestamp.fract() * 1_000_000_000.0) as u32
     ).unwrap_or_else(|| Utc::now());
  
     // info!("Raw timestamp: {}, Converted: {:?}", timestamp, timestamp_dt);

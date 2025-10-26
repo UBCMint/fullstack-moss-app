@@ -61,8 +61,9 @@ pub async fn start_broadcast(write: Arc<Mutex<SplitSink<WebSocketStream<TcpStrea
 // ws_broadcast_receiver takes a EEGDataPacket  struct from the broadcast sender, and converts it to JSON, then send it to the connected websocket client. 
 pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>, 
     mut rx_ws: Receiver<Arc<EEGDataPacket>>) {
-    let mut count = 0;  // for debug purposes
-    let mut dropped  = 0;  // for debug purposes
+    let mut packet_count = 0; // for debug purposes
+    let mut sample_count = 0; // for debug purposes
+    let mut dropped = 0;// for debug purposes
 
     // loops to hanle messages coming in from broadcast
     loop {
@@ -72,9 +73,10 @@ pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>,
                 match serde_json::to_string(&eeg_packet) {
                     Ok(msg) => {
                         // info!("websocket got: {}", msg);  // debug purposes
-                         let num_samples = eeg_packet.signals.len();
+                         let num_samples = eeg_packet.signals[0].len();
                          info!("websocket got packet with {} samples", num_samples);
-                        count += 1; // for debug purposes
+                        packet_count += 1; // for debug purposes
+                        sample_count += num_samples;
                         let mut write_guard = write.lock().await;
                         if let Err(e) = write_guard.send(Message::Text(msg)).await {
                             error!("Failed to send message: {}", e);
@@ -97,7 +99,7 @@ pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>,
             }
         }
     }
-    info!("websocket got {} msg, and dropped {} msg", count, dropped ) // for debug purposes
+     info!("Websocket got {} packets ({} total samples), and dropped {} msg", packet_count, sample_count, dropped) // for debug purposes
 }
 
 //db_broadcast_receiver takes EEGDataPacket  struct from the broadcast sender and inserts it into the database
