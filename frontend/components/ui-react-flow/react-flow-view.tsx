@@ -31,7 +31,6 @@ import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-n
 import Sidebar from '@/components/ui-sidebar/sidebar';
 
 import { useEffect, useState } from 'react';
-import { Ellipsis } from 'lucide-react';
 import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
 import { headers } from 'next/headers';
 
