@@ -42,13 +42,16 @@ impl Default for ProcessingConfig {
 // Async entry point for EEG data collection.
 pub async fn receive_eeg(tx:Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, processing_config: ProcessingConfig) {
     info!("Starting EEG data receiver");
-    
+    let python_script_path = std::env::var("SIGNAL_PROCESSING_SCRIPT")
+    .unwrap_or_else(|_| "../shared-logic/src/signal_processing/signalProcessing.py".to_string());
+
     let result = tokio::task::spawn_blocking(move || {
         // Setup signal processor
-        let sig_processor = match SignalProcessor::new("../shared-logic/src/signal_processing/signalProcessing.py") {
+        let sig_processor = match SignalProcessor::new(&python_script_path) {
             Ok(p) => p,
             Err(e) => {
                 info!("current path: {:?}", std::env::current_dir());
+                info!("Looking for Python script at: {}", python_script_path);
                 error!("Failed to initialize signal processor: {}", e);
                 return (0, 0);
             }
