@@ -1,8 +1,9 @@
 import { Card } from '@/components/ui/card';
-import { Edge, Handle, Node, Position, useReactFlow } from '@xyflow/react';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
 import useWebsocket from '@/hooks/useWebsocket';
-import { useState } from 'react';
+import React from 'react';
 import { useGlobalContext } from '@/context/GlobalContext';
+import { ArrowUpRight } from 'lucide-react';
 
 import {
     Dialog,
@@ -14,7 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import SignalGraphView from './signal-graph-full';
 
-export default function SignalGraphNode() {
+export default function SignalGraphNode({ id }: { id?: string }) {
     const { renderData } = useWebsocket(20, 10);
 
     const processedData = renderData.map((item) => ({
@@ -26,57 +27,64 @@ export default function SignalGraphNode() {
         signal5: item.signals[4],
     }));
 
-    const { getEdges, getNodes } = useReactFlow();
-    const nodes = getNodes();
-    const edges = getEdges();
-
-    const areNodeTypesConnected = (nodes: Node[], edges: Edge[], typeA: string, typeB: string, typeC: string) => {
-        const nodeMap = Object.fromEntries(nodes.map((n) => [n.id, n]));
-      
-        return edges.some((edge) => {
-          const sourceNode = nodeMap[edge.source];
-          const targetNode = nodeMap[edge.target];
-      
-          return ((sourceNode?.type === typeA || sourceNode?.type === typeC) && targetNode?.type === typeB);
-        });
-    };
-
-    const connected = areNodeTypesConnected(nodes, edges, 'source-node', 'signal-graph-node', 'filter-node');
-
-    if (connected) {
-        console.log('At least one inputNode is connected to an outputNode');
-    }
-
-    const [isConnected, setIsConnected] = useState(false);
+    const reactFlowInstance = useReactFlow();
+    const [isConnected, setIsConnected] = React.useState(false);
     const { dataStreaming } = useGlobalContext()
+
+    // Determine if this Chart View node has an upstream path from a Source
+    const checkConnectionStatus = React.useCallback(() => {
+        try {
+            const edges = reactFlowInstance.getEdges();
+            const nodes = reactFlowInstance.getNodes();
+
+            const findNodeById = (nodeId: string | undefined) =>
+                nodes.find((n) => n.id === nodeId);
+
+            const reachesSource = (nodeId: string, visited: Set<string> = new Set()): boolean => {
+                if (visited.has(nodeId)) return false;
+                visited.add(nodeId);
+                const incoming = edges.filter((e) => e.target === nodeId);
+                for (const inEdge of incoming) {
+                    const upNode = findNodeById(inEdge.source);
+                    if (!upNode) continue;
+                    if (upNode.type === 'source-node') return true;
+                    if (reachesSource(upNode.id, visited)) return true;
+                }
+                return false;
+            };
+
+            const activated = id ? reachesSource(id) : false;
+            setIsConnected(activated);
+        } catch (err) {
+            setIsConnected(false);
+        }
+    }, [id, reactFlowInstance]);
+
+    React.useEffect(() => {
+        checkConnectionStatus();
+        const handleEdgeChange = () => checkConnectionStatus();
+        window.addEventListener('reactflow-edges-changed', handleEdgeChange);
+        const interval = setInterval(checkConnectionStatus, 1000);
+        return () => {
+            window.removeEventListener('reactflow-edges-changed', handleEdgeChange);
+            clearInterval(interval);
+        };
+    }, [checkConnectionStatus]);
     
     return (
         <Dialog>
         <Card className="rounded-[30px]">
-            <div onClick={() => setIsConnected(!isConnected)}
-            className="relative w-[396px] h-[96px] flex bg-white rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0">
+            <div className="relative w-[396px] h-[96px] flex bg-white rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0">
+            {/* Left circle with input (target) handle */}
             <span
                 className={`absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center border-[3px] ${isConnected ? 'border-[#000000]' : ' border-[#D3D3D3]'}`}>
                 {isConnected && (
                     <span className="w-3 h-3 rounded-full bg-white" />
                 )}
                 <Handle
-                    type="source"
-                    position={Position.Left}
-                    style={{
-                        transform: 'translateY(-50%)',
-                        width: '18px',
-                        height: '18px',
-                        backgroundColor: 'transparent',
-                        border: '2px solid transparent',
-                        borderRadius: '50%',
-                        zIndex: 10,
-                    }}
-                    onConnect={() => setIsConnected(!isConnected)}
-                />
-                <Handle
                     type="target"
-                    position={Position.Right}
+                    position={Position.Left}
+                    id="signal-graph-input"
                     style={{
                         transform: 'translateY(-50%)',
                         width: '18px',
@@ -86,9 +94,9 @@ export default function SignalGraphNode() {
                         borderRadius: '50%',
                         zIndex: 10,
                     }}
-                    onConnect={() => setIsConnected(!isConnected)}
                 />
             </span>
+            {/* Streaming status dot */}
             <span
                 className={`absolute left-16 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full  ${dataStreaming && isConnected ? 'bg-[#509693]' : 'bg-[#D3D3D3]'}`}
             />
@@ -97,25 +105,20 @@ export default function SignalGraphNode() {
                     Chart View
                 </span>
                 <DialogTrigger asChild>
-                            <button
-                                className="font-geist text-[14px] font-light leading-tight text-black mt-0 underline underline-offset-2 hover:opacity-80 transition"
-                                onClick={(e) => e.stopPropagation()}>
-                                Preview
-                            </button>
+                    <button
+                        className="font-geist text-[14px] font-medium leading-tight text-black mt-0 flex items-center gap-1 hover:opacity-80 transition"
+                        onClick={(e) => e.stopPropagation()}>
+                        Preview <ArrowUpRight size={14} />
+                    </button>
                 </DialogTrigger>
             </div>
+            {/* Right decorative circle only (no output handle for end of pipeline) */}
             <span
                 className={`absolute right-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center border-[3px] ${isConnected ? 'border-[#000000]' : ' border-[#D3D3D3]'}`}
             >
                 {isConnected && (
                     <span className="w-3 h-3 rounded-full bg-white" />
                 )}
-                <Handle
-                    type="source"
-                    position={Position.Right}
-                    className="absolute mr-2 h-3 w-3 !bg-white rounded-full"
-                    onConnect={() => setIsConnected(!isConnected)}
-                />
             </span>
         </div>
 
@@ -128,7 +131,7 @@ export default function SignalGraphNode() {
                 </DialogHeader>
                 <Card>
                     <div className="w-full h-full">
-                        <SignalGraphView data={connected? processedData : []} />
+                        <SignalGraphView data={isConnected ? processedData : []} />
                     </div>
                 </Card>
             </DialogContent>
