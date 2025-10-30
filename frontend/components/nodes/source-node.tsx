@@ -21,7 +21,7 @@ export default function SourceNode() {
                 <span className="font-geist text-[25px] font-[550] leading-tight text-black tracking-wider">
                     EEG Headset
                 </span>
-                <span className="font-geist text-[14px] font-light leading-tight text-black mt-0">
+                <span className="font-geist text-[14px] font-normal leading-tight text-black mt-0">
                     Headset_001
                 </span>
             </div>
