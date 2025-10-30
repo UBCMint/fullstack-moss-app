@@ -6,7 +6,7 @@ use tokio::time::{self, Duration};
 use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
-use super::models::{User, NewUser, TimeSeriesData};
+use super::models::{User, NewUser, TimeSeriesData, UpdateUser};
 use crate::lsl::{EEGData};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
@@ -134,5 +134,99 @@ pub async fn insert_batch_eeg(client: &DbClient, batch: &[EEGData]) -> Result<()
 
     query_builder.build().execute(&**client).await?;
     info!("Batch EEG data added successfully, Size: {}", batch.len());
+    Ok(())
+}
+
+/// Update a user by id.
+///
+/// Returns the updated User on success.
+pub async fn update_user(client: &DbClient, user_id: i32, updated: UpdateUser) -> Result<User, Error> {
+    info!("Updating user id {}", user_id);
+
+    
+    // see what fields are being updated
+    if let Some(ref username) = updated.username {
+        info!("Updating username: {}", username);
+    }
+    
+    if let Some(ref email) = updated.email {
+        info!("Updating email: {}", email);
+    }
+
+    // sql query to update user
+    let user = match (updated.username, updated.email) {
+        (Some(username), Some(email)) => {
+            sqlx::query_as!(
+                User,
+                "UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email",
+                username,
+                email,
+                user_id
+            )
+            .fetch_one(&**client) 
+            .await?
+        }
+        (Some(username), None) => {
+            sqlx::query_as!(
+                User,
+                "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email",
+                username,
+                user_id
+            )
+            .fetch_one(&**client)
+            .await?
+        }
+        (None, Some(email)) => {
+            sqlx::query_as!(
+                User,
+                "UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email",
+                email,
+                user_id
+            )
+            .fetch_one(&**client)
+            .await?
+        }
+        (None, None) => {
+            info!("No fields to update for user id {}, user not updated", user_id); // unsure of what behavior to do in this case
+            return Err(Error::RowNotFound); // returning error for now, should this be allowed/be a different error?
+        }
+    };
+
+    /// let user = sqlx::query_as!(
+    ///     User,
+    ///     r#" UPDATE users SET
+    ///         username = COALESCE($1, username),
+    //        email = COALESCE($2, email)
+    //       WHERE id = $3
+    //      RETURNING id, username, email "#,
+    ///     updated.username,
+    ///     updated.email,
+    ///     user_id
+    /// )
+    /// .fetch_one(&**client)
+    /// .await?;
+
+    info!("=User updated: {:?}", user);
+    Ok(user)
+}
+
+/// Delete a user by id.
+// 
+//  Returns Ok(()) if successful.
+pub async fn delete_user(client: &DbClient, user_id: i32) -> Result<(), Error> {
+    info!("Deleting user id {}", user_id);
+
+    // sql query to delete user
+    let _res = sqlx::query!("DELETE FROM users WHERE id = $1", user_id)
+        .execute(&**client) // same thing that was done for add_user, may be incorrect
+        .await?;
+
+    // check to see if deletion was successful
+    if _res.rows_affected() == 0 {
+        info!("No user found with id {}, no rows deleted", user_id);
+    } else {
+        info!("User id {} deleted", user_id);
+    }
+
     Ok(())
 }
