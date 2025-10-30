@@ -60,6 +60,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      api-server:
+        condition: service_started
     restart: on-failure
     develop:
       watch:

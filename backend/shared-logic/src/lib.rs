@@ -5,3 +5,4 @@ pub mod bc;
 pub mod mockeeg;
 pub mod lsl;
 pub use models::{User, TimeSeriesData, NewUser};
+pub mod signal_processing;

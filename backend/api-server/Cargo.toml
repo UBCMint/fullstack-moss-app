@@ -25,7 +25,7 @@ log = "0.4"          # Logging library
 chrono = "0.4"       # date and time library (e.g. timestamps)
 dotenvy = "0.15"     # loading environment variables
 
-pyo3 = { version = "0.18", features = ["auto-initialize"] }
+pyo3 = { version = "0.18.0", features = ["auto-initialize"] }
 
 env_logger = "0.11"
 

@@ -75,7 +75,7 @@ ENV LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu/:/usr/local/lib:/usr/lib/python3.
 WORKDIR /app
 
 COPY --from=builder /app/backend/api-server/docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x ./docker-entrypoint.sh
+RUN sed -i 's/\r$//' ./docker-entrypoint.sh && chmod +x ./docker-entrypoint.sh
 
 COPY --from=builder /app/backend/target/release/api-server ./api-server
 
@@ -90,5 +90,5 @@ ENV PATH="/opt/venv/bin:$PATH"
 EXPOSE 8080
 EXPOSE 9000
 
-ENTRYPOINT ["./docker-entrypoint.sh"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["./api-server"]
