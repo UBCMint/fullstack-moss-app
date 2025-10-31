@@ -73,8 +73,8 @@ export default function SignalGraphNode({ id }: { id?: string }) {
 
     return (
         <Dialog>
-            <Card className="rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0 overflow-hidden bg-white">
-            <div className={`relative flex items-center transition-all duration-300 ease-in-out h-[96px] w-[396px]`}>
+            <Card className="rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0 overflow-hidden bg-white h-[96px] w-[396px]">
+                <div className={`relative flex items-center transition-all duration-300 ease-in-out h-[94px] w-[394=2px]`}>
                     {/* Left circle with input (target) handle */}
                     <span
                         className={`absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center border-[3px] ${isConnected ? 'border-[#000000]' : 'border-[#D3D3D3]'}`}>
