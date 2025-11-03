@@ -48,9 +48,9 @@ export default function Sidebar() {
     );
 
     return (
-        <ResizablePanelGroup direction="horizontal" className="p-4">
-            <ResizablePanel className="min-w-fit" defaultSize={1}>
-                <Card className="max-h-[calc(100vh-2rem)] flex flex-col bg-white shadow-lg rounded-lg">
+        <ResizablePanelGroup direction="horizontal" className="border-none min-h-[200px] max-w-md rounded-lg border md:min-w-[450px]">
+            <ResizablePanel defaultSize={60} minSize={30} className=" ">
+                <Card className="max-h-[calc(100vh-2rem)] flex flex-col ">
                     <CardHeader className="flex flex-row items-center justify-between pb-4">
                         <CardTitle className="font-ibmplex font-semibold text-xl text-black">Menu</CardTitle>
                         <Cross1 />
@@ -78,8 +78,8 @@ export default function Sidebar() {
                     </CardContent>
                 </Card>
             </ResizablePanel>
-            <ResizableHandle className="bg-border-none" />
-            <ResizablePanel defaultSize={99} />
+            <ResizableHandle withHandle className="bg-border-none" />
+            <ResizablePanel defaultSize={40} minSize={5} />
         </ResizablePanelGroup>
     );
 }
