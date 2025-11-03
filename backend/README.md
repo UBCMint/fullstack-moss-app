@@ -115,3 +115,18 @@ SELECT CURRENT_USER; --to check the current role is team_user
 exit
 ```
 
+## New tables: sessions and frontend_state
+
+-- In order to store front-end state, we've added two new tables.
+
+- `sessions` — This stores the sessions themselves, and just has fields id and name.
+- `frontend_state` — Each session has a corresponding 'frontend_state' entry, containing 
+the required frontend data as a JSON, an id referencing its number in the sessions table,
+and a timestamp to keep track of when it was last updated.
+
+Additionally, note that cascade is in place, so deleting a session will cause it to cascade
+to the corresponding frontend_state entry.
+
+To add them, run the migration '20251101120000_add_sessions_and_frontend_state.sql'.
+
+```
