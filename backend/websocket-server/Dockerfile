@@ -52,7 +52,7 @@ RUN rm -f target/release/websocket-server target/release/websocket-server.d && \
 RUN cargo build --release --bin websocket-server
 
 # Stage 2: Create the final minimal image
-FROM debian:bookworm-slim
+FROM python:3.9-slim
 
 # Install runtime dependencies for lsl library
 RUN apt-get update && \
@@ -64,6 +64,11 @@ WORKDIR /app
 # Copy the built websocket-server binary from the builder stage
 COPY --from=builder /app/backend/target/release/websocket-server ./websocket-server
 
-EXPOSE 8080
+COPY --from=builder /app/backend/shared-logic ./shared-logic
 
+RUN pip install --no-cache-dir numpy scipy mne
+
+ENV SIGNAL_PROCESSING_SCRIPT="/app/shared-logic/src/signal_processing/signalProcessing.py"
+
+EXPOSE 8080
 CMD ["./websocket-server"]
