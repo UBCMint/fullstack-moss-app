@@ -20,7 +20,7 @@ use pyo3::{IntoPy, ToPyObject};
 
 // shared logic library
 use shared_logic::db::{initialize_connection, DbClient};
-use shared_logic::models::{User, NewUser, UpdateUser};
+use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState};
 
 // Define application state
 #[derive(Clone)]
@@ -70,7 +70,7 @@ async fn get_all_users(
         Err(e) => {
             error!("Failed to retrieve users: {}", e);
             Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::INTERNAL_SERVER_ERROR,  
                 format!("Failed to retrieve users: {}", e),
             ))
         }
@@ -115,6 +115,85 @@ async fn delete_user(
         }
     }
 }
+
+
+// Handler for POST /api/sessions
+async fn create_session(
+    State(app_state): State<AppState>,
+    Json(session_name): Json<String>,
+) -> Result<Json<Session>, (StatusCode, String)> {
+    info!("Received request to create session: {}", session_name);
+
+    match shared_logic::db::create_session(&app_state.db_client, session_name).await {
+        Ok(created_session) => {
+            info!("Session created successfully: {:?}", created_session);
+            Ok(Json(created_session))
+        }
+        Err(e) => {
+            error!("Failed to create session: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create session: {}", e)))
+        }
+    }
+}
+
+// Handler for GET /api/sessions
+async fn get_all_sessions(
+    State(app_state): State<AppState>,
+) -> Result<Json<Vec<Session>>, (StatusCode, String)> {
+    info!("Received request to get all sessions");
+
+    match shared_logic::db::get_sessions(&app_state.db_client).await {
+        Ok(sessions) => {
+            info!("Retrieved {} sessions.", sessions.len());
+            Ok(Json(sessions))
+        }
+        Err(e) => {
+            error!("Failed to retrieve sessions: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to retrieve sessions: {}", e)))
+        }
+    }
+}
+
+// Handler for POST /api/sessions/{session_id}/frontend-state
+async fn set_frontend_state(
+    State(app_state): State<AppState>,
+    Path(session_id): Path<i32>,
+    Json(state_data): Json<Value>,
+) -> Result<Json<FrontendState>, (StatusCode, String)> {
+    info!("Received request to set frontend state for session {}", session_id);
+
+    match shared_logic::db::upsert_frontend_state(&app_state.db_client, session_id, state_data).await {
+        Ok(state) => {
+            info!("Frontend state set successfully for session {}", session_id);
+            Ok(Json(state))
+        }
+        Err(e) => {
+            error!("Failed to set frontend state: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to set frontend state: {}", e)))
+        }
+    }
+}
+
+// Handler for  GET /api/sessions/{session_id}/frontend-state
+async fn get_frontend_state(
+    State(app_state): State<AppState>,
+    Path(session_id): Path<i32>,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    info!("Received request to get frontend state for session {}", session_id);
+
+    match shared_logic::db::get_frontend_state(&app_state.db_client, session_id).await {
+        Ok(Some(v)) => {
+            info!("Frontend state retrieved successfully for session {}", session_id);
+            Ok(Json(v))
+        }
+        Ok(None) => { Err((StatusCode::NOT_FOUND, format!("No frontend state found for session {}", session_id))) },
+        Err(e) => {
+            error!("Failed to get frontend state: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get frontend state: {}", e)))
+        }
+    }
+}
+
 
 async fn run_python_script_handler() -> Result<Json<Value>, (StatusCode, String)> {
     info!("Received request to run Python script.");
@@ -199,6 +278,13 @@ async fn main() {
         .route("/users/:id", axum::routing::put(update_user))
         .route("/users/:id", axum::routing::delete(delete_user))
         .route("/run-python-script", get(run_python_script_handler))
+        
+        .route("/api/sessions", post(create_session))
+        .route("/api/sessions", get(get_all_sessions))
+        
+        .route("/api/sessions/:session_id/frontend-state", post(set_frontend_state))
+        .route("/api/sessions/:session_id/frontend-state", get(get_frontend_state))
+
         // Share application state with all handlers
         .with_state(app_state);
 

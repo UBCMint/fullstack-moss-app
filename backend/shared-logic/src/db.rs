@@ -1,3 +1,4 @@
+use serde_json::{Value};
 use sqlx::{
     postgres::PgPoolOptions,
     Error, PgPool,
@@ -6,8 +7,8 @@ use tokio::time::{self, Duration};
 use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
-use super::models::{User, NewUser, TimeSeriesData, UpdateUser};
-use crate::lsl::{EEGDataPacket};
+use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
+use crate::{lsl::EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 
@@ -251,4 +252,98 @@ pub async fn delete_user(client: &DbClient, user_id: i32) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+/// Create a new session
+//
+/// Returns the created Session on success.
+pub async fn create_session(client: &DbClient, name: String) -> Result<Session, Error> {
+    info!("Creating session: {}", name);
+    let session = sqlx::query_as!(
+        Session,
+        "INSERT INTO sessions (name) VALUES ($1) RETURNING id, name",
+        name,
+    )
+    .fetch_one(&**client)
+    .await?;
+    info!("Session created successfully: {:?}", session);
+    
+    return Ok(session);
+}
+
+/// Get all sessions
+//
+/// Returns a vector of Sessions on success.
+pub async fn get_sessions(client: &DbClient) -> Result<Vec<Session>, Error>
+{
+    info!("Retrieving sessions...");
+    let sessions = sqlx::query_as!(Session, "SELECT id, name FROM sessions")
+        .fetch_all(&**client)
+        .await?;
+    info!("Retrieved {} sessions.", sessions.len());
+
+    return Ok(sessions);
+}
+
+/// Delete a session by id.
+//
+/// Returns Ok(()) if successful.
+pub async fn delete_session(client: &DbClient, session_id: i32) -> Result<(), Error> {
+    info!("Deleting session id {}", session_id);
+
+    let res = sqlx::query!("DELETE FROM sessions WHERE id = $1", session_id)
+        .execute(&**client)
+        .await?;
+
+    if (res.rows_affected() == 0) {
+        info!("No rows deleted, session id {} not found", session_id);
+        return Err(Error::RowNotFound);
+    } else {
+        info!("Session id {} deleted", session_id);
+    }
+
+    return Ok(());
+}
+
+/// Create a frontend_state entry tied to the given session id, which stores
+/// the provided JSON data, or if a frontend_state for that session already exists,
+/// update it with the new data.
+///
+/// Returns the created FrontendState on success.
+pub async fn upsert_frontend_state(client: &DbClient, session_id: i32, data: serde_json::Value) -> Result<FrontendState, Error> {
+    info!("Creating frontend state for session id {}", session_id);
+
+    let state = sqlx::query_as!(
+        FrontendState,
+        "INSERT INTO frontend_state (session_id, data) VALUES ($1, $2)
+        ON CONFLICT (session_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+        RETURNING session_id, data, updated_at",
+        session_id,
+        data
+    )
+    .fetch_one(&**client)
+    .await?;
+
+    info!("Frontend state created/updated successfully: {:?}", state);
+
+    return Ok(state);
+}
+
+/// Get the JSON frontend state associated with the given session id.
+///
+/// Returns the JSON value on success.
+pub async fn get_frontend_state(client: &DbClient, session_id: i32) -> Result<Option<Value>, Error> {
+    info!("Retrieving frontend state for session id {}", session_id);
+
+    let state = sqlx::query_as!(
+        FrontendState,
+        "SELECT session_id, data, updated_at FROM frontend_state WHERE session_id = $1",
+        session_id
+    )
+    .fetch_optional(&**client)
+    .await?;
+
+    info!("Retrieved frontend state successfully: {:?}", state);
+
+    return Ok(state.map(|s| s.data));
 }
