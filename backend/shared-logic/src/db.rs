@@ -8,7 +8,7 @@ use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
 use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
-use crate::{lsl::EEGDataPacket};
+use crate::{lsl::EEGData};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 
