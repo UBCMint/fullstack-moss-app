@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   name TEXT NOT NULL UNIQUE
 );
 
+
 CREATE TABLE IF NOT EXISTS frontend_state (
   session_id INTEGER PRIMARY KEY
     REFERENCES sessions(id) ON DELETE CASCADE,
