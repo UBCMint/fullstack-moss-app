@@ -29,13 +29,13 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
     const signals = [
         {key: 'signal1', colour: '#0000ff', name: 'Signal 1'},
         {key: 'signal2', colour: '#00ff00', name: 'Signal 2'},
-        {key: 'signal3', colour: '#FFC0CB', name: 'Signal 3'},
+        {key: 'signal3', colour: '#FF00D0', name: 'Signal 3'},
         {key: 'signal4', colour: '#FFFF00', name: 'Signal 4'},
         {key: 'signal5', colour: '#ff0000', name: 'Signal 5'},
     ];
 
     return (
-        // ✅ Take full height of the container your dialog gives
+        // take full height of the container
         <div className="w-full h-full grid grid-rows-[3fr_2fr] gap-4">
 
             {/* ---- TOP HALF: CHART ---- */}
@@ -43,12 +43,7 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                 <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={data} syncId="SignalChart">
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis 
-                            dataKey="time" 
-                            type="number"
-                            domain={[0,100]}
-                            ticks={[0,10,20,30,40,50,60,70,80,90,100]}
-                        />
+                        <XAxis dataKey="time" />
                         <YAxis 
                             type="number"
                             domain={[0,100]}
