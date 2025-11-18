@@ -8,6 +8,7 @@ import {
     useNodesState,
     useEdgesState,
     Controls,
+    ControlButton,
     useReactFlow,
     Background,
     Panel,
@@ -29,9 +30,9 @@ import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-n
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
 
-import { useState } from 'react';
-import { X } from 'lucide-react';
-import { Ellipsis } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
+import { headers } from 'next/headers';
 
 const nodeTypes = {
     'source-node': SourceNode,
@@ -48,6 +49,20 @@ const ReactFlowInterface = () => {
     const [edges, setEdges] = useEdgesState<Edge>([]);
     const { screenToFlowPosition } = useReactFlow();
     const [isControlsOpen, setIsControlsOpen] = useState(false);
+
+    // Listen for global pipeline reset to clear nodes/edges
+    useEffect(() => {
+        const listener = () => {
+            try {
+                setNodes([]);
+                setEdges([]);
+            } catch (_) {
+                // no-op
+            }
+        };
+        window.addEventListener('pipeline-reset', listener);
+        return () => window.removeEventListener('pipeline-reset', listener);
+    }, [setNodes, setEdges]);
 
     // Helper to notify components that edges have changed
     const dispatchEdgesChanged = () => {
@@ -200,26 +215,44 @@ const ReactFlowInterface = () => {
                 attributionPosition="bottom-left"
                 isValidConnection={isValidConnection}
             >
-                <Panel position="top-right">
+                <Panel position="top-right" style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                }}>
                     <button
                         onClick={toggleControls}
-                        className="p-2 rounded-full bg-white border "
-                    >
+                        className="p-1 rounded-full bg-white border"
+                        style={{ 
+                            width: 30, 
+                            height: 30,
+                            border: '1px solid #ebebeb',
+                    }}>
                         {isControlsOpen ? (
                             <X size={20} />
                         ) : (
-                            <Ellipsis size={20} />
+                            <Ellipsis size={20}/>
                         )}
                     </button>
-                    {isControlsOpen && (
-                        <Controls
-                            position="top-right"
-                            style={{
-                                top: '90%',
-                                left: '-25%',
-                            }}
-                        />
-                    )}
+                    <div style={{
+                        transition: 'opacity 0.2s, transform 0.2s',
+                        opacity: isControlsOpen ? 1 : 0,
+                        transform: isControlsOpen ? 'translateY(5px)' : 'translateY(-5px)',
+                        pointerEvents: isControlsOpen ? 'auto' : 'none',
+                    }}>
+                        <Controls showFitView={false} showInteractive={false} style={{
+                            position: 'static',
+                            boxShadow: '0 1px 1px rgba(255, 255, 255, 0)',
+                            border: '1px solid #ebebeb',
+                        }}>
+                            <ControlButton>                                
+                                <RotateCw strokeWidth={2.5} style={{fill: 'none'}}/>
+                            </ControlButton>
+                            <ControlButton>           
+                                <RotateCcw strokeWidth={2.5} style={{fill: 'none'}}/>
+                            </ControlButton>
+                        </Controls>
+                    </div>
                 </Panel>
                 <Panel position="top-left">
                     <Sidebar />

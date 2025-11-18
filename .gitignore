@@ -1,1 +1,5 @@
 node_modules/
+# Ignore specific queries in backend
+backend/.sqlx/*.json
+backend/.sqlx/query-*
+target/
