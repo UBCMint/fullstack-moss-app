@@ -46,14 +46,14 @@ export default function ComboBox({
     return (
         <div
             className={cn(
-                'bg-white rounded-3xl border-2 overflow-hidden',
+                'bg-white rounded-[30px] border-2 overflow-hidden',
                 // Node border stays gray - no change with connection
                 'border-[#D3D3D3]'
             )}
             style={{
                 width: 'fit-content',
                 minWidth: '396px', // changed width to 396px, same width as source-node
-                
+
             }}
         >
             {/* Main button/header */}
@@ -61,16 +61,16 @@ export default function ComboBox({
                 onClick={toggleExpanded}
                 className="w-full h-[70px] px-4 flex items-center justify-between transition-colors"
             >
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center">
                     {/* Left connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white',
+                            'absolute left-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
-                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                  : 'border-gray-300' // Disconnected: gray border
+                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                    : 'border-gray-300' // Disconnected: gray border
                         )}
                     >
                         {/* No filled circle - always stay empty */}
@@ -79,17 +79,16 @@ export default function ComboBox({
                     {/* Status dot */}
                     <div
                         className={cn(
-                            'w-2 h-2 rounded-full',
+                            'absolute left-16 w-3 h-3 rounded-full',
                             isConnected && isDataStreamOn
-                                ? 'bg-[#509693]'
-                                : 'bg-[#D3D3D3]'
+                                ? 'bg-[#509693]' : 'bg-[#D3D3D3]'
                         )}
                     />
 
                     {/* Filter text - larger, bold font with ref for measurement */}
                     <span
                         ref={titleRef}
-                        className="font-geist text-[25px] font-[550] leading-tight text-black tracking-wider"
+                        className="absolute left-24 font-geist text-[25px] font-[550] leading-tight text-black tracking-wider"
                     >
                         {filters.find((filter) => filter.value === value)
                             ?.label || 'Low Pass Filter'}
@@ -98,62 +97,52 @@ export default function ComboBox({
 
                 <div className="flex items-center space-x-3">
                     {/* Toggle arrow */}
-                    {isExpanded ? (
-                        <ChevronUp className="h-5 w-5 text-gray-600" />
-                    ) : (
-                        <ChevronDown className="h-5 w-5 text-gray-600" />
-                    )}
+                    <div className="absolute right-[58px] transition-transform duration-300 ease-in-out">
+                        <ChevronUp className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${isExpanded ? 'rotate-0' : 'rotate-180'
+                            }`} />
+                    </div>
 
                     {/* Right connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white',
+                            'absolute right-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
-                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                  : 'border-gray-300' // Disconnected: gray border
+                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                    : 'border-gray-300' // Disconnected: gray border
                         )}
                     >
                         {/* No solid circle inside - always stay empty */}
                     </div>
-
-                
                 </div>
             </button>
 
             {/* Slider row under the header */}
-<div
-  className="space-y-1 pb-3 pt-1"
-  style={{
-    paddingLeft: '60px',  // aligns with the title start
-    paddingRight: '60px',
-  }}
->
+            <div
+                className="space-y-1 pb-3 pt-1"
+                style={{
+                    paddingLeft: '60px',  // aligns with the title start
+                    paddingRight: '60px',
+                }}
+            >
+                <Slider
+                    value={sliderValue}
+                    onValueChange={setSliderValue}
+                    max={100}
+                    min={0}
+                    step={1}
+                    className="w-full"
+                />
+                <div className="flex justify-between items-center mb-1">
+                    {/* optional 0 / 100 labels, adjust if you don't want them */}
+                    <span className="text-xs text-gray-500">0</span>
 
-<Slider
-    value={sliderValue}
-    onValueChange={setSliderValue}
-    max={100}
-    min={0}
-    step={1}
-    className="w-full"
-  />
-  <div className="flex justify-between items-center mb-1">
-    {/* optional 0 / 100 labels, adjust if you don't want them */}
-    <span className="text-xs text-gray-500">0</span>
-
-   
-
-    <span className="text-xs text-gray-500">100</span>
-  </div>
-
-  
-</div>
+                    <span className="text-xs text-gray-500">100</span>
+                </div>
 
 
-        
-                        
+            </div>
 
             {/* Expandable options section */}
             <div
