@@ -12,6 +12,8 @@ interface FilterNodeProps {
 export default function FilterNode({ id }: FilterNodeProps) {
     const [selectedFilter, setSelectedFilter] = React.useState('lowpass');
     const [isConnected, setIsConnected] = React.useState(false);
+    const [frequency, setFrequency] = React.useState(75);
+
     
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
