@@ -1,5 +1,6 @@
 use axum::{
     extract::State,
+    extract::Path,
     http::StatusCode,
     routing::{get, post},
     Json,
@@ -20,7 +21,7 @@ use rand_core::OsRng;
 
 // shared logic library
 use shared_logic::db::{initialize_connection, DbClient};
-use shared_logic::models::{User, NewUser};
+use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState};
 
 // Argon2 imports
 use argon2::{
