@@ -9,6 +9,9 @@ edition = "2021"
 axum = { version = "0.7", features = ["macros"] }
 # Tower for HTTP services (used by Axum)
 tower-http = { version = "0.5", features = ["cors"] } # For CORS, logging, etc.
+argon2 = "0.4"
+rand_core = "0.6"
+
 
 # Serialization/Deserialization for JSON
 serde = { version = "1.0", features = ["derive"] }
