@@ -41,6 +41,10 @@ once_cell = "1.18"
 #lsl
 lsl = "0.1.1"
 
+# working with python 
+pyo3 = { version = "0.18.0", features = ["auto-initialize"] }
+numpy = "0.18"
+
 # Argon2 password hashing
 argon2 = "0.5"
 password-hash = "0.5"

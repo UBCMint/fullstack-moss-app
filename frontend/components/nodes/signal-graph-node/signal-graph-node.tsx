@@ -73,8 +73,8 @@ export default function SignalGraphNode({ id }: { id?: string }) {
 
     return (
         <Dialog>
-            <Card className="rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0 overflow-hidden bg-white">
-            <div className={`relative flex items-center transition-all duration-300 ease-in-out h-[96px] w-[396px]`}>
+            <Card className="rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0 overflow-hidden bg-white h-[96px] w-[396px]">
+                <div className={`relative flex items-center transition-all duration-300 ease-in-out h-[94px] w-[394=2px]`}>
                     {/* Left circle with input (target) handle */}
                     <span
                         className={`absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center border-[3px] ${isConnected ? 'border-[#000000]' : 'border-[#D3D3D3]'}`}>
@@ -130,18 +130,17 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                 </div>
 
 
-                <DialogContent className="w-[80vw] h-[80vh] max-w-none max-h-none">
+                <DialogContent 
+                    className="items-center justify-center w-screen h-screen max-w-none max-h-none" 
+                    style={{ backgroundColor : '#EAF1F0'}}
+                >
                     <DialogHeader>
-                        <DialogTitle>Signal Graph</DialogTitle>
-                        <DialogDescription>
-                            Here is a preview of the signal graph.
-                        </DialogDescription>
+                        <DialogTitle></DialogTitle>
+                        <DialogDescription></DialogDescription>
                     </DialogHeader>
-                    <Card>
-                        <div className="w-full h-full">
-                            <SignalGraphView data={isConnected ? processedData : []} />
-                        </div>
-                    </Card>
+                    <div className="w-[85vw] h-[90vh]">
+                        <SignalGraphView data={isConnected ? processedData : []} />
+                    </div>
                 </DialogContent>
             </Card>
         </Dialog>

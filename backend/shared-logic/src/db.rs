@@ -1,3 +1,4 @@
+use serde_json::{Value};
 use sqlx::{
     postgres::PgPoolOptions,
     Error, PgPool,
@@ -6,8 +7,8 @@ use tokio::time::{self, Duration};
 use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
-use super::models::{User, NewUser, TimeSeriesData, UpdateUser};
-use crate::lsl::{EEGData};
+use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
+use crate::{lsl::EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 use argon2::password_hash::SaltString;
@@ -134,24 +135,46 @@ pub async fn get_testtime_series_data(client: &DbClient) -> Result<Vec<TimeSerie
 }
 
 /// Insert a batch of records into eeg_data.
-pub async fn insert_batch_eeg(client: &DbClient, batch: &[EEGData]) -> Result<(), sqlx::Error> {
+pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Result<(), sqlx::Error> {
+
+    let n_samples = packet.timestamps.len();
+
+      // Add validation to prevent empty inserts
+    if n_samples == 0 {
+        info!("Skipping insert - packet has no samples");
+        return Ok(());
+    }
+
     // Construct a single SQL insert statement
     let mut query_builder = sqlx::QueryBuilder::new(
         "INSERT INTO eeg_data (time, channel1, channel2, channel3, channel4) "
     );
-    
-    // inputting the values of the batch into the SQL insert statement
-    query_builder.push_values(batch, |mut b, item| {
-        b.push_bind(item.time)
-            .push_bind(item.signals[0])
-            .push_bind(item.signals[1])
-            .push_bind(item.signals[2])
-            .push_bind(item.signals[3]);
-    });
+
+    // Iterate through all data in the packet, pairing timestamp to the signal, and insert them
+
+    query_builder.push_values(
+        (0..n_samples).map(|sample_idx| {
+            (
+                &packet.timestamps[sample_idx],
+                packet.signals[0][sample_idx],  // Channel 0
+                packet.signals[1][sample_idx],  // Channel 1
+                packet.signals[2][sample_idx],  // Channel 2
+                packet.signals[3][sample_idx],  // Channel 3
+            )
+        }),
+        |mut b, (timestamp, ch0, ch1, ch2, ch3)| {
+            b.push_bind(timestamp)
+                .push_bind(ch0)
+                .push_bind(ch1)
+                .push_bind(ch2)
+                .push_bind(ch3);
+        }
+    );
 
     query_builder.build().execute(&**client).await?;
-    info!("Batch EEG data added successfully, Size: {}", batch.len());
+    info!("EEG packet inserted successfully - {} data", packet.timestamps.len());
     Ok(())
+
 }
 
 /// Update a user by id.
@@ -287,4 +310,98 @@ pub async fn delete_user(client: &DbClient, user_id: i32) -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+/// Create a new session
+//
+/// Returns the created Session on success.
+pub async fn create_session(client: &DbClient, name: String) -> Result<Session, Error> {
+    info!("Creating session: {}", name);
+    let session = sqlx::query_as!(
+        Session,
+        "INSERT INTO sessions (name) VALUES ($1) RETURNING id, name",
+        name,
+    )
+    .fetch_one(&**client)
+    .await?;
+    info!("Session created successfully: {:?}", session);
+    
+    return Ok(session);
+}
+
+/// Get all sessions
+//
+/// Returns a vector of Sessions on success.
+pub async fn get_sessions(client: &DbClient) -> Result<Vec<Session>, Error>
+{
+    info!("Retrieving sessions...");
+    let sessions = sqlx::query_as!(Session, "SELECT id, name FROM sessions")
+        .fetch_all(&**client)
+        .await?;
+    info!("Retrieved {} sessions.", sessions.len());
+
+    return Ok(sessions);
+}
+
+/// Delete a session by id.
+//
+/// Returns Ok(()) if successful.
+pub async fn delete_session(client: &DbClient, session_id: i32) -> Result<(), Error> {
+    info!("Deleting session id {}", session_id);
+
+    let res = sqlx::query!("DELETE FROM sessions WHERE id = $1", session_id)
+        .execute(&**client)
+        .await?;
+
+    if (res.rows_affected() == 0) {
+        info!("No rows deleted, session id {} not found", session_id);
+        return Err(Error::RowNotFound);
+    } else {
+        info!("Session id {} deleted", session_id);
+    }
+
+    return Ok(());
+}
+
+/// Create a frontend_state entry tied to the given session id, which stores
+/// the provided JSON data, or if a frontend_state for that session already exists,
+/// update it with the new data.
+///
+/// Returns the created FrontendState on success.
+pub async fn upsert_frontend_state(client: &DbClient, session_id: i32, data: serde_json::Value) -> Result<FrontendState, Error> {
+    info!("Creating frontend state for session id {}", session_id);
+
+    let state = sqlx::query_as!(
+        FrontendState,
+        "INSERT INTO frontend_state (session_id, data) VALUES ($1, $2)
+        ON CONFLICT (session_id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+        RETURNING session_id, data, updated_at",
+        session_id,
+        data
+    )
+    .fetch_one(&**client)
+    .await?;
+
+    info!("Frontend state created/updated successfully: {:?}", state);
+
+    return Ok(state);
+}
+
+/// Get the JSON frontend state associated with the given session id.
+///
+/// Returns the JSON value on success.
+pub async fn get_frontend_state(client: &DbClient, session_id: i32) -> Result<Option<Value>, Error> {
+    info!("Retrieving frontend state for session id {}", session_id);
+
+    let state = sqlx::query_as!(
+        FrontendState,
+        "SELECT session_id, data, updated_at FROM frontend_state WHERE session_id = $1",
+        session_id
+    )
+    .fetch_optional(&**client)
+    .await?;
+
+    info!("Retrieved frontend state successfully: {:?}", state);
+
+    return Ok(state.map(|s| s.data));
 }

@@ -105,16 +105,13 @@ export default function MLComboBox({
                     height: '90px',
                 }}
             >
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center">
                     {/* Left connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white',
+                            'absolute left-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
-                                ? 'border-black' // Connected to source AND data stream on: black border (activated)
-                                : isConnected
-                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                    : 'border-gray-300' // Disconnected: gray border
+                                ? 'border-[#000000]' : 'border-[#D3D3D3]'
                         )}
                     >
                     </div>
@@ -122,7 +119,7 @@ export default function MLComboBox({
                     {/* Status dot */}
                     <div
                         className={cn(
-                            'w-3 h-3 rounded-full',
+                            'absolute left-16 w-3 h-3 rounded-full',
                             isConnected && isDataStreamOn
                                 ? "bg-[#509693]" : "bg-[#D3D3D3]"
                         )}
@@ -131,7 +128,7 @@ export default function MLComboBox({
                     {/* ML prediction text - larger, bold font with ref for measurement */}
                     <span
                         ref={titleRef}
-                        className="font-geist text-[25px] font-[550] leading-tight text-black tracking-wider"
+                        className="absolute left-24 font-geist text-[25px] font-[550] leading-tight text-black tracking-wider"
                     >
                         {mlPredictions.find(
                             (prediction) => prediction.value === value
@@ -139,23 +136,19 @@ export default function MLComboBox({
                     </span>
                 </div>
 
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center ">
                     {/* Toggle arrow */}
-                    {isExpanded ? (
-                        <ChevronUp className="h-5 w-5 text-gray-600" />
-                    ) : (
-                        <ChevronDown className="h-5 w-5 text-gray-600" />
-                    )}
+                    <div className="absolute right-[58px] transition-transform duration-300 ease-in-out">
+                        <ChevronUp className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${isExpanded ? 'rotate-0' : 'rotate-180'
+                            }`} />
+                    </div>
 
                     {/* Right connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white',
+                            'absolute right-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
-                                ? 'border-black' // Connected to source AND data stream on: black border (activated)
-                                : isConnected
-                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                    : 'border-gray-300' // Disconnected: gray border
+                                ? 'border-[#000000]' : 'border-[#D3D3D3]'
                         )}
                     ></div>
                 </div>
@@ -163,8 +156,8 @@ export default function MLComboBox({
 
             {/* In-card error message when not properly connected */}
             {!isConnected && !dismissedError && (
-                <div className="px-5 pb-4 -mt-1">
-                    <div className="w-full bg-white rounded-3xl border border-gray-200 px-4 pt-3 pb-4 shadow-sm">
+                <div className="px-5 pb-10 -mt-1">
+                    <div className="w-full bg-white rounded-[30px] border border-gray-200 px-4 pt-3 pb-4 shadow-sm">
                         <div className="flex items-start space-x-3">
                             <div className="mt-0.5">
                                 <div className="w-6 h-6 rounded-full bg-red-100 flex items-center justify-center">
@@ -174,7 +167,7 @@ export default function MLComboBox({
                             <div className="flex-1 text-left">
                                 <div className="text-[18px] font-semibold text-gray-900 leading-6">Error: Expected filtered input but received raw input.</div>
                                 <div className="text-[16px] text-gray-800 mt-2">Please attach the prediction node to a filter node.</div>
-                                <div className="mt-4 flex justify-center">
+                                <div className="-ml-6 mt-4 flex justify-center">
                                     <button
                                         onClick={() => setDismissedError(true)}
                                         className="px-4 py-2 rounded-xl bg-[#2B6C66] text-white font-semibold text-[16px]"
@@ -195,8 +188,9 @@ export default function MLComboBox({
                         <div className="flex items-center justify-between space-x-3">
                             <div
                                 className={cn(
-                                    'w-5 h-5 rounded-full border-2 bg-white',
-                                    isConnected && isDataStreamOn ? 'border-black' : 'border-gray-300'
+                                    'w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                                    isConnected
+                                        ? 'border-[#000000]' : 'border-[#D3D3D3]'
                                 )}
                             />
                             <div className="flex-1 flex items-center space-x-3">
@@ -210,8 +204,9 @@ export default function MLComboBox({
                             </div>
                             <div
                                 className={cn(
-                                    'w-5 h-5 rounded-full border-2 bg-white',
-                                    isConnected && isDataStreamOn ? 'border-black' : 'border-gray-300'
+                                    'w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                                    isConnected
+                                        ? 'border-[#000000]' : 'border-[#D3D3D3]'
                                 )}
                             />
                         </div>

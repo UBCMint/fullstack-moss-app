@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
 
+use serde_json::Value;
 
 // Existing User struct (used for data coming OUT of the DB)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow)]
@@ -36,4 +37,19 @@ pub struct UpdateUser {
     pub username: Option<String>,
     pub email: Option<String>,
     pub password: Option<String>, // new field for updating password
+}
+
+// Struct for session data
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Session {
+    pub id: i32,
+    pub name: String,
+}
+
+// Struct for frontend state associated with a session
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct FrontendState {
+    pub session_id: i32,
+    pub data: Value, 
+    pub updated_at: chrono::DateTime<Utc>,
 }

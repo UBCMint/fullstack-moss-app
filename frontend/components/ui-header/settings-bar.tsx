@@ -1,7 +1,7 @@
 'use client';
 
 import { Menubar, MenubarMenu, MenubarTrigger } from '@/components/ui/menubar';
-import { Slider } from '@/components/ui/slider';
+import { ProgressBar } from '@/components/ui/progressbar';
 import { Button } from '@/components/ui/button';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { Timer } from '@/components/ui/timer';
@@ -100,16 +100,11 @@ export default function SettingsBar() {
 
             {/* slider */}
             <div className="flex-1 mx-4">
-                <Slider
-                    value={[(leftTimerSeconds / 300) * 100]}
-                    max={100}
-                    step={1}
-                    disabled
-                />
+                <ProgressBar value={(leftTimerSeconds / 300) * 100} />
             </div>
 
             {/* Timer */}
-            <div className="mx-4">
+            <div className="pr-4">
                 <Timer
                     leftTime={formatTime(leftTimerSeconds)}
                     rightTime="05:00"
