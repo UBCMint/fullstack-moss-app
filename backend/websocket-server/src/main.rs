@@ -1,3 +1,4 @@
+use std::os::windows::process;
 use std::{sync::Arc};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
@@ -11,8 +12,10 @@ use tokio_tungstenite::{
 use tokio_util::sync::CancellationToken;
 use shared_logic::bc::{start_broadcast};
 use shared_logic::db::{initialize_connection};
+use shared_logic::lsl::{ProcessingConfig}; // get ProcessingConfig from lsl.rs
 use dotenvy::dotenv;
 use log::{info, error};
+use serde_json; // used to parse ProcessingConfig from JSON sent by frontend
 
 
 #[tokio::main]
@@ -81,9 +84,44 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
     let write_clone = write.clone();
     let cancel_token = CancellationToken::new();
     let cancel_clone = cancel_token.clone();
+
+    // setup registration for signal processing configuration
+    let signal_config = read.next().await;
+
+    // we have the ProcessingConfig struct
+    // check if we received a message (two layers of unwrapping needed)
+    let processing_config: ProcessingConfig = match signal_config {
+
+        Some(Ok(config_json)) => {
+
+            // here, we parse the json into a signal config struct using serde_json
+            let config_text = config_json.to_text().unwrap();
+
+            match serde_json::from_str(config_text) {
+                Ok(config) => config,
+                Err(e) => {
+                    error!("Error parsing signal configuration JSON: {}", e);
+                    return;
+                }
+            }
+
+        }
+
+        Some(Err(e)) => {
+            error!("Error receiving signal configuration: {}", e);
+            return;
+        }
+
+        None => {
+            error!("No signal configuration received from client. Closing connection.");
+            return;
+        }
+    };
+
     // spawns the broadcast task
     let mut broadcast = Some(tokio::spawn(async move {
-        start_broadcast(write_clone, cancel_clone).await;
+        // pass ProcessingConfig into broadcast so it reaches receive_eeg
+        start_broadcast(write_clone, cancel_clone, processing_config).await;
     }));
 
 
@@ -137,4 +175,3 @@ async fn handle_prep_close(
         info!("Notified client prep close is complete.");
     }
 }
-

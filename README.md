@@ -72,20 +72,18 @@ These instructions were tested on Windows and not guarnateed to work on Macs
     sqlx migrate run
     ```
 
-    **if migrations already exist and need to reset migrations**
-        - run the database and connect to it
-        ```
-        docker exec -it timescaledb psql -U postgres
-        ```
-        - remove the old one from database
-        ```
-        DELETE FROM _sqlx_migrations WHERE version = 20250630230435;
-        ```
-        - go back and re-run
+    ### if migrations already exist and need to update migrations
+    - Just re-run
         ```
         sqlx migrate run
         ```
-
+    - Or
+    ```
+    sqlx database drop
+    sqlx database create
+    sqlx migrate run
+    ```
+   
 6. Generate sqlx-data.json schema snapshot:
     ```
     cd shared-logic
@@ -104,6 +102,15 @@ These instructions were tested on Windows and not guarnateed to work on Macs
 ```sql
  TRUNCATE TABLE eeg_data;
 ```
+
+ ### if you have the following error:
+    ```
+    error: set `DATABASE_URL` to use query macros online, or run `cargo sqlx prepare` to update the query cache
+    ```
+    - start up the database docker
+    - re-do : `$env:DATABASE_URL="postgres://postgres:my_secure_password_123@localhost:5432/postgres"`
+    - `cd shared-logic`
+    - then: `cargo sqlx prepare --workspace`
 ---
 
 **Run api server:**
