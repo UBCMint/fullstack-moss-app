@@ -19,7 +19,11 @@ use tokio_util::sync::CancellationToken;
 use log::{info, error};
 
 // starts the broadcast by spawning async sender and receiver tasks.
-pub async fn start_broadcast(write: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,  cancel_token: CancellationToken) {
+pub async fn start_broadcast(
+    write: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,  
+    cancel_token: CancellationToken,
+    processing_config: ProcessingConfig, // takes in signal processing configuration from frontend
+) {
     let (tx, _rx) = broadcast::channel::<Arc<EEGDataPacket>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
     let rx_ws = tx.subscribe();
     let rx_db = tx.subscribe();
@@ -37,7 +41,8 @@ pub async fn start_broadcast(write: Arc<Mutex<SplitSink<WebSocketStream<TcpStrea
     let tx_clone = tx.clone();
     let sender_token = cancel_token.clone(); 
     let sender = tokio::spawn(async move {
-        receive_eeg(tx_clone, sender_token, ProcessingConfig::default()).await;
+        // use the ProcessingConfig provided by the client instead of default
+        receive_eeg(tx_clone, sender_token, processing_config).await;
     });
 
     // Subscribe for websocket Receiver 
