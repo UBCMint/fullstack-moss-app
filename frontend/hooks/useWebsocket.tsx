@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useGlobalContext } from '@/context/GlobalContext';
+import { ProcessingConfig } from '@/lib/processing';
 
 export default function useWebsocket(
     chartSize: number,
@@ -11,8 +12,18 @@ export default function useWebsocket(
     const wsRef = useRef<WebSocket | null>(null);
     const closingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isClosingGracefully, setIsClosingGracefully] = useState(false);
+    const processingConfigRef = useRef<ProcessingConfig | null>(null);
 
     const intervalTime = 1000 / batchesPerSecond;
+
+    const sendProcessingConfig = (config: ProcessingConfig) => {
+        processingConfigRef.current = config
+      
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify(config))
+          console.log('Sent processing config:', config)
+        }
+    }      
 
     useEffect(() => {
         console.log('data streaming:', dataStreaming);
@@ -45,6 +56,10 @@ export default function useWebsocket(
 
             ws.onopen = () => {
                 console.log('WebSocket connection opened.');
+
+                if (processingConfigRef.current) {
+                    ws.send(JSON.stringify(processingConfigRef.current))
+                }
             };
 
             ws.onmessage = (event) => {
@@ -128,5 +143,5 @@ export default function useWebsocket(
         };
     }, [chartSize, batchesPerSecond, dataStreaming, isClosingGracefully]);
 
-    return { renderData };
+    return { renderData, sendProcessingConfig };
 }

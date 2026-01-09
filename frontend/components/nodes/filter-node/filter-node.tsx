@@ -3,6 +3,8 @@ import React from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import ComboBox from './combo-box';
+import useWebsocket from '@/hooks/useWebsocket';
+import { ProcessingConfig } from '@/lib/processing';
 
 interface FilterNodeProps {
     id?: string;
@@ -12,13 +14,52 @@ interface FilterNodeProps {
 export default function FilterNode({ id }: FilterNodeProps) {
     const [selectedFilter, setSelectedFilter] = React.useState('lowpass');
     const [isConnected, setIsConnected] = React.useState(false);
+    const [cutoff, setCutoff] = React.useState(50);
     
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
     
     // Get data stream status from global context
     const { dataStreaming } = useGlobalContext();
-    
+
+    const { sendProcessingConfig } = useWebsocket(0, 0)
+
+    const buildConfig = (): ProcessingConfig => {
+        if (!isConnected) {
+            return {
+                apply_bandpass: false,
+                use_iir: false,
+                l_freq: null,
+                h_freq: null,
+                downsample_factor: null,
+                sfreq: 256,
+                n_channels: 4,
+            }
+        }
+      
+        if (selectedFilter === 'lowpass') {
+            return {
+                apply_bandpass: true,
+                use_iir: false,
+                l_freq: null,
+                h_freq: cutoff,
+                downsample_factor: null,
+                sfreq: 256,
+                n_channels: 4,
+            }
+        }
+      
+        return {
+          apply_bandpass: true,
+          use_iir: false,
+          l_freq: cutoff,
+          h_freq: null,
+          downsample_factor: null,
+          sfreq: 256,
+          n_channels: 4,
+        }
+    }      
+
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
         try {
@@ -79,6 +120,11 @@ export default function FilterNode({ id }: FilterNodeProps) {
         };
     }, [checkConnectionStatus]);
 
+    React.useEffect(() => {
+        if (!dataStreaming) return
+        sendProcessingConfig(buildConfig())
+    }, [selectedFilter, cutoff, isConnected, dataStreaming])  
+
     return (
         <div className="relative">
             {/* Input Handle - positioned to align with left circle */}
@@ -130,6 +176,24 @@ export default function FilterNode({ id }: FilterNodeProps) {
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
             />
+
+            {isConnected && (
+            <>
+                <input
+                type="range"
+                min={1}
+                max={100}
+                value={cutoff}
+                onChange={(e) => setCutoff(Number(e.target.value))}
+                />
+
+                <p className="text-xs text-muted-foreground">
+                {selectedFilter === 'lowpass'
+                    ? 'Frequencies below cutoff will pass through'
+                    : 'Frequencies above cutoff will pass through'}
+                </p>
+            </>
+            )}
         </div>
     );
 }
