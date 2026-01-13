@@ -12,6 +12,10 @@ const filters = [
         value: 'highpass',
         label: 'High Pass Filter',
     },
+    {
+        value: 'bandpass',
+        label: 'Bandpass Filter',
+    },
 ];
 
 interface ComboBoxProps {
@@ -30,6 +34,10 @@ export default function ComboBox({
     const [isExpanded, setIsExpanded] = React.useState(false);
     const titleRef = React.useRef<HTMLSpanElement>(null);
     const [sliderValue, setSliderValue] = React.useState([75]);
+    const [cutoff, setCutoff] = React.useState([75]);
+
+    const [lowCutoff, setLowCutoff] = React.useState([25]);
+    const [highCutoff, setHighCutoff] = React.useState([75]);
 
     const toggleExpanded = () => {
         setIsExpanded(!isExpanded);
@@ -53,7 +61,6 @@ export default function ComboBox({
             style={{
                 width: 'fit-content',
                 minWidth: '396px', // changed width to 396px, same width as source-node
-
             }}
         >
             {/* Main button/header */}
@@ -69,8 +76,8 @@ export default function ComboBox({
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
-                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                    : 'border-gray-300' // Disconnected: gray border
+                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                  : 'border-gray-300' // Disconnected: gray border
                         )}
                     >
                         {/* No filled circle - always stay empty */}
@@ -81,7 +88,8 @@ export default function ComboBox({
                         className={cn(
                             'absolute left-16 w-3 h-3 rounded-full',
                             isConnected && isDataStreamOn
-                                ? 'bg-[#509693]' : 'bg-[#D3D3D3]'
+                                ? 'bg-[#509693]'
+                                : 'bg-[#D3D3D3]'
                         )}
                     />
 
@@ -98,8 +106,11 @@ export default function ComboBox({
                 <div className="flex items-center space-x-3">
                     {/* Toggle arrow */}
                     <div className="absolute right-[58px] transition-transform duration-300 ease-in-out">
-                        <ChevronUp className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${isExpanded ? 'rotate-0' : 'rotate-180'
-                            }`} />
+                        <ChevronUp
+                            className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${
+                                isExpanded ? 'rotate-0' : 'rotate-180'
+                            }`}
+                        />
                     </div>
 
                     {/* Right connection circle - changes based on connection and data stream */}
@@ -109,11 +120,11 @@ export default function ComboBox({
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
-                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                    : 'border-gray-300' // Disconnected: gray border
+                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                  : 'border-gray-300' // Disconnected: gray border
                         )}
                     >
-                        {/* No solid circle inside - always stay empty */}
+                        {/* No solid circle inside */}
                     </div>
                 </div>
             </button>
@@ -122,26 +133,98 @@ export default function ComboBox({
             <div
                 className="space-y-1 pb-3 pt-1"
                 style={{
-                    paddingLeft: '60px',  // aligns with the title start
+                    paddingLeft: '60px', // aligns with the title start
                     paddingRight: '60px',
                 }}
             >
-                <Slider
-                    value={sliderValue}
-                    onValueChange={setSliderValue}
-                    max={100}
-                    min={0}
-                    step={1}
-                    className="w-full"
-                />
-                <div className="flex justify-between items-center mb-1">
-                    {/* optional 0 / 100 labels, adjust if you don't want them */}
-                    <span className="text-xs text-gray-500">0</span>
+                {value != 'bandpass' && (
+                    <Slider
+                        value={sliderValue}
+                        onValueChange={setSliderValue}
+                        max={100}
+                        min={0}
+                        step={1}
+                        className="w-full"
+                    />
+                )}
 
+                {/* Single slider for lowpass and highpass */}
+                {value == 'bandpass' && (
+                    <div>
+                        {/* Low cutoff */}
+                        <div>
+                            
+
+                            <Slider
+                                value={lowCutoff}
+                                onValueChange={(val) => {
+                                    // prevent low from going above high
+                                    const next =
+                                        val[0] >= highCutoff[0]
+                                            ? highCutoff[0] - 1
+                                            : val[0];
+                                    setLowCutoff([next]);
+                                }}
+                                min={0}
+                                max={100}
+                                step={1}
+                                className="w-full"
+                            />
+                        </div>
+
+                        <div className="flex justify-between items-center mb-1"> 
+                        </div> 
+                        {/* Makeshift spacing */}
+
+                        
+
+                        <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs text-gray-500">0</span>
+                            <span className="text-xs text-gray-500">Low Cutoff</span>
+                            <span className="text-xs text-gray-500">100</span>
+                        </div>
+
+                        <div className="flex justify-between items-center"> 
+                        </div>
+                        <div className="flex justify-between items-center mb-1">
+                        </div>
+                        <div className="flex justify-between items-center mb-1">
+                        </div>
+                        <div className="flex justify-between items-center mb-1">
+                        </div>
+
+                        {/* More makeshift spacing */}
+
+
+
+                        {/* High cutoff */}
+                        <div>
+                        
+
+                            <Slider
+                                value={highCutoff}
+                                onValueChange={(val) => {
+                                    // prevent high from going below low
+                                    const next =
+                                        val[0] <= lowCutoff[0]
+                                            ? lowCutoff[0] + 1
+                                            : val[0];
+                                    setHighCutoff([next]);
+                                }}
+                                min={0}
+                                max={100}
+                                step={1}
+                                className="w-full"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs text-gray-500">0</span>
+                    <span className="text-xs text-gray-500">High Cutoff</span>
                     <span className="text-xs text-gray-500">100</span>
                 </div>
-
-
             </div>
 
             {/* Expandable options section */}
