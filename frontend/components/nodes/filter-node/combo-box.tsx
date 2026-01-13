@@ -176,11 +176,11 @@ export default function ComboBox({
                                 min={0}
                                 max={100}
                                 step={1}
-                                className="w-full"
+                                className="w-full mb-1"
                             />
                         </div>
 
-                        <div className="flex justify-between items-center mb-4">
+                        <div className="flex justify-between items-center mb-5">
                             <span className="text-xs text-gray-500">0</span>
                             <span className="text-xs text-gray-500">Low Cutoff</span>
                             <span className="text-xs text-gray-500">100</span>
@@ -201,7 +201,7 @@ export default function ComboBox({
                                 min={0}
                                 max={100}
                                 step={1}
-                                className="w-full"
+                                className="w-full mb-1"
                             />
                         </div>
 
