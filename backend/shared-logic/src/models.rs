@@ -53,3 +53,10 @@ pub struct FrontendState {
     pub data: Value, 
     pub updated_at: chrono::DateTime<Utc>,
 }
+
+#[derive(Debug, Serialize)]
+pub struct PublicUser {
+    pub id: i32,
+    pub username: String,
+    pub email: String,
+}

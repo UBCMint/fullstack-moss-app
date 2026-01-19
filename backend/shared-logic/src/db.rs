@@ -7,7 +7,7 @@ use tokio::time::{self, Duration};
 use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
-use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
+use super::models::{User, PublicUser, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
 use crate::{lsl::EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
@@ -79,9 +79,9 @@ pub async fn add_user(client: &DbClient, new_user: NewUser, password_hash: Strin
     Ok(user)
 }
 
-pub async fn get_users(client: &DbClient) -> Result<Vec<User>, Error> {
+pub async fn get_users(client: &DbClient) -> Result<Vec<PublicUser>, Error> {
     info!("Retrieving users...");
-    let users = sqlx::query_as!(User, "SELECT id, username, email, password_hash FROM users")
+    let users = sqlx::query_as!(PublicUser, "SELECT id, username, email FROM users")
         .fetch_all(&**client)
         .await?;
     info!("Retrieved {} users.", users.len());
@@ -135,7 +135,7 @@ pub async fn get_testtime_series_data(client: &DbClient) -> Result<Vec<TimeSerie
 }
 
 /// Insert a batch of records into eeg_data.
-pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Result<(), sqlx::Error> {
+pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Result<(), Error> {
 
     let n_samples = packet.timestamps.len();
 
@@ -196,7 +196,7 @@ pub async fn update_user(
                 .hash_password(password.as_bytes(), &salt)
                 .map_err(|e| {
                     log::error!("Password hashing failed: {}", e);
-                    Error::RowNotFound // fallback error
+                    Error::Protocol(format!("Password hashing failed: {}", e))
                 })?
                 .to_string(),
         )
@@ -353,7 +353,7 @@ pub async fn delete_session(client: &DbClient, session_id: i32) -> Result<(), Er
         .execute(&**client)
         .await?;
 
-    if (res.rows_affected() == 0) {
+    if res.rows_affected() == 0 {
         info!("No rows deleted, session id {} not found", session_id);
         return Err(Error::RowNotFound);
     } else {
@@ -368,7 +368,7 @@ pub async fn delete_session(client: &DbClient, session_id: i32) -> Result<(), Er
 /// update it with the new data.
 ///
 /// Returns the created FrontendState on success.
-pub async fn upsert_frontend_state(client: &DbClient, session_id: i32, data: serde_json::Value) -> Result<FrontendState, Error> {
+pub async fn upsert_frontend_state(client: &DbClient, session_id: i32, data: Value) -> Result<FrontendState, Error> {
     info!("Creating frontend state for session id {}", session_id);
 
     let state = sqlx::query_as!(

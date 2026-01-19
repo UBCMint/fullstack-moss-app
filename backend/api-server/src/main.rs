@@ -21,7 +21,7 @@ use rand_core::OsRng;
 
 // shared logic library
 use shared_logic::db::{initialize_connection, DbClient};
-use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState};
+use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState, PublicUser};
 
 // Argon2 imports
 use argon2::{
@@ -43,18 +43,10 @@ pub struct LoginRequest {
     pub password: String,
 }
 
-#[derive(Debug, Serialize)]
-struct PublicUser {
-    id: i32,
-    username: String,
-    email: String,
-}
-
 #[derive(Debug, Deserialize)]
 struct DeleteUserRequest {
     id: i32,
 }
-
 
 // creates new user when POST /users is called
 async fn create_user(
@@ -142,15 +134,10 @@ async fn get_all_users(
         (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to retrieve users: {}", e))
     })?;
 
-    let public_users: Vec<PublicUser> = users.into_iter().map(|u| PublicUser {
-        id: u.id,
-        username: u.username,
-        email: u.email,
-    }).collect();
-
-    Ok(Json(public_users))
+    Ok(Json(users))
 }
 
+// Handler for DELETE /users
 async fn delete_user(
     State(app_state): State<AppState>,
     Json(payload): Json<DeleteUserRequest>,
