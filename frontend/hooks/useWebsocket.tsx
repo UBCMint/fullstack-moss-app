@@ -14,6 +14,18 @@ export default function useWebsocket(
 
     const intervalTime = 1000 / batchesPerSecond;
 
+    const normalizeBatch = (batch: any) => {
+        const { time, signals } = batch;
+        
+        return [{
+            time,
+            signal1: signals[0],
+            signal2: signals[1],
+            signal3: signals[2],
+            signal4: signals[3],
+        }];
+    };
+
     useEffect(() => {
         console.log('data streaming:', dataStreaming);
 
@@ -61,7 +73,8 @@ export default function useWebsocket(
                 } else {
                     try {
                         const parsedData = JSON.parse(message);
-                        bufferRef.current.push(parsedData);
+                        const normalizedPoints = normalizeBatch(parsedData);
+                        bufferRef.current.push(...normalizedPoints);
                     } catch (e) {
                         console.error("Failed to parse non-confirmation message as JSON:", e, message);
                     }

@@ -18,7 +18,6 @@ interface SignalGraphViewProps {
         signal2: number;
         signal3: number;
         signal4: number;
-        signal5: number;
     }[];
 }
 
@@ -31,7 +30,6 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
         {key: 'signal2', colour: '#00ff00', name: 'Signal 2'},
         {key: 'signal3', colour: '#FF00D0', name: 'Signal 3'},
         {key: 'signal4', colour: '#FFFF00', name: 'Signal 4'},
-        {key: 'signal5', colour: '#ff0000', name: 'Signal 5'},
     ];
 
     return (

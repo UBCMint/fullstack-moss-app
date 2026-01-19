@@ -14,7 +14,6 @@ interface SignalData {
     signal2: number;
     signal3: number;
     signal4: number;
-    signal5: number;
 }
 
 interface DataTableProps {
@@ -33,7 +32,6 @@ const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
                     signal2: 0,
                     signal3: 0,
                     signal4: 0,
-                    signal5: 0,
                 }
             );
         });
@@ -57,9 +55,6 @@ const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
                         </TableHead>
                         <TableHead className="text-center font-medium text-[#0D585F]">
                             Signal 4
-                        </TableHead>
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Signal 5
                         </TableHead>
                     </TableRow>
                 </TableHeader>
@@ -85,9 +80,6 @@ const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
                             </TableCell>
                             <TableCell className="text-center text-[#0D585F]">
                                 {row.signal4}
-                            </TableCell>
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.signal5}
                             </TableCell>
                         </TableRow>
                     ))}
