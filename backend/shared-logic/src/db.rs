@@ -7,10 +7,15 @@ use tokio::time::{self, Duration};
 use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
-use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
+use super::models::{User, PublicUser, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
 use crate::{lsl::EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
+use argon2::password_hash::SaltString;
+use rand_core::OsRng;
+use argon2::{Argon2, password_hash::{PasswordHasher, PasswordHash, PasswordVerifier}};
+
+
 
 pub static DB_POOL: OnceCell<Arc<PgPool>> = OnceCell::new();
 
@@ -59,13 +64,14 @@ pub fn get_db_client() -> DbClient {
     DB_POOL.get().expect("DB not initialized").clone()
 }
 
-pub async fn add_user(client: &DbClient, new_user: NewUser) -> Result<User, Error> {
+pub async fn add_user(client: &DbClient, new_user: NewUser, password_hash: String) -> Result<User, Error> {
     info!("Adding user: {} ({})", new_user.username, new_user.email);
     let user = sqlx::query_as!(
         User,
-        "INSERT INTO users (username, email) VALUES ($1, $2) RETURNING id, username, email",
+        "INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, password_hash",
         new_user.username,
         new_user.email,
+        password_hash
     )
     .fetch_one(&**client)
     .await?;
@@ -73,14 +79,25 @@ pub async fn add_user(client: &DbClient, new_user: NewUser) -> Result<User, Erro
     Ok(user)
 }
 
-pub async fn get_users(client: &DbClient) -> Result<Vec<User>, Error> {
+pub async fn get_users(client: &DbClient) -> Result<Vec<PublicUser>, Error> {
     info!("Retrieving users...");
-    let users = sqlx::query_as!(User, "SELECT id, username, email FROM users")
+    let users = sqlx::query_as!(PublicUser, "SELECT id, username, email FROM users")
         .fetch_all(&**client)
         .await?;
     info!("Retrieved {} users.", users.len());
     Ok(users)
 }
+
+pub async fn get_user_by_email(client: &DbClient, email: &str) -> Result<User, Error> {
+    sqlx::query_as!(
+        User,
+        "SELECT id, username, email, password_hash FROM users WHERE email = $1",
+        email
+    )
+    .fetch_one(&**client)
+    .await
+}
+
 
 /// Insert a new record into testtime_series using chrono's DateTime<Utc>.
 pub async fn add_testtime_series_data(
@@ -118,7 +135,7 @@ pub async fn get_testtime_series_data(client: &DbClient) -> Result<Vec<TimeSerie
 }
 
 /// Insert a batch of records into eeg_data.
-pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Result<(), sqlx::Error> {
+pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Result<(), Error> {
 
     let n_samples = packet.timestamps.len();
 
@@ -163,73 +180,114 @@ pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Resu
 /// Update a user by id.
 ///
 /// Returns the updated User on success.
-pub async fn update_user(client: &DbClient, user_id: i32, updated: UpdateUser) -> Result<User, Error> {
-    info!("Updating user id {}", user_id);
+pub async fn update_user(
+    client: &DbClient,
+    user_id: i32,
+    updated: UpdateUser,
+) -> Result<User, Error> {
+    log::info!("Updating user id {}", user_id);
 
-    
-    // see what fields are being updated
-    if let Some(ref username) = updated.username {
-        info!("Updating username: {}", username);
-    }
-    
-    if let Some(ref email) = updated.email {
-        info!("Updating email: {}", email);
-    }
+    // Hash password if provided
+    let password_hash = if let Some(password) = &updated.password {
+        let salt = SaltString::generate(&mut OsRng);
+        let argon2 = Argon2::default();
+        Some(
+            argon2
+                .hash_password(password.as_bytes(), &salt)
+                .map_err(|e| {
+                    log::error!("Password hashing failed: {}", e);
+                    Error::Protocol(format!("Password hashing failed: {}", e))
+                })?
+                .to_string(),
+        )
+    } else {
+        None
+    };
 
-    // sql query to update user
-    let user = match (updated.username, updated.email) {
-        (Some(username), Some(email)) => {
+    // Build SQL query dynamically based on which fields are Some
+    let user = match (updated.username, updated.email, password_hash) {
+        (Some(username), Some(email), Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email",
+                "UPDATE users SET username = $1, email = $2, password_hash = $3 WHERE id = $4 RETURNING id, username, email, password_hash",
+                username,
+                email,
+                password_hash,
+                user_id
+            )
+            .fetch_one(&**client)
+            .await?
+        }
+        (Some(username), Some(email), None) => {
+            sqlx::query_as!(
+                User,
+                "UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
                 username,
                 email,
                 user_id
             )
-            .fetch_one(&**client) 
+            .fetch_one(&**client)
             .await?
         }
-        (Some(username), None) => {
+        (Some(username), None, Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email",
+                "UPDATE users SET username = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                username,
+                password_hash,
+                user_id
+            )
+            .fetch_one(&**client)
+            .await?
+        }
+        (None, Some(email), Some(password_hash)) => {
+            sqlx::query_as!(
+                User,
+                "UPDATE users SET email = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                email,
+                password_hash,
+                user_id
+            )
+            .fetch_one(&**client)
+            .await?
+        }
+        (Some(username), None, None) => {
+            sqlx::query_as!(
+                User,
+                "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
                 username,
                 user_id
             )
             .fetch_one(&**client)
             .await?
         }
-        (None, Some(email)) => {
+        (None, Some(email), None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email",
+                "UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
                 email,
                 user_id
             )
             .fetch_one(&**client)
             .await?
         }
-        (None, None) => {
-            info!("No fields to update for user id {}, user not updated", user_id); // unsure of what behavior to do in this case
-            return Err(Error::RowNotFound); // returning error for now, should this be allowed/be a different error?
+        (None, None, Some(password_hash)) => {
+            sqlx::query_as!(
+                User,
+                "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                password_hash,
+                user_id
+            )
+            .fetch_one(&**client)
+            .await?
+        }
+        (None, None, None) => {
+            log::info!("No fields to update for user id {}, user not updated", user_id);
+            return Err(Error::RowNotFound);
         }
     };
 
-    /// let user = sqlx::query_as!(
-    ///     User,
-    ///     r#" UPDATE users SET
-    ///         username = COALESCE($1, username),
-    //        email = COALESCE($2, email)
-    //       WHERE id = $3
-    //      RETURNING id, username, email "#,
-    ///     updated.username,
-    ///     updated.email,
-    ///     user_id
-    /// )
-    /// .fetch_one(&**client)
-    /// .await?;
-
-    info!("=User updated: {:?}", user);
+    log::info!("User updated: {:?}", user);
     Ok(user)
 }
 
@@ -295,7 +353,7 @@ pub async fn delete_session(client: &DbClient, session_id: i32) -> Result<(), Er
         .execute(&**client)
         .await?;
 
-    if (res.rows_affected() == 0) {
+    if res.rows_affected() == 0 {
         info!("No rows deleted, session id {} not found", session_id);
         return Err(Error::RowNotFound);
     } else {
@@ -310,7 +368,7 @@ pub async fn delete_session(client: &DbClient, session_id: i32) -> Result<(), Er
 /// update it with the new data.
 ///
 /// Returns the created FrontendState on success.
-pub async fn upsert_frontend_state(client: &DbClient, session_id: i32, data: serde_json::Value) -> Result<FrontendState, Error> {
+pub async fn upsert_frontend_state(client: &DbClient, session_id: i32, data: Value) -> Result<FrontendState, Error> {
     info!("Creating frontend state for session id {}", session_id);
 
     let state = sqlx::query_as!(
