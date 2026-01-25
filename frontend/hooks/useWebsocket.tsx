@@ -15,15 +15,13 @@ export default function useWebsocket(
     const intervalTime = 1000 / batchesPerSecond;
 
     const normalizeBatch = (batch: any) => {
-        const { time, signals } = batch;
-        
-        return [{
+        return batch.timestamps.map((time: number, i: number) => ({
             time,
-            signal1: signals[0],
-            signal2: signals[1],
-            signal3: signals[2],
-            signal4: signals[3],
-        }];
+            signal1: batch.signals[0][i],
+            signal2: batch.signals[1][i],
+            signal3: batch.signals[2][i],
+            signal4: batch.signals[3][i],
+        }));
     };
 
     useEffect(() => {
