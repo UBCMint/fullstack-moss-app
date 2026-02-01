@@ -35,25 +35,39 @@ jobs:
             // CONFIGURATION
             // -------------------
             const rules = {
-              frontend: { path: "frontend/", label: "frontend", lead: "MaddieWright", team: [] },
-              backend:  { path: "backend/",  label: "backend",  lead: "HeisSteve", team: [] },
-              infra:    { path: ".github/",  label: "infra",    lead: ["HeisSteve","MaddieWright" ], team: [] }
+              frontend: { path: "frontend/", label: "frontend", lead: ["MaddieWright"], team: [] },
+              backend:  { path: "backend/",  label: "backend",  lead: ["HeisSteve"], team: [] },
+              infra:    { path: ".github/",  label: "infra",    lead: ["HeisSteve", "MaddieWright" ], team: [] }
             };
 
             const labelsToAdd = new Set();
-            const reviewersToAdd = new Set();
-            const leadsToCheck = new Set();
-            const teamToCheck = new Set();
+            const reviewersToAdd = new Set(); 
 
+            const leadsToCheck = new Set();  
+            const teamToCheck = new Set();    
+
+            
             // Determine applicable rules
             for (const file of changedFiles) {
               for (const rule of Object.values(rules)) {
-                if (file.startsWith(rule.path)) {
-                  labelsToAdd.add(rule.label);
-                  rule.team.forEach(u => reviewersToAdd.add(u));
-                  leadsToCheck.add(rule.lead);
-                  rule.team.forEach(u => teamToCheck.add(u));
-                }
+                if (!file.startsWith(rule.path)) continue;
+
+                labelsToAdd.add(rule.label);
+
+                // Normalize leads to an array
+                const leads = Array.isArray(rule.lead) ? rule.lead : [rule.lead];
+
+                // Add leads for approval & reviewers
+                leads.forEach(u => {
+                  leadsToCheck.add(u);      
+                  reviewersToAdd.add(u);    
+                });
+
+                // Add team members for approval & reviewers
+                rule.team.forEach(u => {
+                  teamToCheck.add(u);       
+                  reviewersToAdd.add(u);    
+                });
               }
             }
 
