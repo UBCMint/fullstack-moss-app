@@ -11,6 +11,7 @@ on:
 
 jobs:
   pr-automation:
+    name: "PR Check"
     runs-on: ubuntu-latest
 
     steps:
