@@ -1,5 +1,10 @@
 name: PR workflow
 
+permissions:
+  contents: read          # for git operations
+  pull-requests: write    # to request reviewers
+  issues: write           # to create/update PR comments
+
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review]  # include ready_for_review for draft PRs
