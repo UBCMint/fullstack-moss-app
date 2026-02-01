@@ -1,0 +1,112 @@
+name: PR workflow
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  pr-automation:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get changed files
+        id: files
+        uses: tj-actions/changed-files@v44
+
+      - name: Assign, label, and request reviewers
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.pull_request.number;
+            const author = context.payload.pull_request.user.login;
+
+            const changedFiles = "${{ steps.files.outputs.all_changed_files }}".split(" ");
+
+            // CONFIGURATION
+            const rules = {
+              frontend: {
+                path: "frontend/",
+                label: "frontend",
+                reviewers: ["MaddieWright"]
+              },
+              backend: {
+                path: "backend/",
+                label: "backend",
+                reviewers: ["HeisSteve"]
+              },
+               infra: {
+                path: ".github/",
+                label: "infra",
+                reviewers: ["HeisSteve", "MaddieWright"]
+             }
+            };
+
+            const labelsToAdd = new Set();
+            const reviewersToAdd = new Set();
+
+            // Determine applicable rules
+            for (const file of changedFiles) {
+              for (const rule of Object.values(rules)) {
+                if (file.startsWith(rule.path)) {
+                  labelsToAdd.add(rule.label);
+                  rule.reviewers.forEach(r => reviewersToAdd.add(r));
+                }
+              }
+            }
+
+            // Assign PR author
+            await github.rest.issues.addAssignees({
+              owner,
+              repo,
+              issue_number: prNumber,
+              assignees: [author]
+            });
+
+            // Get existing labels
+            const existingLabels = await github.rest.issues.listLabelsOnIssue({
+              owner,
+              repo,
+              issue_number: prNumber
+            });
+
+            const managedLabels = Object.values(rules).map(r => r.label);
+            const existingManagedLabels = existingLabels.data
+              .map(l => l.name)
+              .filter(l => managedLabels.includes(l));
+
+            // Remove labels that no longer apply
+            for (const label of existingManagedLabels) {
+              if (!labelsToAdd.has(label)) {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  name: label
+                });
+              }
+            }
+
+            // Add labels
+            if (labelsToAdd.size > 0) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: prNumber,
+                labels: [...labelsToAdd]
+              });
+            }
+
+            // Remove PR author from reviewers if present
+            reviewersToAdd.delete(author);
+
+            // Request reviewers
+            if (reviewersToAdd.size > 0) {
+              await github.rest.pulls.requestReviewers({
+                owner,
+                repo,
+                pull_number: prNumber,
+                reviewers: [...reviewersToAdd]
+              });
+            }
