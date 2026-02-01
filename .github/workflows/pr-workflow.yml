@@ -157,14 +157,13 @@ jobs:
             // Determine if approval rules are satisfied
             const approvalSatisfied = leadApproved || teamApprovals >= 2;
 
-            // Prepare the comment body with an identifier
+            
+            // Prepare the comment body with a timestamp and identifier
             const now = new Date().toISOString();
             const commentBody = approvalSatisfied
-              ? `✅ PR approval conditions satisfied (1 lead OR 2 team members approved). [${now}]`
-              : `❌ PR approval conditions NOT satisfied. At least 1 team lead OR 2 team members must approve before merging. [${now}]`;
+              ? `✅ PR approval conditions satisfied (1 lead OR 2 team members approved).\n[Last checked: ${now}] <!-- PR_APPROVAL_CHECK -->`
+              : `❌ PR approval conditions NOT satisfied. At least 1 team lead OR 2 team members must approve before merging.\n[Last checked: ${now}] <!-- PR_APPROVAL_CHECK -->`;
 
-
-            // Find existing comment from the bot with our identifier
             const { data: comments } = await github.rest.issues.listComments({
               owner,
               repo,
