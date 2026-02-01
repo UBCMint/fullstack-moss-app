@@ -114,8 +114,9 @@ jobs:
             }
 
             // Remove PR author from reviewers
-            ![...leadsToCheck].includes(author) && reviewersToAdd.delete(author);
-
+            if (!leadsToCheck.has(author)) {
+              reviewersToAdd.delete(author);
+            }
 
             // Request reviewers
             if (reviewersToAdd.size > 0) {
