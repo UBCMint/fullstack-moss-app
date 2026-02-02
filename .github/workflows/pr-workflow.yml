@@ -1,0 +1,202 @@
+name: PR workflow
+
+permissions:
+  contents: read          # for git operations
+  pull-requests: write    # to request reviewers
+  issues: write           # to create/update PR comments
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]  # include ready_for_review for draft PRs
+
+jobs:
+  pr-automation:
+    name: "PR Check"
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Get changed files
+      - name: Get changed files
+        id: files
+        uses: tj-actions/changed-files@v44
+
+      # Step 2: Assign, label, request reviewers, and enforce approvals
+      - name: Assign, label, request reviewers, enforce approvals
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.pull_request.number;
+            const author = context.payload.pull_request.user.login;
+
+            if (context.payload.pull_request.draft) {
+              console.log("PR is a draft — skipping workflow steps.");
+              return;
+            }
+
+            const changedFiles = "${{ steps.files.outputs.all_changed_files }}".split(" ").filter(f => f);
+
+            // -------------------
+            // CONFIGURATION
+            // -------------------
+            const rules = {
+              frontend: { path: "frontend/", label: "frontend", lead: ["MaddieWright"], team: [] },
+              backend:  { path: "backend/",  label: "backend",  lead: ["HeisSteve"], team: [] },
+              infra:    { path: ".github/",  label: "infra",    lead: ["HeisSteve", "MaddieWright" ], team: [] }
+            };
+
+            const labelsToAdd = new Set();
+            const reviewersToAdd = new Set(); 
+
+            const leadsToCheck = new Set();  
+            const teamToCheck = new Set();    
+
+            
+            // Determine applicable rules
+            for (const file of changedFiles) {
+              for (const rule of Object.values(rules)) {
+                if (!file.startsWith(rule.path)) continue;
+
+                labelsToAdd.add(rule.label);
+
+                // Normalize leads to an array
+                const leads = Array.isArray(rule.lead) ? rule.lead : [rule.lead];
+
+                // Add leads for approval & reviewers
+                leads.forEach(u => {
+                  leadsToCheck.add(u);      
+                  reviewersToAdd.add(u);    
+                });
+
+                // Add team members for approval & reviewers
+                rule.team.forEach(u => {
+                  teamToCheck.add(u);       
+                  reviewersToAdd.add(u);    
+                });
+              }
+            }
+
+            // Assign PR author
+            await github.rest.issues.addAssignees({
+              owner,
+              repo,
+              issue_number: prNumber,
+              assignees: [author]
+            });
+
+            // Get existing labels
+            const existingLabels = await github.rest.issues.listLabelsOnIssue({
+              owner,
+              repo,
+              issue_number: prNumber
+            });
+
+            const managedLabels = Object.values(rules).map(r => r.label);
+            const existingManagedLabels = existingLabels.data
+              .map(l => l.name)
+              .filter(l => managedLabels.includes(l));
+
+            // Remove labels that no longer apply
+            for (const label of existingManagedLabels) {
+              if (!labelsToAdd.has(label)) {
+                await github.rest.issues.removeLabel({
+                  owner,
+                  repo,
+                  issue_number: prNumber,
+                  name: label
+                });
+              }
+            }
+
+            // Add labels
+            if (labelsToAdd.size > 0) {
+              await github.rest.issues.addLabels({
+                owner,
+                repo,
+                issue_number: prNumber,
+                labels: [...labelsToAdd]
+              });
+            }
+
+            // Remove PR author from reviewers
+            if (!leadsToCheck.has(author)) {
+              reviewersToAdd.delete(author);
+            }
+
+            // Request reviewers
+            if (reviewersToAdd.size > 0) {
+              await github.rest.pulls.requestReviewers({
+                owner,
+                repo,
+                pull_number: prNumber,
+                reviewers: [...reviewersToAdd]
+              });
+            }
+
+        
+            // -------------------
+            // CUSTOM APPROVAL CHECK WITH SINGLE COMMENT
+            // -------------------
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner,
+              repo,
+              pull_number: prNumber
+            });
+
+            // Set of users who approved
+            const approvedUsers = new Set(
+              reviews
+                .filter(r => r.state === "APPROVED")
+                .map(r => r.user.login)
+            );
+
+            // Check if at least one lead approved (include author if they are a lead)
+            const leadApproved = [...leadsToCheck].some(u => approvedUsers.has(u));
+
+            // Count how many team members approved (exclude PR author)
+            let teamApprovals = 0;
+            for (const member of teamToCheck) {
+              if (approvedUsers.has(member) && member !== author) teamApprovals++;
+            }
+
+            // Determine if approval rules are satisfied
+            const approvalSatisfied = leadApproved || teamApprovals >= 2;
+
+            
+            // Prepare the comment body with a timestamp and identifier
+            const now = new Date().toISOString();
+            const commentBody = approvalSatisfied
+              ? `✅ PR approval conditions satisfied (1 lead OR 2 team members approved).\n[Last checked: ${now}] <!-- PR_APPROVAL_CHECK -->`
+              : `❌ PR approval conditions NOT satisfied. At least 1 team lead OR 2 team members must approve before merging.\n[Last checked: ${now}] <!-- PR_APPROVAL_CHECK -->`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: prNumber
+            });
+
+            const existingComment = comments.find(c => c.body.includes("<!-- PR_APPROVAL_CHECK -->"));
+
+            if (existingComment) {
+              // Update the existing comment
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body: commentBody
+              });
+            } else {
+              // Create a new comment
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: commentBody
+              });
+            }
+
+            // Fail workflow if approvals are not satisfied
+            if (!approvalSatisfied) {
+              process.exit(1);
+            }

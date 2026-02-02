@@ -42,23 +42,23 @@ const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
         <div className="w-full overflow-hidden">
             <Table>
                 <TableHeader>
-                    <TableRow className="bg-sky-50">
-                        <TableHead className="text-center font-medium">
+                    <TableRow className="bg-[#ABD4C7] border-[#2C7778]">
+                        <TableHead className="text-center font-medium text-[#0D585F]">
                             Time
                         </TableHead>
-                        <TableHead className="text-center font-medium">
+                        <TableHead className="text-center font-medium text-[#0D585F]">
                             Signal 1
                         </TableHead>
-                        <TableHead className="text-center font-medium">
+                        <TableHead className="text-center font-medium text-[#0D585F]">
                             Signal 2
                         </TableHead>
-                        <TableHead className="text-center font-medium">
+                        <TableHead className="text-center font-medium text-[#0D585F]">
                             Signal 3
                         </TableHead>
-                        <TableHead className="text-center font-medium">
+                        <TableHead className="text-center font-medium text-[#0D585F]">
                             Signal 4
                         </TableHead>
-                        <TableHead className="text-center font-medium">
+                        <TableHead className="text-center font-medium text-[#0D585F]">
                             Signal 5
                         </TableHead>
                     </TableRow>
@@ -68,25 +68,25 @@ const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
                         <TableRow
                             key={index}
                             className={
-                                index % 2 === 0 ? 'bg-white' : 'bg-sky-50'
+                                index % 2 === 0 ? 'bg-white border-[#2C7778]' : 'bg-[#ABD4C7] border-[#2C7778]'
                             }
                         >
-                            <TableCell className="text-center">
+                            <TableCell className="text-center text-[#0D585F]">
                                 {row.time}
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center text-[#0D585F]">
                                 {row.signal1}
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center text-[#0D585F]">
                                 {row.signal2}
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center text-[#0D585F]">
                                 {row.signal3}
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center text-[#0D585F]">
                                 {row.signal4}
                             </TableCell>
-                            <TableCell className="text-center">
+                            <TableCell className="text-center text-[#0D585F]">
                                 {row.signal5}
                             </TableCell>
                         </TableRow>

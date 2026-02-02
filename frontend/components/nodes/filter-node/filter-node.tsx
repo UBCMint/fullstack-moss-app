@@ -145,7 +145,6 @@ export default function FilterNode({ id }: FilterNodeProps) {
                     cursor: 'crosshair',
                     pointerEvents: 'all'
                 }}
-                className="hover:border-blue-500"
             />
             
             {/* Output Handle - positioned to align with right circle */}
@@ -166,7 +165,6 @@ export default function FilterNode({ id }: FilterNodeProps) {
                     cursor: 'crosshair',
                     pointerEvents: 'all'
                 }}
-                className="hover:border-blue-500"
             />
 
             {/* Just the ComboBox without Card wrapper */}

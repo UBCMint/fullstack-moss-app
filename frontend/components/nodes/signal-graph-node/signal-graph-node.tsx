@@ -130,18 +130,17 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                 </div>
 
 
-                <DialogContent className="w-[80vw] h-[80vh] max-w-none max-h-none">
+                <DialogContent 
+                    className="items-center justify-center w-screen h-screen max-w-none max-h-none" 
+                    style={{ backgroundColor : '#EAF1F0'}}
+                >
                     <DialogHeader>
-                        <DialogTitle>Signal Graph</DialogTitle>
-                        <DialogDescription>
-                            Here is a preview of the signal graph.
-                        </DialogDescription>
+                        <DialogTitle></DialogTitle>
+                        <DialogDescription></DialogDescription>
                     </DialogHeader>
-                    <Card>
-                        <div className="w-full h-full">
-                            <SignalGraphView data={isConnected ? processedData : []} />
-                        </div>
-                    </Card>
+                    <div className="w-[85vw] h-[90vh]">
+                        <SignalGraphView data={isConnected ? processedData : []} />
+                    </div>
                 </DialogContent>
             </Card>
         </Dialog>
