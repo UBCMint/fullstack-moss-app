@@ -11,10 +11,21 @@ use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, Frontend
 use crate::{lsl::EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
+use serde::{Serialize, Deserialize};
 
 pub static DB_POOL: OnceCell<Arc<PgPool>> = OnceCell::new();
 
 pub type DbClient = Arc<PgPool>;
+
+// struct for EEG rows to convert to CSV
+#[derive(serde::Serialize)]
+struct EEGCsvRow {
+    time: String,
+    channel1: i32,
+    channel2: i32,
+    channel3: i32,
+    channel4: i32,
+}
 
 pub async fn initialize_connection() -> Result<DbClient, Error> {
     dotenv().ok();
@@ -118,7 +129,7 @@ pub async fn get_testtime_series_data(client: &DbClient) -> Result<Vec<TimeSerie
 }
 
 /// Insert a batch of records into eeg_data.
-pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Result<(), sqlx::Error> {
+pub async fn insert_batch_eeg(client: &DbClient, session_id: i32, packet: &EEGDataPacket) -> Result<(), sqlx::Error> {
 
     let n_samples = packet.timestamps.len();
 
@@ -130,7 +141,7 @@ pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Resu
 
     // Construct a single SQL insert statement
     let mut query_builder = sqlx::QueryBuilder::new(
-        "INSERT INTO eeg_data (time, channel1, channel2, channel3, channel4) "
+        "INSERT INTO eeg_data (session_id, time, channel1, channel2, channel3, channel4) "
     );
 
     // Iterate through all data in the packet, pairing timestamp to the signal, and insert them
@@ -138,6 +149,7 @@ pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Resu
     query_builder.push_values(
         (0..n_samples).map(|sample_idx| {
             (
+                session_id,
                 &packet.timestamps[sample_idx],
                 packet.signals[0][sample_idx],  // Channel 0
                 packet.signals[1][sample_idx],  // Channel 1
@@ -145,8 +157,9 @@ pub async fn insert_batch_eeg(client: &DbClient, packet: &EEGDataPacket) -> Resu
                 packet.signals[3][sample_idx],  // Channel 3
             )
         }),
-        |mut b, (timestamp, ch0, ch1, ch2, ch3)| {
-            b.push_bind(timestamp)
+        |mut b, (session_id, timestamp, ch0, ch1, ch2, ch3)| {
+            b.push_bind(session_id)
+                .push_bind(timestamp)
                 .push_bind(ch0)
                 .push_bind(ch1)
                 .push_bind(ch2)
@@ -346,4 +359,70 @@ pub async fn get_frontend_state(client: &DbClient, session_id: i32) -> Result<Op
     info!("Retrieved frontend state successfully: {:?}", state);
 
     return Ok(state.map(|s| s.data));
+}
+
+/// Export the EEG data for a given session ID and time range as a CSV string.
+/// 
+/// Returns the CSV data on success.
+pub async fn export_eeg_data_as_csv(client: &DbClient, session_id: i32, start_time: DateTime<Utc>, end_time: DateTime<Utc>, include_header: bool) -> Result<String, Error> {
+    info!("Exporting EEG data for session id {} from {} to {}", session_id, start_time, end_time);
+
+    // get the data from the database
+    let data = sqlx::query!(
+        "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data
+        WHERE session_id = $1 AND time >= $2 AND time <= $3
+        ORDER BY time ASC",
+        session_id,
+        start_time,
+        end_time
+    )
+    .fetch_all(&**client)
+    .await?;
+
+    // build the CSV using the csv crate
+
+    let mut writer = csv::WriterBuilder::new()
+        .has_headers(false)
+        .from_writer(vec![]);
+
+    // write the header based on include_header flag
+    if include_header {
+        writer.write_record(&["time", "channel1", "channel2", "channel3", "channel4"])
+            .map_err(|e| Error::Protocol(e.to_string()))?;
+    }
+
+    // now, iterate through the data and write each row
+    for row in data {
+        writer.serialize(EEGCsvRow {
+            time: row.time.to_rfc3339(),
+            channel1: row.channel1,
+            channel2: row.channel2,
+            channel3: row.channel3,
+            channel4: row.channel4,
+        })
+        .map_err(|e| Error::Protocol(e.to_string()))?;
+    }
+
+    let byte_stream = writer.into_inner()
+        .map_err(|e| Error::Protocol(e.to_string()))?;
+
+    // now, we convert the CSV data to a string and return it
+    let csv_data = String::from_utf8(byte_stream)
+        .map_err(|e| Error::Protocol(e.to_string()))?;
+
+    Ok(csv_data)
+}
+
+/// Helper function for eeg data to find the earliest timestamp for a given session
+/// 
+/// Returns the earliest timestamp on success.
+pub async fn get_earliest_eeg_timestamp(client: &DbClient, session_id: i32) -> Result<Option<DateTime<Utc>>, Error> {
+    let row = sqlx::query!(
+        "SELECT MIN(time) as earliest_time FROM eeg_data WHERE session_id = $1",
+        session_id
+    )
+    .fetch_one(&**client)
+    .await?;
+
+    Ok(row.earliest_time)
 }
