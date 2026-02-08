@@ -19,6 +19,9 @@ use pyo3::types::{PyList, PyModule, PyTuple};
 use pyo3::PyResult;
 use pyo3::{IntoPy, ToPyObject};
 use rand_core::OsRng;
+use chrono::{DateTime, Utc};
+use axum::http::{HeaderMap, HeaderValue, header};
+use axum::response::IntoResponse;
 
 // shared logic library
 use shared_logic::db::{initialize_connection, DbClient};
@@ -55,6 +58,21 @@ struct DeleteUserRequest {
     id: i32,
 }
 
+
+// define request struct for exporting EEG data
+#[derive(Deserialize)]
+struct ExportEEGRequest {
+    filename: String,
+    options: ExportOptions
+}
+
+#[derive(Deserialize)]
+struct ExportOptions {
+    format: String,
+    includeHeader: bool,
+    start_time: Option<DateTime<Utc>>,
+    end_time: Option<DateTime<Utc>>,
+}
 
 // creates new user when POST /users is called
 async fn create_user(
@@ -247,6 +265,73 @@ async fn get_frontend_state(
     }
 }
 
+// Handler for POST /api/sessions/{session_id}/eeg_data/export
+async fn export_eeg_data(
+    State(app_state): State<AppState>,
+    Path(session_id): Path<i32>,
+    Json(request): Json<ExportEEGRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    info!("Received request to export EEG data for session {}", session_id);
+
+    // right now the only export format supported is CSV, so we just check for that
+    if request.options.format.to_lowercase() != "csv" {
+        return Err((StatusCode::BAD_REQUEST, format!("Unsupported export format: {}", request.options.format)));
+    }
+
+    // check for time range, else use defaults
+    // for end time, we default to the current time
+    // for start time, we default to the earliest timestamp for the session
+    let end_time = match request.options.end_time {
+        Some(t) => t,
+        None => Utc::now(),
+    };
+
+    let start_time = match request.options.start_time {
+        Some(t) => t,
+        None => {
+            // we call the helper function in db.rs to get the earliest timestamp
+            match shared_logic::db::get_earliest_eeg_timestamp(&app_state.db_client, session_id).await {
+                Ok(Some(t)) => t,
+                Ok(None) => return Err((StatusCode::NOT_FOUND, format!("No EEG data found for session {}", session_id))),
+                Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get earliest EEG timestamp: {}", e))),
+            }
+        }
+    };
+
+    if start_time > end_time {
+        return Err((StatusCode::BAD_REQUEST, "start_time cannot be after end_time".to_string()));
+    }
+
+    let header_included = request.options.includeHeader;
+
+    // finally call the export function in db.rs
+    let return_csv = match shared_logic::db::export_eeg_data_as_csv(&app_state.db_client, session_id, start_time, end_time, header_included).await {
+        Ok(csv_data) => csv_data,
+        Err(e) => {
+            error!("Failed to export EEG data: {}", e);
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to export EEG data: {}", e)));
+        }
+    };
+
+    // small safety: avoid quotes breaking header
+    let filename = request.filename.replace('"', "");
+
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("text/csv; charset=utf-8"));
+
+    let content_disp = format!("attachment; filename=\"{}\"", filename);
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&content_disp).map_err(|e| {
+            (StatusCode::BAD_REQUEST, format!("Invalid filename for header: {}", e))
+        })?,
+    );
+
+    // return CSV directly as the body
+    Ok((headers, return_csv))
+        
+}
+
 
 // Handler for POST /api/sessions/{session_id}/time-label
 // Receives a batch of time labels from the frontend after a session ends and stores them in the DB.
@@ -278,9 +363,7 @@ async fn get_eeg_data(
 ) -> Result<Json<Vec<EegDataRow>>, (StatusCode, String)> {
     info!("Received request to get EEG data for session {} from {} to {}", session_id, params.start, params.end);
 
-    // Note: session_id is accepted for URL consistency but not used in the query —
-    // the eeg_data table has no session_id column, so we can only filter by time range.
-    match shared_logic::db::get_eeg_data_by_range(&app_state.db_client, params.start, params.end).await {
+    match shared_logic::db::get_eeg_data_by_range(&app_state.db_client, session_id, params.start, params.end).await {
         Ok(rows) => {
             info!("Retrieved {} EEG data rows", rows.len());
             Ok(Json(rows))
@@ -397,6 +480,7 @@ async fn main() {
 
         .route("/api/sessions/:session_id/time-label", post(store_time_labels))
         .route("/api/sessions/:session_id/eeg-data", get(get_eeg_data))
+        .route("/api/sessions/:session_id/eeg_data/export", post(export_eeg_data))
 
         // Share application state with all handlers
         .with_state(app_state);
