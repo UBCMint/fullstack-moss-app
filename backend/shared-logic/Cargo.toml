@@ -44,3 +44,6 @@ lsl = "0.1.1"
 # working with python 
 pyo3 = { version = "0.18.0", features = ["auto-initialize"] }
 numpy = "0.18"
+
+# CSV serialization/deserialization
+csv = "1.4"
