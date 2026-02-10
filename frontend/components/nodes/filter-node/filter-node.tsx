@@ -14,9 +14,8 @@ interface FilterNodeProps {
 export default function FilterNode({ id }: FilterNodeProps) {
     const [selectedFilter, setSelectedFilter] = React.useState('lowpass');
     const [isConnected, setIsConnected] = React.useState(false);
-    const [frequency, setFrequency] = React.useState(75);
-
-    const [cutoff, setCutoff] = React.useState(50);
+    const [lowCutoff, setLowCutoff] = React.useState(1)
+    const [highCutoff, setHighCutoff] = React.useState(50)
     
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
@@ -28,39 +27,55 @@ export default function FilterNode({ id }: FilterNodeProps) {
 
     const buildConfig = (): ProcessingConfig => {
         if (!isConnected) {
-            return {
-                apply_bandpass: false,
-                use_iir: false,
-                l_freq: null,
-                h_freq: null,
-                downsample_factor: null,
-                sfreq: 256,
-                n_channels: 4,
-            }
+          return {
+            apply_bandpass: false,
+            use_iir: false,
+            l_freq: null,
+            h_freq: null,
+            downsample_factor: null,
+            sfreq: 256,
+            n_channels: 4,
+          }
         }
       
-        if (selectedFilter === 'lowpass') {
+        switch (selectedFilter) {
+          case 'lowpass':
             return {
-                apply_bandpass: true,
-                use_iir: false,
-                l_freq: null,
-                h_freq: cutoff,
-                downsample_factor: null,
-                sfreq: 256,
-                n_channels: 4,
+              apply_bandpass: true,
+              use_iir: false,
+              l_freq: null,
+              h_freq: highCutoff,
+              downsample_factor: null,
+              sfreq: 256,
+              n_channels: 4,
             }
-        }
       
-        return {
-          apply_bandpass: true,
-          use_iir: false,
-          l_freq: cutoff,
-          h_freq: null,
-          downsample_factor: null,
-          sfreq: 256,
-          n_channels: 4,
+          case 'highpass':
+            return {
+              apply_bandpass: true,
+              use_iir: false,
+              l_freq: lowCutoff,
+              h_freq: null,
+              downsample_factor: null,
+              sfreq: 256,
+              n_channels: 4,
+            }
+      
+          case 'bandpass':
+            return {
+              apply_bandpass: true,
+              use_iir: false,
+              l_freq: lowCutoff,
+              h_freq: highCutoff,
+              downsample_factor: null,
+              sfreq: 256,
+              n_channels: 4,
+            }
+
+            default:
+                throw new Error(`Unhandled filter type: ${selectedFilter}`)
         }
-    }      
+      }       
 
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
@@ -125,7 +140,7 @@ export default function FilterNode({ id }: FilterNodeProps) {
     React.useEffect(() => {
         if (!dataStreaming) return
         sendProcessingConfig(buildConfig())
-    }, [selectedFilter, cutoff, isConnected, dataStreaming])  
+    }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming])  
 
     return (
         <div className="relative">
@@ -173,27 +188,13 @@ export default function FilterNode({ id }: FilterNodeProps) {
             <ComboBox 
                 value={selectedFilter}
                 onValueChange={setSelectedFilter}
+                lowCutoff={lowCutoff}
+                highCutoff={highCutoff}
+                setLowCutoff={setLowCutoff}
+                setHighCutoff={setHighCutoff}
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
             />
-
-            {isConnected && (
-            <>
-                <input
-                type="range"
-                min={1}
-                max={100}
-                value={cutoff}
-                onChange={(e) => setCutoff(Number(e.target.value))}
-                />
-
-                <p className="text-xs text-muted-foreground">
-                {selectedFilter === 'lowpass'
-                    ? 'Frequencies below cutoff will pass through'
-                    : 'Frequencies above cutoff will pass through'}
-                </p>
-            </>
-            )}
         </div>
     );
 }

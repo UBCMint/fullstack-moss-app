@@ -17,6 +17,10 @@ const filters = [
 interface ComboBoxProps {
     value?: string;
     onValueChange?: (value: string) => void;
+    lowCutoff: number
+    highCutoff: number
+    setLowCutoff: (v: number) => void
+    setHighCutoff: (v: number) => void
     isConnected?: boolean;
     isDataStreamOn?: boolean;
 }
