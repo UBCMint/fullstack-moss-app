@@ -14,7 +14,7 @@ pub struct EEGDataPacket {
     pub signals: Vec<Vec<f64>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
 pub struct ProcessingConfig {
     pub apply_bandpass: bool,
     pub use_iir: bool,  // true for IIR, false for FIR

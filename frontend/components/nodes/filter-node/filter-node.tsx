@@ -3,6 +3,8 @@ import React from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import ComboBox from './combo-box';
+import useWebsocket from '@/hooks/useWebsocket';
+import { ProcessingConfig } from '@/lib/processing';
 
 interface FilterNodeProps {
     id?: string;
@@ -12,15 +14,69 @@ interface FilterNodeProps {
 export default function FilterNode({ id }: FilterNodeProps) {
     const [selectedFilter, setSelectedFilter] = React.useState('lowpass');
     const [isConnected, setIsConnected] = React.useState(false);
-    const [frequency, setFrequency] = React.useState(75);
-
+    const [lowCutoff, setLowCutoff] = React.useState(1)
+    const [highCutoff, setHighCutoff] = React.useState(50)
     
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
     
     // Get data stream status from global context
     const { dataStreaming } = useGlobalContext();
-    
+
+    const { sendProcessingConfig } = useWebsocket(0, 0)
+
+    const buildConfig = (): ProcessingConfig => {
+        if (!isConnected) {
+          return {
+            apply_bandpass: false,
+            use_iir: false,
+            l_freq: null,
+            h_freq: null,
+            downsample_factor: null,
+            sfreq: 256,
+            n_channels: 4,
+          }
+        }
+      
+        switch (selectedFilter) {
+          case 'lowpass':
+            return {
+              apply_bandpass: true,
+              use_iir: false,
+              l_freq: null,
+              h_freq: highCutoff,
+              downsample_factor: null,
+              sfreq: 256,
+              n_channels: 4,
+            }
+      
+          case 'highpass':
+            return {
+              apply_bandpass: true,
+              use_iir: false,
+              l_freq: lowCutoff,
+              h_freq: null,
+              downsample_factor: null,
+              sfreq: 256,
+              n_channels: 4,
+            }
+      
+          case 'bandpass':
+            return {
+              apply_bandpass: true,
+              use_iir: false,
+              l_freq: lowCutoff,
+              h_freq: highCutoff,
+              downsample_factor: null,
+              sfreq: 256,
+              n_channels: 4,
+            }
+
+            default:
+                throw new Error(`Unhandled filter type: ${selectedFilter}`)
+        }
+      }       
+
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
         try {
@@ -81,6 +137,11 @@ export default function FilterNode({ id }: FilterNodeProps) {
         };
     }, [checkConnectionStatus]);
 
+    React.useEffect(() => {
+        if (!dataStreaming) return
+        sendProcessingConfig(buildConfig())
+    }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming])  
+
     return (
         <div className="relative">
             {/* Input Handle - positioned to align with left circle */}
@@ -127,6 +188,10 @@ export default function FilterNode({ id }: FilterNodeProps) {
             <ComboBox 
                 value={selectedFilter}
                 onValueChange={setSelectedFilter}
+                lowCutoff={lowCutoff}
+                highCutoff={highCutoff}
+                setLowCutoff={setLowCutoff}
+                setHighCutoff={setHighCutoff}
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
             />

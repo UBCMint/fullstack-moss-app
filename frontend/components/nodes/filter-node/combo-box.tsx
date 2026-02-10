@@ -21,6 +21,10 @@ const filters = [
 interface ComboBoxProps {
     value?: string;
     onValueChange?: (value: string) => void;
+    lowCutoff: number
+    highCutoff: number
+    setLowCutoff: (v: number) => void
+    setHighCutoff: (v: number) => void
     isConnected?: boolean;
     isDataStreamOn?: boolean;
 }
@@ -140,7 +144,17 @@ export default function ComboBox({
                     <div>
                         <Slider
                             value={sliderValue}
-                            onValueChange={setSliderValue}
+                            onValueChange={(val) => {
+                                setSliderValue(val);
+                        
+                                if (value === 'lowpass') {
+                                  setHighCutoff(val);   
+                                }
+                        
+                                if (value === 'highpass') {
+                                  setLowCutoff(val);    
+                                }
+                              }}
                             max={100}
                             min={0}
                             step={1}
