@@ -144,7 +144,17 @@ export default function ComboBox({
                     <div>
                         <Slider
                             value={sliderValue}
-                            onValueChange={setSliderValue}
+                            onValueChange={(val) => {
+                                setSliderValue(val);
+                        
+                                if (value === 'lowpass') {
+                                  setHighCutoff(val);   
+                                }
+                        
+                                if (value === 'highpass') {
+                                  setLowCutoff(val);    
+                                }
+                              }}
                             max={100}
                             min={0}
                             step={1}
