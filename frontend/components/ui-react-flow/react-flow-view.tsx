@@ -29,10 +29,13 @@ import MachineLearningNode from '@/components/nodes/machine-learning-node/machin
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
+import {
+    FrontendWorkspaceState,
+    isFrontendWorkspaceState,
+} from '@/lib/frontend-state';
 
 import { useEffect, useState } from 'react';
 import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
-import { headers } from 'next/headers';
 
 const nodeTypes = {
     'source-node': SourceNode,
@@ -62,6 +65,52 @@ const ReactFlowInterface = () => {
         };
         window.addEventListener('pipeline-reset', listener);
         return () => window.removeEventListener('pipeline-reset', listener);
+    }, [setNodes, setEdges]);
+
+    useEffect(() => {
+        const exportListener = () => {
+            const state: FrontendWorkspaceState = {
+                nodes,
+                edges,
+            };
+
+            window.dispatchEvent(
+                new CustomEvent('frontend-state-response', {
+                    detail: state,
+                })
+            );
+        };
+
+        window.addEventListener('request-frontend-state', exportListener);
+        return () =>
+            window.removeEventListener('request-frontend-state', exportListener);
+    }, [nodes, edges]);
+
+    useEffect(() => {
+        const importListener = (event: Event) => {
+            const customEvent = event as CustomEvent<unknown>;
+            if (!isFrontendWorkspaceState(customEvent.detail)) {
+                return;
+            }
+
+            const importedState = customEvent.detail;
+            setNodes(importedState.nodes);
+            setEdges(importedState.edges);
+
+            // Keep generated IDs unique after loading nodes with node_{n} IDs.
+            const maxNodeIndex = importedState.nodes.reduce((max, node) => {
+                const match = /^node_(\d+)$/.exec(node.id);
+                if (!match) {
+                    return max;
+                }
+                return Math.max(max, Number(match[1]));
+            }, -1);
+            id = Math.max(id, maxNodeIndex + 1);
+        };
+
+        window.addEventListener('restore-frontend-state', importListener);
+        return () =>
+            window.removeEventListener('restore-frontend-state', importListener);
     }, [setNodes, setEdges]);
 
     // Helper to notify components that edges have changed
