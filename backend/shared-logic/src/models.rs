@@ -50,6 +50,40 @@ pub struct Session {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct FrontendState {
     pub session_id: i32,
-    pub data: Value, 
+    pub data: Value,
     pub updated_at: chrono::DateTime<Utc>,
+}
+
+// Struct for a time label row coming OUT of the DB (includes all columns)
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct TimeLabel {
+    pub id: i32,
+    pub session_id: i32,
+    pub timestamp: DateTime<Utc>,
+    pub label: String,
+}
+
+// Struct for a time label coming INTO the API from the frontend
+// No id (auto-generated) or session_id (comes from URL path)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewTimeLabel {
+    pub timestamp: DateTime<Utc>,
+    pub label: String,
+}
+
+// Struct for a row of EEG data coming OUT of the DB
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct EegDataRow {
+    pub time: DateTime<Utc>,
+    pub channel1: i32,
+    pub channel2: i32,
+    pub channel3: i32,
+    pub channel4: i32,
+}
+
+// Struct for the query parameters on GET /api/sessions/{session_id}/eeg-data
+#[derive(Debug, Deserialize)]
+pub struct EegDataQuery {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
 }
