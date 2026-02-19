@@ -1,55 +1,101 @@
 import * as React from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Slider } from '@/components/ui/slider';
 
-const filters = [
-    {
-        value: 'lowpass',
-        label: 'Low Pass Filter',
-    },
-    {
-        value: 'highpass',
-        label: 'High Pass Filter',
-    },
-    {
-        value: 'bandpass',
-        label: 'Bandpass Filter',
-    },
-];
+export type WindowOption = 'default' | 'preset' | 'custom';
 
 interface ComboBoxProps {
-    value?: string;
-    onValueChange?: (value: string) => void;
-    lowCutoff: number
-    highCutoff: number
-    setLowCutoff: (v: number) => void
-    setHighCutoff: (v: number) => void
+    windowSize: number;
+    overlapSize: number;
+    selectedOption: WindowOption;
+    setWindowSize: (size: number) => void;
+    setOverlapSize: (size: number) => void;
+    setSelectedOption: (option: WindowOption) => void;
     isConnected?: boolean;
     isDataStreamOn?: boolean;
 }
 
+const presetWindows: Array<{ value: WindowOption; label: string; size?: number }> = [
+    { value: 'default', label: 'Default (64)', size: 64 },
+    { value: 'preset', label: 'Preset A (placeholder: 4)', size: 4 },
+    { value: 'preset', label: 'Preset B (placeholder: 6)', size: 6 },
+    { value: 'custom', label: 'Custom' },
+];
+
 export default function ComboBox({
-    value = 'lowpass',
-    onValueChange,
+    windowSize,
+    overlapSize,
+    selectedOption,
+    setWindowSize,
+    setOverlapSize,
+    setSelectedOption,
     isConnected = false,
     isDataStreamOn = false,
 }: ComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
-    const titleRef = React.useRef<HTMLSpanElement>(null);
-    const [sliderValue, setSliderValue] = React.useState([75]);
-    const [cutoff, setCutoff] = React.useState([75]);
+    const [customWindowInput, setCustomWindowInput] = React.useState<string>('');
+    const[customOverlapInput, setCustomOverlapInput] = React.useState<string>(String(overlapSize));
+    const[error, setError] = React.useState<string>('');
 
-    const [lowCutoff, setLowCutoff] = React.useState([25]);
-    const [highCutoff, setHighCutoff] = React.useState([75]);
+    React.useEffect(() => {
+        setCustomOverlapInput(String(overlapSize));
+    }, [overlapSize]);
 
     const toggleExpanded = () => {
         setIsExpanded(!isExpanded);
     };
 
-    const handleOptionSelect = (optionValue: string) => {
-        onValueChange?.(optionValue);
-        // Add animation delay before closing
+    const handlePresetSelect = (optionValue: WindowOption, size?: number) => {
+        setSelectedOption(optionValue);
+        if(typeof size == 'number'){
+            setWindowSize(size);
+            if(overlapSize >= size){
+                setOverlapSize(Math.max(0,size-1));
+            }
+        }
+        if(optionValue !== 'custom'){
+            setError('');
+            setIsExpanded(false);
+        }
+
+        setTimeout(() => {
+            setIsExpanded(false);
+        }, 100);
+    };
+
+    const submitCustomWindow = () => {
+        const parsed = Number(customWindowInput);
+        if(!Number.isInteger(parsed) || parsed <= 0){
+            setError('Window size must be a positive integer');
+            return;
+        }   
+        if(overlapSize >= parsed){
+            setError('Overlap size must be less than window size');
+            return;
+        }
+        setSelectedOption('custom');
+        setWindowSize(parsed);
+        setError('');
+        setIsExpanded(false);
+
+        setTimeout(() => {
+            setIsExpanded(false);
+        }, 100);
+    };
+
+    const submitCustomOverlap = () => {
+        const parsed = Number(customOverlapInput);
+        if(!Number.isInteger(parsed) || parsed < 0){
+            setError('Overlap size must be a non-negative integer');
+            return;
+        }   
+        if(parsed >= windowSize){
+            setError('Overlap size must be less than window size');
+            return;
+        }
+        setOverlapSize(parsed);
+        setError('');
+
         setTimeout(() => {
             setIsExpanded(false);
         }, 100);
@@ -99,11 +145,9 @@ export default function ComboBox({
 
                     {/* Filter text - larger, bold font with ref for measurement */}
                     <span
-                        ref={titleRef}
                         className="absolute left-24 font-geist text-[25px] font-[550] leading-tight text-black tracking-wider"
                     >
-                        {filters.find((filter) => filter.value === value)
-                            ?.label || 'Low Pass Filter'}
+                        Window Node
                     </span>
                 </div>
 
@@ -132,98 +176,23 @@ export default function ComboBox({
                 </div>
             </button>
 
-            {/* Slider row under the header */}
-            <div
-                className="space-y-1 pb-3 pt-1"
-                style={{
-                    paddingLeft: '60px', // aligns with the title start
-                    paddingRight: '60px',
-                }}
-            >
-                {value != 'bandpass' && (
-                    <div>
-                        <Slider
-                            value={sliderValue}
-                            onValueChange={(val) => {
-                                setSliderValue(val);
-                        
-                                if (value === 'lowpass') {
-                                  setHighCutoff(val);   
-                                }
-                        
-                                if (value === 'highpass') {
-                                  setLowCutoff(val);    
-                                }
-                              }}
-                            max={100}
-                            min={0}
-                            step={1}
-                            className="w-full"
-                        />
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs text-gray-500">0</span>
-                            <span className="text-xs text-gray-500">100</span>
-                        </div>
+            {/* Collapsed Header */}
+            {!isExpanded && (
+                <div className="space-y-3 pb-4" style={{ paddingLeft: '60px', paddingRight: '60px' }}>
+                    <div className="text-[22px] leading-tight text-black">
+                        Size:{' '}
+                        <span className="inline-flex w-12 h-12 rounded-full border border-[#509693] items-center justify-center">
+                            {windowSize}
+                        </span>
                     </div>
-                )}
-
-                {/* Single slider for lowpass and highpass */}
-                {value == 'bandpass' && (
-                    <div>
-                        {/* Low cutoff */}
-                        <div>
-
-                            <Slider
-                                value={lowCutoff}
-                                onValueChange={(val) => {
-                                    // prevent low from going above high
-                                    const next =
-                                        val[0] >= highCutoff[0]
-                                            ? highCutoff[0] - 1
-                                            : val[0];
-                                    setLowCutoff([next]);
-                                }}
-                                min={0}
-                                max={100}
-                                step={1}
-                                className="w-full mb-1"
-                            />
-                        </div>
-
-                        <div className="flex justify-between items-center mb-5">
-                            <span className="text-xs text-gray-500">0</span>
-                            <span className="text-xs text-gray-500">Low Cutoff</span>
-                            <span className="text-xs text-gray-500">100</span>
-                        </div>
-
-                        {/* High cutoff */}
-                        <div>
-                            <Slider
-                                value={highCutoff}
-                                onValueChange={(val) => {
-                                    // prevent high from going below low
-                                    const next =
-                                        val[0] <= lowCutoff[0]
-                                            ? lowCutoff[0] + 1
-                                            : val[0];
-                                    setHighCutoff([next]);
-                                }}
-                                min={0}
-                                max={100}
-                                step={1}
-                                className="w-full mb-1"
-                            />
-                        </div>
-
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs text-gray-500">0</span>
-                            <span className="text-xs text-gray-500">High Cutoff</span>
-                            <span className="text-xs text-gray-500">100</span>
-                        </div>
+                    <div className="text-[22px] leading-tight text-black">
+                        Overlap Size:{' '}
+                        <span className="inline-flex w-12 h-12 rounded-full border border-[#509693] items-center justify-center">
+                            {overlapSize}
+                        </span>
                     </div>
-                )}
-
-            </div>
+                </div>
+            )}
 
             {/* Expandable options section */}
             <div
@@ -235,31 +204,58 @@ export default function ComboBox({
                         'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
                 }}
             >
-                <div
-                    className="space-y-0.5 flex flex-col"
-                    style={{
-                        paddingLeft: '60px', // Align with title start (circle + dot + spacing)
-                        paddingRight: '60px', // Same padding on right for symmetry
-                        paddingBottom: '8px',
-                    }}
-                >
-                    {filters.map((filter) => (
+        <div className="space-y-2 pb-3" style={{ paddingLeft: '60px', paddingRight: '60px' }}>
+                    <div className="text-sm text-gray-700">Input size</div>
+                    {presetWindows.map((preset) => (
                         <button
-                            key={filter.value}
-                            onClick={() => handleOptionSelect(filter.value)}
+                            key={preset.label}
+                            onClick={() => handlePresetSelect(preset.value, preset.size)}
                             className={cn(
-                                'text-left px-3 py-0 text-xs font-normal rounded-lg transition-colours',
-                                'block w-full', // Full width within the constrained container
-                                value === filter.value
-                                    ? 'bg-gray-100 text-gray-900'
-                                    : 'text-gray-600 hover:bg-gray-50'
+                                'w-full text-left px-3 py-1 rounded-md text-sm',
+                                selectedOption === preset.value ? 'bg-gray-100 text-gray-900' : 'text-gray-700 hover:bg-gray-50'
                             )}
                         >
-                            {filter.label}
+                            {preset.label}
                         </button>
                     ))}
+
+                    {selectedOption === 'custom' && (
+                        <div className="flex items-center gap-2 pt-1">
+                            <input
+                                value={customWindowInput}
+                                onChange={(e) => setCustomWindowInput(e.target.value.replace(/[^\d]/g, ''))} // Enfore integer-only input by stripping non-digits.
+                                placeholder="Custom integer"
+                                className="h-8 w-full rounded-md border border-gray-300 px-2 text-sm"
+                            />
+                            <button
+                                onClick={submitCustomWindow}
+                                className="h-8 px-3 rounded-md border border-gray-300 text-sm hover:bg-gray-50"
+                            >
+                                OK
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="pt-1">
+                        <div className="text-sm text-gray-700 mb-1">Overlap size</div>
+                        <div className="flex items-center gap-2">
+                            <input
+                                value={customOverlapInput}
+                                onChange={(e) => setCustomOverlapInput(e.target.value.replace(/[^\d]/g, ''))}
+                                className="h-8 w-full rounded-md border border-gray-300 px-2 text-sm"
+                            />
+                            <button
+                                onClick={submitCustomOverlap}
+                                className="h-8 px-3 rounded-md border border-gray-300 text-sm hover:bg-gray-50"
+                            >
+                                Apply
+                            </button>
+                        </div>
+                    </div>
+
+                    {error && <div className="text-xs text-red-600">{error}</div>}
                 </div>
             </div>
-        </div>
+        </div>        
     );
 }

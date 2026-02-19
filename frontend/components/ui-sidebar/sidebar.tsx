@@ -39,6 +39,12 @@ export default function Sidebar() {
             description: 'Visualize data and create charts',
             category: 'Nodes',
         },
+        {
+            id: 'window-node',
+            label: 'Window Node',
+            description: 'Configure windowing parameters for data streams',
+            category: 'Nodes',
+        }
     ];
 
     const [searchTerm, setSearchTerm] = useState('');

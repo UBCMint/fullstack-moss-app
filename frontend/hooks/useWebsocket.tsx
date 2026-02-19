@@ -1,11 +1,15 @@
 import { useEffect, useState, useRef } from 'react';
 import { useGlobalContext } from '@/context/GlobalContext';
-import { ProcessingConfig } from '@/lib/processing';
+import { ProcessingConfig, WindowingConfig } from '@/lib/processing';
 
 export default function useWebsocket(
     chartSize: number,
     batchesPerSecond: number
 ) {
+    type WsConfigMessage =
+  | { type: 'processing'; payload: ProcessingConfig }
+  | { type: 'windowing'; payload: WindowingConfig };
+
     const { dataStreaming } = useGlobalContext();
     const [renderData, setRenderData] = useState<any[] | []>([]);
     const bufferRef = useRef<any[]>([]);
@@ -13,9 +17,10 @@ export default function useWebsocket(
     const closingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const [isClosingGracefully, setIsClosingGracefully] = useState(false);
     const processingConfigRef = useRef<ProcessingConfig | null>(null);
+    const windowingConfigRef = useRef<WindowingConfig | null>(null);
 
     const intervalTime = 1000 / batchesPerSecond;
-
+  
     const sendProcessingConfig = (config: ProcessingConfig) => {
         processingConfigRef.current = config
       
@@ -23,7 +28,16 @@ export default function useWebsocket(
           wsRef.current.send(JSON.stringify(config))
           console.log('Sent processing config:', config)
         }
-    }      
+    }     
+    
+    const sendWindowingConfig = (config: WindowingConfig) => {
+        windowingConfigRef.current = config
+      
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(JSON.stringify(config))
+          console.log('Sent windowing config:', config)
+        }
+    }     
 
     useEffect(() => {
         console.log('data streaming:', dataStreaming);
@@ -59,6 +73,9 @@ export default function useWebsocket(
 
                 if (processingConfigRef.current) {
                     ws.send(JSON.stringify(processingConfigRef.current))
+                }
+                if (windowingConfigRef.current) {
+                    ws.send(JSON.stringify(windowingConfigRef.current))
                 }
             };
 
@@ -143,5 +160,5 @@ export default function useWebsocket(
         };
     }, [chartSize, batchesPerSecond, dataStreaming, isClosingGracefully]);
 
-    return { renderData, sendProcessingConfig };
+    return { renderData, sendProcessingConfig, sendWindowingConfig };
 }
