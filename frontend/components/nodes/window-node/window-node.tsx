@@ -1,8 +1,8 @@
 'use client';
 import React from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
+import { Handle, Position, useReactFlow} from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
-import WindowComboBox from './window-combo-box';
+import WindowComboBox, {type WindowOption} from './window-combo-box';
 import useWebsocket from '@/hooks/useWebsocket';
 
 interface WindowNodeProps {
@@ -13,8 +13,6 @@ interface WindowNodeProps {
 export default function WindowNode({ id }: WindowNodeProps) {
     const DEFAULT_WINDOW_SIZE = 64;
     const DEFAULT_OVERLAP_SIZE = 0;
-
-    type WindowOption = 'default' | 'preset' | 'custom';
 
     const [windowSize, setWindowSize] = React.useState<number>(DEFAULT_WINDOW_SIZE);
     const [overlapSize, setOverlapSize] = React.useState<number>(DEFAULT_OVERLAP_SIZE);
@@ -28,7 +26,7 @@ export default function WindowNode({ id }: WindowNodeProps) {
     // Get data stream status from global context
     const { dataStreaming } = useGlobalContext();
 
-    const { sendProcessingConfig } = useWebsocket(0, 0)
+    const { sendWindowingConfig } = useWebsocket(0, 0);
 
     const buildConfig = () => {
         if (!isConnected) {
@@ -37,7 +35,7 @@ export default function WindowNode({ id }: WindowNodeProps) {
         overlap_size: DEFAULT_OVERLAP_SIZE,
         };
     }
-
+    
     return {
         chunk_size: windowSize,
         overlap_size: overlapSize,
@@ -114,7 +112,7 @@ export default function WindowNode({ id }: WindowNodeProps) {
     React.useEffect(() => {
         if (!dataStreaming) return;
         if(!isValidConfig) return;
-        sendProcessingConfig(buildConfig());
+        sendWindowingConfig(buildConfig());
     }, [windowSize, overlapSize, selectedOption, isConnected, dataStreaming])  
 
     return (
