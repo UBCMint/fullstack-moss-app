@@ -7,7 +7,7 @@ use tokio::time::{self, Duration};
 use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
-use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
+use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState, NewTimeLabel, EegDataRow};
 use crate::{lsl::EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
@@ -404,4 +404,50 @@ pub async fn get_frontend_state(client: &DbClient, session_id: i32) -> Result<Op
     info!("Retrieved frontend state successfully: {:?}", state);
 
     return Ok(state.map(|s| s.data));
+}
+
+/// Insert a batch of time labels for a given session.
+///
+/// Takes a session_id and a list of labels (each with a timestamp and label string),
+/// and inserts them all into the time_labels table in a single query.
+pub async fn insert_time_labels(client: &DbClient, session_id: i32, labels: Vec<NewTimeLabel>) -> Result<(), sqlx::Error> {
+    if labels.is_empty() {
+        info!("Skipping insert - no labels to insert");
+        return Ok(());
+    }
+
+    let mut query_builder = sqlx::QueryBuilder::new(
+        "INSERT INTO time_labels (session_id, timestamp, label) "
+    );
+
+    query_builder.push_values(labels.iter(), |mut b, label| {
+        b.push_bind(session_id)
+            .push_bind(label.timestamp)
+            .push_bind(&label.label);
+    });
+
+    query_builder.build().execute(&**client).await?;
+    info!("Inserted {} time labels for session {}", labels.len(), session_id);
+    Ok(())
+}
+
+/// Get EEG data rows within a time range.
+///
+/// Returns all rows from eeg_data where time is between start and end (inclusive),
+/// ordered by time. Note: eeg_data has no session_id column, so this filters by
+/// time range only — if two sessions overlap in time, their data will mix.
+pub async fn get_eeg_data_by_range(client: &DbClient, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<EegDataRow>, Error> {
+    info!("Retrieving EEG data from {} to {}", start, end);
+
+    let data = sqlx::query_as!(
+        EegDataRow,
+        "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data WHERE time >= $1 AND time <= $2 ORDER BY time",
+        start,
+        end
+    )
+    .fetch_all(&**client)
+    .await?;
+
+    info!("Retrieved {} EEG data rows.", data.len());
+    Ok(data)
 }
