@@ -1,6 +1,7 @@
 use axum::{
     extract::State,
     extract::Path,
+    extract::Query,
     http::StatusCode,
     routing::{get, post},
     Json,
@@ -21,14 +22,13 @@ use rand_core::OsRng;
 
 // shared logic library
 use shared_logic::db::{initialize_connection, DbClient};
-use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState};
+use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState, NewTimeLabel, EegDataRow, EegDataQuery};
 
 // Argon2 imports
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
-
 
 // Define application state
 #[derive(Clone)]
@@ -248,7 +248,49 @@ async fn get_frontend_state(
 }
 
 
+// Handler for POST /api/sessions/{session_id}/time-label
+// Receives a batch of time labels from the frontend after a session ends and stores them in the DB.
+async fn store_time_labels(
+    State(app_state): State<AppState>,       // DB connection pool
+    Path(session_id): Path<i32>,             // session ID from the URL path
+    Json(labels): Json<Vec<NewTimeLabel>>,   // array of {timestamp, label} objects from the request body
+) -> Result<StatusCode, (StatusCode, String)> {
+    info!("Received request to store {} time labels for session {}", labels.len(), session_id);
 
+    match shared_logic::db::insert_time_labels(&app_state.db_client, session_id, labels).await {
+        Ok(_) => {
+            info!("Time labels stored successfully for session {}", session_id);
+            Ok(StatusCode::CREATED) // 201 — write-only, nothing to return
+        }
+        Err(e) => {
+            error!("Failed to store time labels: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to store time labels: {}", e)))
+        }
+    }
+}
+
+// Handler for GET /api/sessions/{session_id}/eeg-data
+// Returns EEG data rows within a given time range (passed as ?start=...&end=... query params).
+async fn get_eeg_data(
+    State(app_state): State<AppState>,      // DB connection pool
+    Path(session_id): Path<i32>,            // session ID from the URL path
+    Query(params): Query<EegDataQuery>,     // ?start=...&end=... parsed into EegDataQuery struct
+) -> Result<Json<Vec<EegDataRow>>, (StatusCode, String)> {
+    info!("Received request to get EEG data for session {} from {} to {}", session_id, params.start, params.end);
+
+    // Note: session_id is accepted for URL consistency but not used in the query —
+    // the eeg_data table has no session_id column, so we can only filter by time range.
+    match shared_logic::db::get_eeg_data_by_range(&app_state.db_client, params.start, params.end).await {
+        Ok(rows) => {
+            info!("Retrieved {} EEG data rows", rows.len());
+            Ok(Json(rows))
+        }
+        Err(e) => {
+            error!("Failed to get EEG data: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get EEG data: {}", e)))
+        }
+    }
+}
 
 async fn run_python_script_handler() -> Result<Json<Value>, (StatusCode, String)> {
     info!("Received request to run Python script.");
@@ -352,6 +394,9 @@ async fn main() {
         
         .route("/api/sessions/:session_id/frontend-state", post(set_frontend_state))
         .route("/api/sessions/:session_id/frontend-state", get(get_frontend_state))
+
+        .route("/api/sessions/:session_id/time-label", post(store_time_labels))
+        .route("/api/sessions/:session_id/eeg-data", get(get_eeg_data))
 
         // Share application state with all handlers
         .with_state(app_state);

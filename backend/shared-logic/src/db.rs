@@ -439,12 +439,11 @@ pub async fn insert_time_labels(client: &DbClient, session_id: i32, labels: Vec<
 pub async fn get_eeg_data_by_range(client: &DbClient, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<EegDataRow>, Error> {
     info!("Retrieving EEG data from {} to {}", start, end);
 
-    let data = sqlx::query_as!(
-        EegDataRow,
+    let data = sqlx::query_as::<_, EegDataRow>(
         "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data WHERE time >= $1 AND time <= $2 ORDER BY time",
-        start,
-        end
     )
+    .bind(start)
+    .bind(end)
     .fetch_all(&**client)
     .await?;
 
