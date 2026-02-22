@@ -28,6 +28,7 @@ import FilterNode from '@/components/nodes/filter-node/filter-node';
 import MachineLearningNode from '@/components/nodes/machine-learning-node/machine-learning-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
 import WindowNode from '@/components/nodes/window-node/window-node';
+import LabelingNode from '@/components/nodes/labeling-node/labeling-node';
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
 import {
@@ -44,6 +45,7 @@ const nodeTypes = {
     'machine-learning-node': MachineLearningNode,
     'signal-graph-node': SignalGraphNode,
     'window-node': WindowNode,
+    'labeling-node': LabelingNode,
 };
 
 let id = 0;
