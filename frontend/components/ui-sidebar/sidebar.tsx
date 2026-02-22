@@ -39,6 +39,12 @@ export default function Sidebar() {
             description: 'Visualize data and create charts',
             category: 'Nodes',
         },
+        {
+            id: 'labeling-node',
+            label: 'Labeling Node',
+            description: 'Label data and create labels',
+            category: 'Nodes',
+        }
     ];
 
     const [searchTerm, setSearchTerm] = useState('');
