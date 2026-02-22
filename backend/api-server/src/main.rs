@@ -5,6 +5,7 @@ use axum::{
     routing::{get, post},
     Json,
     Router,
+    body::Bytes,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -279,6 +280,19 @@ async fn export_eeg_data(
         
 }
 
+// Handler for POST /api/sessions/{session_id}/eeg_data/import
+async fn import_eeg_data(
+    State(app_state): State<AppState>,
+    Path(session_id): Path<i32>,
+    // we expect the CSV data to be sent as raw text in the body of the request
+    body: Bytes,
+) -> Result<Json<Value>, (StatusCode, String)> {
+    shared_logic::db::import_eeg_data_from_csv(&app_state.db_client, session_id, &body)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to import EEG data: {}", e)))?;
+
+    Ok(Json(json!({"status": "success"})))
+}
 
 async fn run_python_script_handler() -> Result<Json<Value>, (StatusCode, String)> {
     info!("Received request to run Python script.");
@@ -371,6 +385,7 @@ async fn main() {
         .route("/api/sessions/:session_id/frontend-state", get(get_frontend_state))
 
         .route("/api/sessions/:session_id/eeg_data/export", post(export_eeg_data))
+        .route("/api/sessions/:session_id/eeg_data/import", post(import_eeg_data))
 
         // Share application state with all handlers
         .with_state(app_state);

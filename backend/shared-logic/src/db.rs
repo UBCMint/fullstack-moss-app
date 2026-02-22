@@ -413,6 +413,75 @@ pub async fn export_eeg_data_as_csv(client: &DbClient, session_id: i32, start_ti
     Ok(csv_data)
 }
 
+/// Import EEG data from a CSV byte stream for a given session ID. The CSV is expected
+/// to have columns: "time", "channel1", "channel2", "channel3", "channel4". 
+///
+/// Returns Ok(()) on success.
+pub async fn import_eeg_data_from_csv(client: &DbClient, session_id: i32, csv_bytes: &[u8]) ->  Result<(), Error> {
+    info!("Importing EEG data for session id {} from CSV", session_id);
+
+    // we use the csv crate to read the CSV data, converting them to the struct we made for CSV rows
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true) // we expect the CSV to have headers, should probably make this clear somewhere
+        .from_reader(csv_bytes);
+
+    // set up our vectors to hold the parsed EEG data rows, so we can batch insert them later
+    let mut timestamps: Vec<DateTime<Utc>> = Vec::new();
+    let mut channel1_data: Vec<f64> = Vec::new();
+    let mut channel2_data: Vec<f64> = Vec::new();
+    let mut channel3_data: Vec<f64> = Vec::new();
+    let mut channel4_data: Vec<f64> = Vec::new();
+
+
+    // we iterate through the CSV records, parsing each row and converting it to the format we need for insertion
+    for result in reader.records() {
+        // unwrap the record, if there's an error we return it
+        let record = result.map_err(|e| Error::Protocol(e.to_string()))?;
+
+        // now we parse the fields, converting time to DateTime<Utc> and channels to i32
+        let time_str = record.get(0).ok_or_else(|| Error::Protocol("Missing time field".to_string()))?;
+
+        // we assume the time is in RFC3339 format
+        let time = DateTime::parse_from_rfc3339(time_str)
+            .map_err(|e| Error::Protocol(format!("Invalid time format: {}", e)))?
+            .with_timezone(&Utc);
+
+        let channel1 = record.get(1)
+            .ok_or_else(|| Error::Protocol("Missing channel1 field".to_string()))?
+            .parse::<f64>()
+            .map_err(|e| Error::Protocol(format!("Invalid channel1 value: {}", e)))?;
+        let channel2 = record.get(2)
+            .ok_or_else(|| Error::Protocol("Missing channel2 field".to_string()))?
+            .parse::<f64>()
+            .map_err(|e| Error::Protocol(format!("Invalid channel2 value: {}", e)))?;
+        let channel3 = record.get(3)
+            .ok_or_else(|| Error::Protocol("Missing channel3 field".to_string()))?
+            .parse::<f64>()
+            .map_err(|e| Error::Protocol(format!("Invalid channel3 value: {}", e)))?;
+        let channel4 = record.get(4)
+            .ok_or_else(|| Error::Protocol("Missing channel4 field".to_string()))?
+            .parse::<f64>()
+            .map_err(|e| Error::Protocol(format!("Invalid channel4 value: {}", e)))?;
+
+        // now we construct the tuple and add it to our vectors
+        timestamps.push(time);
+        channel1_data.push(channel1);
+        channel2_data.push(channel2);
+        channel3_data.push(channel3);
+        channel4_data.push(channel4);
+    }
+
+    // now we use our existing batch insert function to insert the data into the database
+    let eeg_rows = EEGDataPacket {
+        timestamps,
+        signals: vec![channel1_data, channel2_data, channel3_data, channel4_data],
+    };
+
+    insert_batch_eeg(client, session_id, &eeg_rows).await?;
+
+    Ok(())
+}
+
 /// Helper function for eeg data to find the earliest timestamp for a given session
 /// 
 /// Returns the earliest timestamp on success.
