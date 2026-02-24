@@ -28,7 +28,7 @@ pub struct ProcessingConfig {
 impl Default for ProcessingConfig {
     fn default() -> Self {
         Self {
-            apply_bandpass: true,
+            apply_bandpass: false,
             use_iir: false,
             l_freq: Some(1.0),
             h_freq: Some(50.0),
