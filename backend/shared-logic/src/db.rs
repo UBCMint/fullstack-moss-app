@@ -413,14 +413,14 @@ pub async fn export_eeg_data_as_csv(client: &DbClient, session_id: i32, start_ti
     info!("Exporting EEG data for session id {} from {} to {}", session_id, start_time, end_time);
 
     // get the data from the database
-    let data = sqlx::query!(
+    let data = sqlx::query_as::<_, EegDataRow>(
         "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data
         WHERE session_id = $1 AND time >= $2 AND time <= $3
         ORDER BY time ASC",
-        session_id,
-        start_time,
-        end_time
     )
+    .bind(session_id)
+    .bind(start_time)
+    .bind(end_time)
     .fetch_all(&**client)
     .await?;
 
@@ -462,12 +462,12 @@ pub async fn export_eeg_data_as_csv(client: &DbClient, session_id: i32, start_ti
 ///
 /// Returns the earliest timestamp on success.
 pub async fn get_earliest_eeg_timestamp(client: &DbClient, session_id: i32) -> Result<Option<DateTime<Utc>>, Error> {
-    let row = sqlx::query!(
-        "SELECT MIN(time) as earliest_time FROM eeg_data WHERE session_id = $1",
-        session_id
+    let earliest = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
+        "SELECT MIN(time) FROM eeg_data WHERE session_id = $1",
     )
+    .bind(session_id)
     .fetch_one(&**client)
     .await?;
 
-    Ok(row.earliest_time)
+    Ok(earliest)
 }
