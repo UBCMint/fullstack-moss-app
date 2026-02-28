@@ -40,7 +40,7 @@ export default function Sidebar() {
             category: 'Nodes',
         },
         {
-            id: 'labeling-node',
+            id: 'label-node',
             label: 'Labeling Node',
             description: 'Label data and create labels',
             category: 'Nodes',
