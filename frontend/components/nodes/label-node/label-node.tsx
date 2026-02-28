@@ -3,14 +3,13 @@
 import React from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
-import ComboBox, { LabelCategory } from './label-combo-box';
+import ComboBox from './label-combo-box';
 
 interface LabelNodeProps {
     id?: string;
 }
 
 export default function LabelNode({ id }: LabelNodeProps) {
-    const [selectedCategory, setSelectedCategory] = React.useState('event-based');
     const [isConnected, setIsConnected] = React.useState(false);
 
     const { dataStreaming } = useGlobalContext();
@@ -120,8 +119,6 @@ export default function LabelNode({ id }: LabelNodeProps) {
             />
 
             <ComboBox 
-              value={selectedCategory as LabelCategory}
-              onValueChange={setSelectedCategory}
               isConnected={isConnected} 
               isDataStreamOn={dataStreaming} 
             />
