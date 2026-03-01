@@ -19,6 +19,8 @@ export interface LabelTimelinePanelProps {
     rows: TimelineLabelRow[];
     sessionStartTimestamp: string | null;
     latestBackendTimestamp: string | null;
+    isConnected: boolean;
+    isDataStreamOn: boolean;
     onClose: () => void;
     onGraphViewClick?: () => void;
 }
@@ -52,6 +54,17 @@ const formatRelativeTime = (ms: number): string => {
         .padStart(2, '0')}`;
 };
 
+const formatRelativeTimeWithMs = (ms: number): string => {
+    const clamped = Math.max(0, ms);
+    const totalSeconds = Math.floor(clamped / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const milliseconds = clamped % 1000;
+    return `${minutes.toString().padStart(2, '0')}:${seconds
+        .toString()
+        .padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+};
+
 const formatDuration = (ms: number | null): string => {
     if (ms == null || ms < 0) return '-';
     if (ms < 1000) return '<1s';
@@ -68,6 +81,8 @@ export default function LabelTimelinePanel({
     latestBackendTimestamp,
     onClose,
     onGraphViewClick,
+    isConnected,
+    isDataStreamOn,
 }: LabelTimelinePanelProps) {
     if (!isExpanded) {
         return null;
@@ -187,14 +202,21 @@ export default function LabelTimelinePanel({
         return groups;
     }, [packedEntries]);
 
-    const requiredTimelineRowCount = laneGroups.length;
-
     return (
         <div className="mx-4 mb-4 rounded-[24px] border border-[#D3D3D3] bg-[#F8F9F8] p-4">
             <div className="mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-3 rounded-full bg-[#509693]" />
-                    <h3 className="text-[38px] font-[550] leading-none text-black">
+                    
+                    {/* Status dot */}
+                    <div
+                        className={cn(
+                            'absolute left-16 w-3 h-3 rounded-full',
+                            isConnected && isDataStreamOn
+                                ? 'bg-[#509693]'
+                                : 'bg-[#D3D3D3]'
+                        )}
+                    />
+                    <h3 className="absolute left-24 font-geist text-[25px] font-[550] leading-tight text-black">
                         Timeline
                     </h3>
                 </div>
@@ -230,7 +252,7 @@ export default function LabelTimelinePanel({
                 </div>
 
                 <div className="space-y-2">
-                    {requiredTimelineRowCount === 0 && (
+                    {laneGroups.length === 0 && (
                         <div className="py-3 text-sm text-[#8A8A8A]">
                             No labels yet. Start/stop Trigger to add moments.
                         </div>
@@ -288,9 +310,9 @@ export default function LabelTimelinePanel({
             </div>
 
             <div className="rounded-[16px] border border-[#D3D3D3] bg-white p-3">
-                <h4 className="mb-3 text-[32px] font-[550] leading-none text-black">
+                <h3 className="mb-3 font-geist text-[25px] font-[550] leading-tight text-black">
                     Event Log
-                </h4>
+                </h3>
 
                 <div className="max-h-[210px] overflow-y-auto rounded-md border border-[#E2E2E2]">
                     <table className="w-full text-left text-sm">
@@ -332,7 +354,7 @@ export default function LabelTimelinePanel({
                                     <tr key={row.id} className="border-t border-[#EFEFEF]">
                                         <td className="px-3 py-2 text-[#5A5A5A]">
                                             {relativeStart !== null
-                                                ? formatRelativeTime(relativeStart)
+                                                ? formatRelativeTimeWithMs(relativeStart)
                                                 : '--:--'}
                                         </td>
                                         <td className="px-3 py-2 text-black">

@@ -99,7 +99,7 @@ export default function ComboBox({
                 </div>
             </div>
 
-            {/* Trigger and Preview buttons - TODO: shouldn't be able to trigger if not connected */}
+            {/* Trigger and Preview buttons */}
             <div className="flex flex-col items-center gap-2 pb-3">
                 <span className="text-[24px] leading-none text-black">
                     {isTriggerActive ? 'Stop labeling' : 'Start labeling'}
@@ -190,6 +190,8 @@ export default function ComboBox({
                 latestBackendTimestamp={latestBackendTimestamp}
                 onClose={onExpandedClose}
                 onGraphViewClick={onGraphViewClick}
+                isConnected={isConnected}
+                isDataStreamOn={isDataStreamOn}
             />
         </div>
     );
