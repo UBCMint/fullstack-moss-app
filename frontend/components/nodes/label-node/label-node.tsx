@@ -111,6 +111,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
         };
     }, [checkConnectionStatus]);
 
+    // TODO: this isn't working rn, start of ?
     React.useEffect(() => {
         labelsRef.current = labeledMoments;
     }, [labeledMoments]);
@@ -118,7 +119,9 @@ export default function LabelNode({ id }: LabelNodeProps) {
     React.useEffect(() => {
         const handlePacket = (event: Event) => {
             const customEvent = event as CustomEvent<{ latestTimestamp?: string | null }>;
-            const nextTimestamp = customEvent.detail?.latestTimestamp;
+            //const nextTimestamp = customEvent.detail?.latestTimestamp;
+            // TODO: add current timestamp without using backend
+            const nextTimestamp = new Date().toISOString();
             if (nextTimestamp) {
                 if (!sessionStartTimestamp) {
                     setSessionStartTimestamp(nextTimestamp);
@@ -133,6 +136,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
         };
     }, [sessionStartTimestamp]);
 
+    // currently not working
     const postLabelsToApi = React.useCallback(async () => {
         const labelsToPost = labelsRef.current;
         if (labelsToPost.length === 0) {
@@ -180,7 +184,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
         const streamJustStopped = wasStreaming && !dataStreaming;
 
         if (streamJustStarted) {
-            setSessionStartTimestamp(null);
+            setSessionStartTimestamp(null); // TODO huh
             setLatestBackendTimestamp(null);
         }
 

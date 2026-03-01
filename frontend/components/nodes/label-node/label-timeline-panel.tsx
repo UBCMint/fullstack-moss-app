@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
-
-type LabelColor = 'teal-700' | 'teal-500' | 'teal-300' | 'mint-100';
+import { colorClassMap, LabelColor } from './label-combo-box';
 
 export type TimelineRowSource = 'Trigger' | 'Manual' | 'Auto';
 
@@ -24,12 +23,12 @@ export interface LabelTimelinePanelProps {
     onGraphViewClick?: () => void;
 }
 
-const colorClassMap: Record<LabelColor, string> = {
-    'teal-700': 'bg-[#2E7B75]',
-    'teal-500': 'bg-[#6CAFA4]',
-    'teal-300': 'bg-[#98CDBF]',
-    'mint-100': 'bg-[#D6E6D4]',
-};
+interface PackedTimelineEntry {
+    row: TimelineLabelRow;
+    startMs: number;
+    endMs: number;
+    laneIndex: number;
+}
 
 const colorBorderMap: Record<LabelColor, string> = {
     'teal-700': 'border-[#2E7B75]',
@@ -112,6 +111,84 @@ export default function LabelTimelinePanel({
         return bStart - aStart;
     });
 
+    const packedEntries = React.useMemo<PackedTimelineEntry[]>(() => {
+        const normalized = rows
+            .map((row) => {
+                const startMs = parseTimestampMs(row.startTimestamp);
+                const endMs = parseTimestampMs(
+                    row.endTimestamp ?? latestBackendTimestamp
+                );
+                if (startMs === null || endMs === null) {
+                    return null;
+                }
+                return {
+                    row,
+                    startMs,
+                    endMs: Math.max(endMs, startMs + 1),
+                };
+            })
+            .filter(
+                (
+                    value
+                ): value is {
+                    row: TimelineLabelRow;
+                    startMs: number;
+                    endMs: number;
+                } => value !== null
+            )
+            .sort((a, b) => {
+                if (a.startMs !== b.startMs) {
+                    return a.startMs - b.startMs;
+                }
+                return a.endMs - b.endMs;
+            });
+
+        const laneEndTimes: number[] = [];
+        const packed: PackedTimelineEntry[] = [];
+
+        normalized.forEach((entry) => {
+            const reusableLaneIndex = laneEndTimes.findIndex(
+                (laneEndTime) => entry.startMs >= laneEndTime
+            );
+
+            if (reusableLaneIndex === -1) {
+                laneEndTimes.push(entry.endMs);
+                packed.push({
+                    ...entry,
+                    laneIndex: laneEndTimes.length - 1,
+                });
+                return;
+            }
+
+            laneEndTimes[reusableLaneIndex] = entry.endMs;
+            packed.push({
+                ...entry,
+                laneIndex: reusableLaneIndex,
+            });
+        });
+
+        return packed;
+    }, [latestBackendTimestamp, rows]);
+
+    const laneGroups = React.useMemo(() => {
+        const totalLanes =
+            packedEntries.length > 0
+                ? Math.max(...packedEntries.map((entry) => entry.laneIndex)) + 1
+                : 0;
+        const groups: PackedTimelineEntry[][] = Array.from(
+            { length: totalLanes },
+            () => []
+        );
+
+        packedEntries.forEach((entry) => {
+            groups[entry.laneIndex].push(entry);
+        });
+
+        return groups;
+    }, [packedEntries]);
+
+    const requiredTimelineRowCount = laneGroups.length;
+
     return (
         <div className="mx-4 mb-4 rounded-[24px] border border-[#D3D3D3] bg-[#F8F9F8] p-4">
             <div className="mb-4 flex items-center justify-between">
@@ -153,58 +230,60 @@ export default function LabelTimelinePanel({
                 </div>
 
                 <div className="space-y-2">
-                    {rows.length === 0 && (
+                    {requiredTimelineRowCount === 0 && (
                         <div className="py-3 text-sm text-[#8A8A8A]">
                             No labels yet. Start/stop Trigger to add moments.
                         </div>
                     )}
 
-                    {rows.map((row) => {
-                        const startMs = parseTimestampMs(row.startTimestamp);
-                        const endMs = parseTimestampMs(
-                            row.endTimestamp ?? latestBackendTimestamp
-                        );
+                    {laneGroups.map((laneEntries, laneIndex) => (
+                        <div
+                            key={`timeline-lane-${laneIndex}`}
+                            className="relative h-8 rounded-md bg-[#EEF3F2]"
+                        >
+                            {laneEntries.map((entry) => {
+                                if (sessionStartMs === null || domainMs === null) {
+                                    return null;
+                                }
 
-                        if (
-                            startMs === null ||
-                            endMs === null ||
-                            sessionStartMs === null ||
-                            domainMs === null
-                        ) {
-                            return null;
-                        }
+                                const startOffset = Math.max(
+                                    entry.startMs - sessionStartMs,
+                                    0
+                                );
+                                const endOffset = Math.max(
+                                    entry.endMs - sessionStartMs,
+                                    startOffset + 1
+                                );
+                                const leftPercent = (startOffset / domainMs) * 100;
+                                const widthPercent = Math.max(
+                                    ((endOffset - startOffset) / domainMs) * 100,
+                                    2
+                                );
 
-                        const startOffset = Math.max(startMs - sessionStartMs, 0);
-                        const endOffset = Math.max(endMs - sessionStartMs, startOffset + 1);
-                        const leftPercent = (startOffset / domainMs) * 100;
-                        const widthPercent = Math.max(
-                            ((endOffset - startOffset) / domainMs) * 100,
-                            2
-                        );
-
-                        return (
-                            <div
-                                key={row.id}
-                                className="relative h-8 rounded-md bg-[#EEF3F2]"
-                            >
-                                <div
-                                    className={cn(
-                                        'absolute top-0 h-full rounded-md border flex items-center px-3 text-sm text-[#204C49]',
-                                        colorClassMap[row.color],
-                                        colorBorderMap[row.color],
-                                        row.isInProgress ? 'animate-pulse' : ''
-                                    )}
-                                    style={{
-                                        left: `${leftPercent}%`,
-                                        width: `${Math.min(widthPercent, 100 - leftPercent)}%`,
-                                    }}
-                                >
-                                    {row.label}
-                                    {row.isInProgress ? ' (recording)' : ''}
-                                </div>
-                            </div>
-                        );
-                    })}
+                                return (
+                                    <div
+                                        key={entry.row.id}
+                                        className={cn(
+                                            'absolute top-0 h-full rounded-md border flex items-center px-3 text-sm text-[#204C49]',
+                                            colorClassMap[entry.row.color],
+                                            colorBorderMap[entry.row.color],
+                                            entry.row.isInProgress ? 'animate-pulse' : ''
+                                        )}
+                                        style={{
+                                            left: `${leftPercent}%`,
+                                            width: `${Math.min(
+                                                widthPercent,
+                                                100 - leftPercent
+                                            )}%`,
+                                        }}
+                                    >
+                                        {entry.row.label}
+                                        {entry.row.isInProgress ? ' (recording)' : ''}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
                 </div>
             </div>
 

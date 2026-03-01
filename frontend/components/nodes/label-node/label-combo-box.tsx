@@ -28,7 +28,7 @@ interface ComboBoxProps {
     latestBackendTimestamp: string | null;
 }
 
-const colorClassMap: Record<LabelColor, string> = {
+export const colorClassMap: Record<LabelColor, string> = {
     'teal-700': 'bg-[#2E7B75]',
     'teal-500': 'bg-[#6CAFA4]',
     'teal-300': 'bg-[#98CDBF]',
