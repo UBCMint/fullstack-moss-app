@@ -4,6 +4,7 @@ import React from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import ComboBox, { LabelColor } from './label-combo-box';
+import { TimelineLabelRow } from './label-timeline-panel';
 
 interface LabelNodeProps {
     id?: string;
@@ -12,32 +13,38 @@ interface LabelNodeProps {
 type LabelType = 'event-based';
 
 interface LabeledMoment {
+    id: string;
     label: string;
     color: LabelColor;
     labelType: LabelType;
     startTimestamp: string;
     endTimestamp: string;
+    source: 'Trigger';
 }
 
 const EEG_DATA_POST_ENDPOINT =
     process.env.NEXT_PUBLIC_EEGDATA_POST_URL ??
     'http://127.0.0.1:9000/api/eeg-data';
-const EEG_DATA_GET_ENDPOINT =
-    process.env.NEXT_PUBLIC_EEGDATA_GET_URL ??
-    'http://127.0.0.1:9000/api/eeg-data';
 
 export default function LabelNode({ id }: LabelNodeProps) {
     const [isConnected, setIsConnected] = React.useState(false);
     const [isTriggerActive, setIsTriggerActive] = React.useState(false);
+    const [isExpanded, setIsExpanded] = React.useState(false);
     const [isLabelPopupOpen, setIsLabelPopupOpen] = React.useState(false);
     const [labelInputValue, setLabelInputValue] = React.useState('');
-    const [selectedColor, setSelectedColor] = React.useState<LabelColor>('teal-700'); // TODO: premade?
-    const [latestBackendTimestamp, setLatestBackendTimestamp] = React.useState<string | null>(null);
-    const [pendingStartTimestamp, setPendingStartTimestamp] = React.useState<string | null>(null);
+    const [selectedColor, setSelectedColor] = React.useState<LabelColor>('teal-700');
+    const [sessionStartTimestamp, setSessionStartTimestamp] = React.useState<string | null>(null);
+    const [latestBackendTimestamp, setLatestBackendTimestamp] = React.useState<
+        string | null
+    >(null);
+    const [activeStartTimestamp, setActiveStartTimestamp] = React.useState<
+        string | null
+    >(null);
     const [pendingEndTimestamp, setPendingEndTimestamp] = React.useState<string | null>(null);
     const [labeledMoments, setLabeledMoments] = React.useState<LabeledMoment[]>([]);
     const labelsRef = React.useRef<LabeledMoment[]>([]);
     const previousStreamStateRef = React.useRef(false);
+    const momentCounterRef = React.useRef(0);
 
     const { dataStreaming } = useGlobalContext();
 
@@ -104,7 +111,6 @@ export default function LabelNode({ id }: LabelNodeProps) {
         };
     }, [checkConnectionStatus]);
 
-    // TODO: this isn't working rn, start of ?
     React.useEffect(() => {
         labelsRef.current = labeledMoments;
     }, [labeledMoments]);
@@ -114,6 +120,9 @@ export default function LabelNode({ id }: LabelNodeProps) {
             const customEvent = event as CustomEvent<{ latestTimestamp?: string | null }>;
             const nextTimestamp = customEvent.detail?.latestTimestamp;
             if (nextTimestamp) {
+                if (!sessionStartTimestamp) {
+                    setSessionStartTimestamp(nextTimestamp);
+                }
                 setLatestBackendTimestamp(nextTimestamp);
             }
         };
@@ -122,7 +131,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
         return () => {
             window.removeEventListener('eeg-data-packet', handlePacket as EventListener);
         };
-    }, []);
+    }, [sessionStartTimestamp]);
 
     const postLabelsToApi = React.useCallback(async () => {
         const labelsToPost = labelsRef.current;
@@ -167,15 +176,27 @@ export default function LabelNode({ id }: LabelNodeProps) {
 
     React.useEffect(() => {
         const wasStreaming = previousStreamStateRef.current;
+        const streamJustStarted = !wasStreaming && dataStreaming;
         const streamJustStopped = wasStreaming && !dataStreaming;
 
+        if (streamJustStarted) {
+            setSessionStartTimestamp(null);
+            setLatestBackendTimestamp(null);
+        }
+
         if (streamJustStopped) {
+            if (isTriggerActive) {
+                setIsTriggerActive(false);
+                setActiveStartTimestamp(null);
+                setPendingEndTimestamp(null);
+                setIsLabelPopupOpen(false);
+                setLabelInputValue('');
+            }
             void postLabelsToApi();
         }
 
         previousStreamStateRef.current = dataStreaming;
-    }, [dataStreaming, postLabelsToApi]);
-    // TODO: end of ?
+    }, [dataStreaming, isTriggerActive, postLabelsToApi]);
 
     const handleTriggerClick = () => {
         if (!dataStreaming) {
@@ -189,7 +210,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 return;
             }
 
-            setPendingStartTimestamp(latestBackendTimestamp);
+            setActiveStartTimestamp(latestBackendTimestamp);
             setPendingEndTimestamp(null);
             setIsTriggerActive(true);
             return;
@@ -207,65 +228,74 @@ export default function LabelNode({ id }: LabelNodeProps) {
 
     const handleCloseLabelPopup = () => {
         setIsLabelPopupOpen(false);
-        setLabelInputValue(''); // TODO: is this savin right?
-        setPendingStartTimestamp(null);
+        setLabelInputValue('');
+        setActiveStartTimestamp(null);
         setPendingEndTimestamp(null);
         setIsTriggerActive(false);
     };
 
     const handleConfirmLabel = () => {
-        const sanitizedLabel = labelInputValue.trim();
-        if (!sanitizedLabel) {
-            return;
-        }
-
-        if (!pendingStartTimestamp || !pendingEndTimestamp) {
+        if (!activeStartTimestamp || !pendingEndTimestamp) {
             console.warn('Missing backend timestamps for labeled moment.');
             return;
         }
 
+        momentCounterRef.current += 1;
+
         const newLabeledMoment: LabeledMoment = {
-            label: sanitizedLabel,
+            id: `moment-${momentCounterRef.current}`,
+            label: labelInputValue.trim() || 'Untitled',
             color: selectedColor,
             labelType,
-            startTimestamp: pendingStartTimestamp,
+            startTimestamp: activeStartTimestamp,
             endTimestamp: pendingEndTimestamp,
+            source: 'Trigger',
         };
 
         setLabeledMoments((prev) => [...prev, newLabeledMoment]);
         setIsLabelPopupOpen(false);
         setLabelInputValue('');
-        setPendingStartTimestamp(null);
+        setActiveStartTimestamp(null);
         setPendingEndTimestamp(null);
     };
 
-    // TODO: idk
-    const handlePreviewClick = async () => {
-        console.log('clicked preview');
-
-        const latestLabel = labelsRef.current[labelsRef.current.length - 1];
-        if (!latestLabel) {
-            console.warn('No completed labels available for preview.');
-            return;
-        }
-
-        const query = new URLSearchParams({
-            label: latestLabel.label,
-            startTimestamp: latestLabel.startTimestamp,
-            endTimestamp: latestLabel.endTimestamp,
-        });
-
-        const url = `${EEG_DATA_GET_ENDPOINT}?${query.toString()}`;
-        console.log('GET EEGData requested from:', url);
-
-        try {
-            const response = await fetch(url, { method: 'GET' });
-            console.log('GET EEGData response status:', response.status);
-        } catch (error) {
-            console.error('GET EEGData request failed:', error);
-        }
+    const handlePreviewOpen = () => {
+        setIsExpanded(true);
     };
-    // end ?
+
+    const handleExpandedClose = () => {
+        setIsExpanded(false);
+    };
+
+    const handleGraphViewClick = () => {
+        console.log('clicked graph view');
+    };
+
+    const timelineRows = React.useMemo<TimelineLabelRow[]>(() => {
+        const completedRows: TimelineLabelRow[] = labeledMoments.map((moment) => ({
+            id: moment.id,
+            label: moment.label,
+            color: moment.color,
+            startTimestamp: moment.startTimestamp,
+            endTimestamp: moment.endTimestamp,
+            source: moment.source,
+            isInProgress: false,
+        }));
+
+        if (isTriggerActive && activeStartTimestamp) {
+            completedRows.push({
+                id: 'active-label-row',
+                label: labelInputValue.trim() || 'Untitled',
+                color: selectedColor,
+                startTimestamp: activeStartTimestamp,
+                endTimestamp: null,
+                source: 'Trigger',
+                isInProgress: true,
+            });
+        }
+
+        return completedRows;
+    }, [activeStartTimestamp, isTriggerActive, labelInputValue, labeledMoments, selectedColor]);
 
     return (
         <div className="relative">
@@ -314,7 +344,10 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 isDataStreamOn={dataStreaming}
                 isTriggerActive={isTriggerActive}
                 onTriggerClick={handleTriggerClick}
-                onPreviewClick={handlePreviewClick}
+                onPreviewOpen={handlePreviewOpen}
+                isExpanded={isExpanded}
+                onExpandedClose={handleExpandedClose}
+                onGraphViewClick={handleGraphViewClick}
                 isLabelPopupOpen={isLabelPopupOpen}
                 labelInputValue={labelInputValue}
                 selectedColor={selectedColor}
@@ -322,7 +355,9 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 onColorSelect={setSelectedColor}
                 onConfirmLabel={handleConfirmLabel}
                 onCloseLabelPopup={handleCloseLabelPopup}
-                isConfirmDisabled={!labelInputValue.trim()}
+                timelineRows={timelineRows}
+                sessionStartTimestamp={sessionStartTimestamp}
+                latestBackendTimestamp={latestBackendTimestamp}
             />
         </div>
     );

@@ -1,6 +1,9 @@
 
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import LabelTimelinePanel, {
+    TimelineLabelRow,
+} from './label-timeline-panel';
 
 export type LabelColor = 'teal-700' | 'teal-500' | 'teal-300' | 'mint-100';
 
@@ -9,7 +12,10 @@ interface ComboBoxProps {
     isDataStreamOn?: boolean;
     isTriggerActive: boolean;
     onTriggerClick: () => void;
-    onPreviewClick: () => void;
+    onPreviewOpen: () => void;
+    isExpanded: boolean;
+    onExpandedClose: () => void;
+    onGraphViewClick: () => void;
     isLabelPopupOpen: boolean;
     labelInputValue: string;
     selectedColor: LabelColor;
@@ -17,7 +23,9 @@ interface ComboBoxProps {
     onColorSelect: (color: LabelColor) => void;
     onConfirmLabel: () => void;
     onCloseLabelPopup: () => void;
-    isConfirmDisabled: boolean;
+    timelineRows: TimelineLabelRow[];
+    sessionStartTimestamp: string | null;
+    latestBackendTimestamp: string | null;
 }
 
 const colorClassMap: Record<LabelColor, string> = {
@@ -32,7 +40,10 @@ export default function ComboBox({
     isDataStreamOn = false,
     isTriggerActive,
     onTriggerClick,
-    onPreviewClick,
+    onPreviewOpen,
+    isExpanded,
+    onExpandedClose,
+    onGraphViewClick,
     isLabelPopupOpen,
     labelInputValue,
     selectedColor,
@@ -40,7 +51,9 @@ export default function ComboBox({
     onColorSelect,
     onConfirmLabel,
     onCloseLabelPopup,
-    isConfirmDisabled,
+    timelineRows,
+    sessionStartTimestamp,
+    latestBackendTimestamp,
 }: ComboBoxProps) {
     return (
         <div
@@ -49,7 +62,7 @@ export default function ComboBox({
             )}
             style={{
                 width: 'fit-content',
-                minWidth: '396px',
+                minWidth: isExpanded ? '760px' : '396px',
             }}
         >
             <div className="w-full h-[70px] px-4 flex items-center justify-between transition-colors">
@@ -95,10 +108,10 @@ export default function ComboBox({
                 <div className="flex items-center gap-3">
                     <button
                         className={cn(
-                            'mt-1 text-lg px-3 py-1 rounded-md border border-[#2E7B75] transition-colors',
+                            'mt-1 text-lg px-3 py-1 rounded-md border transition-colors',
                             isTriggerActive
-                                ? 'bg-white text-[#2E7B75]'
-                                : 'bg-[#2E7B75] text-white'
+                                ? 'bg-red-500 text-white border-red-500'
+                                : 'bg-[#2E7B75] text-white border-[#2E7B75]'
                         )}
                         onClick={onTriggerClick}
                     >
@@ -107,7 +120,7 @@ export default function ComboBox({
 
                     <button
                         className="mt-1 text-lg px-2 py-1 rounded-md text-black hover:text-[#2E7B75] transition-colors"
-                        onClick={onPreviewClick}
+                        onClick={onPreviewOpen}
                     >
                         Preview ↗
                     </button>
@@ -161,20 +174,23 @@ export default function ComboBox({
 
                     <div className="mt-3 flex justify-end">
                         <button
-                            className={cn(
-                                'rounded-md px-3 py-1 text-sm transition-colors',
-                                isConfirmDisabled
-                                    ? 'bg-[#D3D3D3] text-white cursor-not-allowed'
-                                    : 'bg-[#2E7B75] text-white hover:opacity-90'
-                            )}
+                            className="rounded-md px-3 py-1 text-sm transition-colors bg-[#2E7B75] text-white hover:opacity-90"
                             onClick={onConfirmLabel}
-                            disabled={isConfirmDisabled}
                         >
                             Confirm
                         </button>
                     </div>
                 </div>
             )}
+
+            <LabelTimelinePanel
+                isExpanded={isExpanded}
+                rows={timelineRows}
+                sessionStartTimestamp={sessionStartTimestamp}
+                latestBackendTimestamp={latestBackendTimestamp}
+                onClose={onExpandedClose}
+                onGraphViewClick={onGraphViewClick}
+            />
         </div>
     );
 }
