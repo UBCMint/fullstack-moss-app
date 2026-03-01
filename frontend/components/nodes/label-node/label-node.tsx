@@ -10,13 +10,10 @@ interface LabelNodeProps {
     id?: string;
 }
 
-type LabelType = 'event-based';
-
 interface LabeledMoment {
     id: string;
     label: string;
     color: LabelColor;
-    labelType: LabelType;
     startTimestamp: string;
     endTimestamp: string;
     source: 'Trigger';
@@ -25,6 +22,39 @@ interface LabeledMoment {
 const EEG_DATA_POST_ENDPOINT =
     process.env.NEXT_PUBLIC_EEGDATA_POST_URL ??
     'http://127.0.0.1:9000/api/eeg-data';
+
+const normalizeTimestampToIso = (value: unknown): string | null => {
+    if (value == null) return null;
+
+    if (typeof value === 'number') {
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+
+        if (/^\d+$/.test(trimmed)) {
+            const numeric = Number(trimmed);
+            if (!Number.isNaN(numeric)) {
+                const fromEpoch = new Date(numeric);
+                if (!Number.isNaN(fromEpoch.getTime())) {
+                    return fromEpoch.toISOString();
+                }
+            }
+        }
+
+        const parsed = Date.parse(trimmed);
+        return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
+    }
+
+    if (value instanceof Date) {
+        return Number.isNaN(value.getTime()) ? null : value.toISOString();
+    }
+
+    return null;
+};
 
 export default function LabelNode({ id }: LabelNodeProps) {
     const [isConnected, setIsConnected] = React.useState(false);
@@ -49,9 +79,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const { dataStreaming } = useGlobalContext();
 
     const reactFlowInstance = useReactFlow();
-    const labelType: LabelType = 'event-based';
 
-    // same as other nodes, copied from filter-node.tsx
     const checkConnectionStatus = React.useCallback(() => {
         try {
             const edges = reactFlowInstance.getEdges();
@@ -91,18 +119,15 @@ export default function LabelNode({ id }: LabelNodeProps) {
         }
     }, [id, reactFlowInstance]);
 
-    // Check connection status on mount and when edges might change - also from filter-node.tsx
     React.useEffect(() => {
         checkConnectionStatus();
         
-        // Listen for custom edge change events
         const handleEdgeChange = () => {
             checkConnectionStatus();
         };
         
         window.addEventListener('reactflow-edges-changed', handleEdgeChange);
         
-        // Also set up periodic check as backup
         const interval = setInterval(checkConnectionStatus, 1000);
         
         return () => {
@@ -111,7 +136,6 @@ export default function LabelNode({ id }: LabelNodeProps) {
         };
     }, [checkConnectionStatus]);
 
-    // TODO: this isn't working rn, start of ?
     React.useEffect(() => {
         labelsRef.current = labeledMoments;
     }, [labeledMoments]);
@@ -119,13 +143,11 @@ export default function LabelNode({ id }: LabelNodeProps) {
     React.useEffect(() => {
         const handlePacket = (event: Event) => {
             const customEvent = event as CustomEvent<{ latestTimestamp?: string | null }>;
-            //const nextTimestamp = customEvent.detail?.latestTimestamp;
-            // TODO: add current timestamp without using backend
-            const nextTimestamp = new Date().toISOString();
+            const nextTimestamp = normalizeTimestampToIso(
+                customEvent.detail?.latestTimestamp
+            );
             if (nextTimestamp) {
-                if (!sessionStartTimestamp) {
-                    setSessionStartTimestamp(nextTimestamp);
-                }
+                setSessionStartTimestamp((previousValue) => previousValue ?? nextTimestamp);
                 setLatestBackendTimestamp(nextTimestamp);
             }
         };
@@ -134,17 +156,32 @@ export default function LabelNode({ id }: LabelNodeProps) {
         return () => {
             window.removeEventListener('eeg-data-packet', handlePacket as EventListener);
         };
-    }, [sessionStartTimestamp]);
+    }, []);
 
-    // currently not working
+    React.useEffect(() => {
+        if (!dataStreaming || latestBackendTimestamp) {
+            return;
+        }
+
+        const warnTimeout = setTimeout(() => {
+            if (!latestBackendTimestamp) {
+                console.warn(
+                    'Label node has no EEG timestamp events yet. Ensure at least one node using useWebsocket is mounted and active.'
+                );
+            }
+        }, 2500);
+
+        return () => clearTimeout(warnTimeout);
+    }, [dataStreaming, latestBackendTimestamp]);
+
     const postLabelsToApi = React.useCallback(async () => {
         const labelsToPost = labelsRef.current;
         if (labelsToPost.length === 0) {
             return;
         }
-
+        /*
         const payload = {
-            labelType,
+            labelType: 'event-based',
             labels: labelsToPost,
         };
 
@@ -164,8 +201,8 @@ export default function LabelNode({ id }: LabelNodeProps) {
             }
         } catch (error) {
             console.error('POST EEGData request failed:', error);
-        }
-    }, [labelType]);
+        }*/
+    }, []);
 
     React.useEffect(() => {
         const handleWebSocketClosed = () => {
@@ -250,7 +287,6 @@ export default function LabelNode({ id }: LabelNodeProps) {
             id: `moment-${momentCounterRef.current}`,
             label: labelInputValue.trim() || 'Untitled',
             color: selectedColor,
-            labelType,
             startTimestamp: activeStartTimestamp,
             endTimestamp: pendingEndTimestamp,
             source: 'Trigger',
