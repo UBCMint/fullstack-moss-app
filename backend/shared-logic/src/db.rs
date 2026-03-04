@@ -407,6 +407,27 @@ pub async fn get_eeg_data_by_range(client: &DbClient, session_id: i32, start: Da
     Ok(data)
 }
 
+/// Get time labels for a given session within a time range.
+///
+/// Returns all rows from time_labels where session_id matches and timestamp is between
+/// start and end (inclusive), ordered by timestamp.
+pub async fn get_time_labels_by_range(client: &DbClient, session_id: i32, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<TimeLabel>, Error> {
+    info!("Retrieving time labels for session {} from {} to {}", session_id, start, end);
+
+    let labels = sqlx::query_as!(
+        TimeLabel,
+        "SELECT id, session_id, timestamp, label FROM time_labels WHERE session_id = $1 AND timestamp >= $2 AND timestamp <= $3 ORDER BY timestamp",
+        session_id,
+        start,
+        end,
+    )
+    .fetch_all(&**client)
+    .await?;
+
+    info!("Retrieved {} time labels.", labels.len());
+    Ok(labels)
+}
+
 /// Export the EEG data for a given session ID and time range as a CSV string.
 ///
 /// Returns the CSV data on success.
