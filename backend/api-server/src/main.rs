@@ -24,8 +24,8 @@ use axum::http::{HeaderMap, HeaderValue, header};
 use axum::response::IntoResponse;
 
 // shared logic library
-use shared_logic::db::{initialize_connection, DbClient, get_eeg_data_by_range, get_earliest_eeg_timestamp};
-use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState, NewTimeLabel, EegDataRow, EegDataQuery};
+use shared_logic::db::{initialize_connection, DbClient, get_eeg_data_by_range, get_earliest_eeg_timestamp, get_time_labels_by_range};
+use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState, TimeLabel, NewTimeLabel, EegDataRow, EegDataQuery};
 
 // Argon2 imports
 use argon2::{
