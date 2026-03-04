@@ -24,7 +24,7 @@ use axum::http::{HeaderMap, HeaderValue, header};
 use axum::response::IntoResponse;
 
 // shared logic library
-use shared_logic::db::{initialize_connection, DbClient};
+use shared_logic::db::{initialize_connection, DbClient, get_eeg_data_by_range, get_earliest_eeg_timestamp};
 use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState, NewTimeLabel, EegDataRow, EegDataQuery};
 
 // Argon2 imports
@@ -290,7 +290,7 @@ async fn export_eeg_data(
         Some(t) => t,
         None => {
             // we call the helper function in db.rs to get the earliest timestamp
-            match shared_logic::db::get_earliest_eeg_timestamp(&app_state.db_client, session_id).await {
+            match get_earliest_eeg_timestamp(&app_state.db_client, session_id).await {
                 Ok(Some(t)) => t,
                 Ok(None) => return Err((StatusCode::NOT_FOUND, format!("No EEG data found for session {}", session_id))),
                 Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get earliest EEG timestamp: {}", e))),
@@ -363,7 +363,7 @@ async fn get_eeg_data(
 ) -> Result<Json<Vec<EegDataRow>>, (StatusCode, String)> {
     info!("Received request to get EEG data for session {} from {} to {}", session_id, params.start, params.end);
 
-    match shared_logic::db::get_eeg_data_by_range(&app_state.db_client, session_id, params.start, params.end).await {
+    match get_eeg_data_by_range(&app_state.db_client, session_id, params.start, params.end).await {
         Ok(rows) => {
             info!("Retrieved {} EEG data rows", rows.len());
             Ok(Json(rows))
