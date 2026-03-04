@@ -302,6 +302,27 @@ async fn store_time_labels(
     }
 }
 
+// Handler for GET /api/sessions/{session_id}/time-label
+// Returns time labels within a given time range (passed as ?start=...&end=... query params).
+async fn get_time_labels(
+    State(app_state): State<AppState>,
+    Path(session_id): Path<i32>,
+    Query(params): Query<EegDataQuery>,
+) -> Result<Json<Vec<TimeLabel>>, (StatusCode, String)> {
+    info!("Received request to get time labels for session {} from {} to {}", session_id, params.start, params.end);
+
+    match get_time_labels_by_range(&app_state.db_client, session_id, params.start, params.end).await {
+        Ok(labels) => {
+            info!("Retrieved {} time labels", labels.len());
+            Ok(Json(labels))
+        }
+        Err(e) => {
+            error!("Failed to get time labels: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get time labels: {}", e)))
+        }
+    }
+}
+
 // Handler for GET /api/sessions/{session_id}/eeg-data
 // Returns EEG data rows within a given time range (passed as ?start=...&end=... query params).
 async fn get_eeg_data(
@@ -414,6 +435,7 @@ async fn main() {
         .route("/api/sessions/:session_id/frontend-state", get(get_frontend_state))
 
         .route("/api/sessions/:session_id/time-label", post(store_time_labels))
+        .route("/api/sessions/:session_id/time-label", get(get_time_labels))
         .route("/api/sessions/:session_id/eeg-data", get(get_eeg_data))
         .route("/api/sessions/:session_id/eeg_data/export", post(export_eeg_data))
 
