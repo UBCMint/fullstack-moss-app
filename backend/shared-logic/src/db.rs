@@ -7,7 +7,7 @@ use tokio::time::{self, Duration};
 use log::{info, error, warn};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
-use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState, NewTimeLabel, EegDataRow};
+use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState, TimeLabel, NewTimeLabel, EegDataRow};
 use crate::{lsl::EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
