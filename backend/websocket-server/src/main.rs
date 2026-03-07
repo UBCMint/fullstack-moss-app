@@ -16,6 +16,13 @@ use shared_logic::lsl::{ProcessingConfig}; // get ProcessingConfig from lsl.rs
 use dotenvy::dotenv;
 use log::{info, error};
 use serde_json; // used to parse ProcessingConfig from JSON sent by frontend
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+struct WebSocketInitMessage{
+    session_id: i32,
+    processing_config: ProcessingConfig,
+}
 
 
 #[tokio::main]
@@ -88,40 +95,45 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
     // setup registration for signal processing configuration
     let signal_config = read.next().await;
 
-    // we have the ProcessingConfig struct
-    // check if we received a message (two layers of unwrapping needed)
-    let processing_config: ProcessingConfig = match signal_config {
-
-        Some(Ok(config_json)) => {
-
-            // here, we parse the json into a signal config struct using serde_json
-            let config_text = config_json.to_text().unwrap();
-
-            match serde_json::from_str(config_text) {
-                Ok(config) => config,
+    // we have the WebSocketInitMessage struct, with a session id and processing config
+    // check if we received a message (some unwrapping needed)
+    let init_message: WebSocketInitMessage = match signal_config {
+        Some(Ok(msg)) => {
+            let text = match msg.to_text() {
+                Ok(t) => t,
                 Err(e) => {
-                    error!("Error parsing signal configuration JSON: {}", e);
+                    error!("Failed to convert init message to text: {}", e);
+                    return;
+                }
+            };
+
+            match serde_json::from_str::<WebSocketInitMessage>(text) {
+                Ok(init_msg) => init_msg,
+                Err(e) => {
+                    error!("Failed to parse init message JSON: {}", e);
                     return;
                 }
             }
-
         }
 
         Some(Err(e)) => {
-            error!("Error receiving signal configuration: {}", e);
+            error!("Error receiving initialization message: {}", e);
             return;
         }
 
         None => {
-            error!("No signal configuration received from client. Closing connection.");
+            error!("No initialization message received from client. Closing connection.");
             return;
         }
     };
 
+    let session_id = init_message.session_id;
+    let processing_config = init_message.processing_config;
+
     // spawns the broadcast task
     let mut broadcast = Some(tokio::spawn(async move {
         // pass ProcessingConfig into broadcast so it reaches receive_eeg
-        start_broadcast(write_clone, cancel_clone, processing_config).await;
+        start_broadcast(write_clone, cancel_clone, processing_config, session_id).await;
     }));
 
 
