@@ -21,6 +21,27 @@ export default function SettingsBar() {
     const [leftTimerSeconds, setLeftTimerSeconds] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+    const [sessionId, setSessionId] = useState<string | null>(null);
+
+    useEffect(() => {
+        async function fetchSessions() {
+            try {
+                const res = await fetch('/api/sessions');
+                const sessions = await res.json();
+
+                console.log('sessions response:', sessions);
+    
+                if (sessions.length > 0) {
+                    setSessionId(sessions[0].id);
+                }
+            } catch (err) {
+                console.error('Failed to fetch sessions', err);
+            }
+        }
+    
+        fetchSessions();
+    }, []);
+    
     // useEffect(() => {
     //     console.log('dataStreaming:', dataStreaming);
     // });
@@ -88,13 +109,12 @@ export default function SettingsBar() {
             {/* System Control Panel, Filters, Settings */}
             <Menubar>
                 <MenubarMenu>
-                    <MenubarTrigger>System Control Panel</MenubarTrigger>
+                    <MenubarTrigger>
+                        Session {sessionId ? sessionId.slice(0, 8) : 'ID'}
+                    </MenubarTrigger>
                 </MenubarMenu>
                 <MenubarMenu>
-                    <MenubarTrigger>Filters</MenubarTrigger>
-                </MenubarMenu>
-                <MenubarMenu>
-                    <MenubarTrigger>Settings</MenubarTrigger>
+                    <MenubarTrigger>Tutorials</MenubarTrigger>
                 </MenubarMenu>
             </Menubar>
 
