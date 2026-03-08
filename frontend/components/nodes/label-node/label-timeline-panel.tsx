@@ -1,6 +1,14 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { colorClassMap, LabelColor } from './label-combo-box';
+import {
+    CartesianGrid,
+    Line,
+    LineChart,
+    ResponsiveContainer,
+    XAxis,
+    YAxis,
+} from 'recharts';
 
 export type TimelineRowSource = 'Trigger' | 'Manual' | 'Auto';
 
@@ -14,6 +22,15 @@ export interface TimelineLabelRow {
     isInProgress: boolean;
 }
 
+export interface LabelGraphPoint {
+    id: string;
+    time: string;
+    signal1: number;
+    signal2: number;
+    signal3: number;
+    signal4: number;
+}
+
 export interface LabelTimelinePanelProps {
     isExpanded: boolean;
     rows: TimelineLabelRow[];
@@ -23,6 +40,9 @@ export interface LabelTimelinePanelProps {
     isDataStreamOn: boolean;
     onClose: () => void;
     onGraphViewClick?: () => void;
+    onTimelineViewClick?: () => void;
+    viewMode: 'timeline' | 'graph';
+    graphData: LabelGraphPoint[];
 }
 
 interface PackedTimelineEntry {
@@ -80,8 +100,11 @@ export default function LabelTimelinePanel({
     latestBackendTimestamp,
     onClose,
     onGraphViewClick,
+    onTimelineViewClick,
+    viewMode,
     isConnected,
     isDataStreamOn,
+    graphData,
 }: LabelTimelinePanelProps) {
     if (!isExpanded) {
         return null;
@@ -220,6 +243,35 @@ export default function LabelTimelinePanel({
         return groups;
     }, [packedEntries]);
 
+    const [highlightedSignals, setHighlightedSignals] = React.useState<
+        Array<'signal1' | 'signal2' | 'signal3' | 'signal4'>
+    >(['signal1']);
+
+    const signalConfigs: Array<{
+        key: 'signal1' | 'signal2' | 'signal3' | 'signal4';
+        label: string;
+        color: string;
+    }> = [
+        { key: 'signal1', label: 'Fp1', color: '#2E7B75' },
+        { key: 'signal2', label: 'Fp2', color: '#6CAFA4' },
+        { key: 'signal3', label: 'Cz', color: '#98CDBF' },
+        { key: 'signal4', label: 'Pz', color: '#D6E6D4' },
+    ];
+
+    const toggleSignal = (
+        signalKey: 'signal1' | 'signal2' | 'signal3' | 'signal4'
+    ) => {
+        setHighlightedSignals((previous) => {
+            if (previous.includes(signalKey)) {
+                if (previous.length === 1) {
+                    return previous;
+                }
+                return previous.filter((signal) => signal !== signalKey);
+            }
+            return [...previous, signalKey];
+        });
+    };
+
     return (
         <div className="mx-4 mb-4 rounded-[24px] border border-[#D3D3D3] bg-[#F8F9F8] p-4">
             <div className="mb-4 flex items-center justify-between">
@@ -242,9 +294,13 @@ export default function LabelTimelinePanel({
                 <div className="flex items-center gap-2">
                     <button
                         className="nodrag nopan rounded-md border border-[#D3D3D3] bg-white px-3 py-1 text-sm text-[#7A7A7A] hover:bg-[#F2F2F2] transition-colors"
-                        onClick={onGraphViewClick}
+                        onClick={
+                            viewMode === 'graph'
+                                ? onTimelineViewClick
+                                : onGraphViewClick
+                        }
                     >
-                        Graph View
+                        {viewMode === 'graph' ? 'Timeline View' : 'Graph View'}
                     </button>
                     <button
                         className="nodrag nopan text-[#BFBFBF] hover:text-[#8F8F8F] text-xl leading-none transition-colors"
@@ -256,7 +312,108 @@ export default function LabelTimelinePanel({
                 </div>
             </div>
 
-            <div className="mb-5 rounded-[16px] border border-[#D3D3D3] bg-white p-3">
+            {viewMode === 'graph' ? (
+                <div className="mb-5 rounded-[16px] border border-[#D3D3D3] bg-white p-3">
+                    <div className="grid grid-cols-[1fr_140px] gap-4">
+                        <div className="h-[260px] rounded-[12px] border border-[#E2E2E2] bg-white p-2">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={graphData}>
+                                    <CartesianGrid
+                                        strokeDasharray="3 3"
+                                        stroke="#E7E7E7"
+                                    />
+                                    <XAxis
+                                        dataKey="time"
+                                        tickFormatter={(value) =>
+                                            formatAbsoluteTime(
+                                                parseTimestampMs(String(value)) ??
+                                                    Date.now()
+                                            )
+                                        }
+                                        tick={{ fontSize: 11, fill: '#7A7A7A' }}
+                                    />
+                                    <YAxis
+                                        tick={{ fontSize: 11, fill: '#7A7A7A' }}
+                                    />
+                                    {signalConfigs.map((signal) => (
+                                        <Line
+                                            key={signal.key}
+                                            dataKey={signal.key}
+                                            type="monotone"
+                                            isAnimationActive={false}
+                                            dot={false}
+                                            stroke={
+                                                highlightedSignals.includes(
+                                                    signal.key
+                                                )
+                                                    ? signal.color
+                                                    : '#D3D3D3'
+                                            }
+                                            strokeWidth={
+                                                highlightedSignals.includes(
+                                                    signal.key
+                                                )
+                                                    ? 2
+                                                    : 1.2
+                                            }
+                                        />
+                                    ))}
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <h4 className="mb-2 text-sm font-semibold text-black">
+                                    Highlight
+                                </h4>
+                                <div className="space-y-2">
+                                    {signalConfigs.map((signal) => (
+                                        <button
+                                            key={signal.key}
+                                            className="nodrag nopan flex items-center gap-2 text-sm text-black"
+                                            onClick={() =>
+                                                toggleSignal(signal.key)
+                                            }
+                                        >
+                                            <span
+                                                className={cn(
+                                                    'h-3 w-3 rounded-sm border',
+                                                    highlightedSignals.includes(
+                                                        signal.key
+                                                    )
+                                                        ? 'border-[#2E7B75] bg-[#2E7B75]'
+                                                        : 'border-[#BFBFBF] bg-white'
+                                                )}
+                                            />
+                                            {signal.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <h4 className="mb-2 text-sm font-semibold text-black">
+                                    Events
+                                </h4>
+                                <div className="space-y-2">
+                                    {[...new Set(rows.map((row) => row.label))]
+                                        .slice(0, 4)
+                                        .map((label) => (
+                                            <button
+                                                key={label}
+                                                className="nodrag nopan w-full rounded-md border border-[#BFD9D7] px-2 py-1 text-left text-sm text-[#204C49] hover:bg-[#EEF3F2]"
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <div className="mb-5 rounded-[16px] border border-[#D3D3D3] bg-white p-3">
                 <div className="mb-3 relative h-6 border-b border-[#D3D3D3]">
                     {ticks.map((tick) => (
                         <div
@@ -321,9 +478,11 @@ export default function LabelTimelinePanel({
                         </div>
                     ))}
                 </div>
-            </div>
+                </div>
+            )}
 
-            <div className="rounded-[16px] border border-[#D3D3D3] bg-white p-3">
+            {viewMode === 'timeline' && (
+                <div className="rounded-[16px] border border-[#D3D3D3] bg-white p-3">
                 <h3 className="mb-3 font-geist text-[25px] font-[550] leading-tight text-black">
                     Event Log
                 </h3>
@@ -383,7 +542,8 @@ export default function LabelTimelinePanel({
                         </tbody>
                     </table>
                 </div>
-            </div>
+                </div>
+            )}
         </div>
     );
 }
