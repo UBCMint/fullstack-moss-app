@@ -3,8 +3,9 @@
 import React from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
+import useWebsocket from '@/hooks/useWebsocket';
 import ComboBox, { LabelColor } from './label-combo-box';
-import { TimelineLabelRow } from './label-timeline-panel';
+import { LabelGraphPoint, TimelineLabelRow } from './label-timeline-panel';
 
 interface LabelNodeProps {
     id?: string;
@@ -28,6 +29,9 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const [isConnected, setIsConnected] = React.useState(false);
     const [isTriggerActive, setIsTriggerActive] = React.useState(false);
     const [isExpanded, setIsExpanded] = React.useState(false);
+    const [viewMode, setViewMode] = React.useState<'timeline' | 'graph'>(
+        'timeline'
+    );
     const [isLabelPopupOpen, setIsLabelPopupOpen] = React.useState(false);
     const [labelInputValue, setLabelInputValue] = React.useState('');
     const [selectedColor, setSelectedColor] = React.useState<LabelColor>('teal-700');
@@ -46,6 +50,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const momentCounterRef = React.useRef(0);
 
     const { dataStreaming } = useGlobalContext();
+    const { renderData } = useWebsocket(300, 15);
 
     const reactFlowInstance = useReactFlow();
 
@@ -249,14 +254,20 @@ export default function LabelNode({ id }: LabelNodeProps) {
 
     const handlePreviewOpen = () => {
         setIsExpanded(true);
+        setViewMode('timeline');
     };
 
     const handleExpandedClose = () => {
         setIsExpanded(false);
+        setViewMode('timeline');
     };
 
     const handleGraphViewClick = () => {
-        console.log('clicked graph view');
+        setViewMode('graph');
+    };
+
+    const handleTimelineViewClick = () => {
+        setViewMode('timeline');
     };
 
     const timelineRows = React.useMemo<TimelineLabelRow[]>(() => {
@@ -284,6 +295,31 @@ export default function LabelNode({ id }: LabelNodeProps) {
 
         return completedRows;
     }, [activeStartTimestamp, isTriggerActive, labelInputValue, labeledMoments, selectedColor]);
+
+    const graphData = React.useMemo<LabelGraphPoint[]>(() => {
+        return renderData
+            .map((item: any, index: number) => {
+                const signals: unknown = item?.signals;
+                const signalValues = Array.isArray(signals) ? signals : [];
+                const rawTime = item?.time;
+                const parsedTime = Number(rawTime);
+                const timeLabel = Number.isFinite(parsedTime)
+                    ? new Date(parsedTime).toISOString()
+                    : typeof rawTime === 'string'
+                    ? rawTime
+                    : new Date().toISOString();
+
+                return {
+                    id: `graph-point-${index}`,
+                    time: timeLabel,
+                    signal1: Number(signalValues[0] ?? 0),
+                    signal2: Number(signalValues[1] ?? 0),
+                    signal3: Number(signalValues[2] ?? 0),
+                    signal4: Number(signalValues[3] ?? 0),
+                };
+            })
+            .slice(-300);
+    }, [renderData]);
 
     return (
         <div className="relative">
@@ -336,6 +372,8 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 isExpanded={isExpanded}
                 onExpandedClose={handleExpandedClose}
                 onGraphViewClick={handleGraphViewClick}
+                onTimelineViewClick={handleTimelineViewClick}
+                viewMode={viewMode}
                 isLabelPopupOpen={isLabelPopupOpen}
                 labelInputValue={labelInputValue}
                 selectedColor={selectedColor}
@@ -344,6 +382,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 onConfirmLabel={handleConfirmLabel}
                 onCloseLabelPopup={handleCloseLabelPopup}
                 timelineRows={timelineRows}
+                graphData={graphData}
                 sessionStartTimestamp={sessionStartTimestamp}
                 latestBackendTimestamp={latestBackendTimestamp}
             />

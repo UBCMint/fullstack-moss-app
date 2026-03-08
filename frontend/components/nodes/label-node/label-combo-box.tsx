@@ -2,6 +2,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import LabelTimelinePanel, {
+    LabelGraphPoint,
     TimelineLabelRow,
 } from './label-timeline-panel';
 
@@ -16,6 +17,8 @@ interface ComboBoxProps {
     isExpanded: boolean;
     onExpandedClose: () => void;
     onGraphViewClick: () => void;
+    onTimelineViewClick: () => void;
+    viewMode: 'timeline' | 'graph';
     isLabelPopupOpen: boolean;
     labelInputValue: string;
     selectedColor: LabelColor;
@@ -24,6 +27,7 @@ interface ComboBoxProps {
     onConfirmLabel: () => void;
     onCloseLabelPopup: () => void;
     timelineRows: TimelineLabelRow[];
+    graphData: LabelGraphPoint[];
     sessionStartTimestamp: string | null;
     latestBackendTimestamp: string | null;
 }
@@ -44,6 +48,8 @@ export default function ComboBox({
     isExpanded,
     onExpandedClose,
     onGraphViewClick,
+    onTimelineViewClick,
+    viewMode,
     isLabelPopupOpen,
     labelInputValue,
     selectedColor,
@@ -52,6 +58,7 @@ export default function ComboBox({
     onConfirmLabel,
     onCloseLabelPopup,
     timelineRows,
+    graphData,
     sessionStartTimestamp,
     latestBackendTimestamp,
 }: ComboBoxProps) {
@@ -190,8 +197,11 @@ export default function ComboBox({
                 latestBackendTimestamp={latestBackendTimestamp}
                 onClose={onExpandedClose}
                 onGraphViewClick={onGraphViewClick}
+                onTimelineViewClick={onTimelineViewClick}
+                viewMode={viewMode}
                 isConnected={isConnected}
                 isDataStreamOn={isDataStreamOn}
+                graphData={graphData}
             />
         </div>
     );
