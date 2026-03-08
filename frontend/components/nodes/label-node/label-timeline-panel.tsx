@@ -45,24 +45,23 @@ const parseTimestampMs = (timestamp: string | null): number | null => {
     return Number.isNaN(value) ? null : value;
 };
 
-const formatRelativeTime = (ms: number): string => {
-    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${seconds
+const formatAbsoluteTime = (ms: number): string => {
+    const date = new Date(ms);
+    return `${date.getHours().toString().padStart(2, '0')}:${date
+        .getMinutes()
         .toString()
-        .padStart(2, '0')}`;
+        .padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}`;
 };
 
-const formatRelativeTimeWithMs = (ms: number): string => {
-    const clamped = Math.max(0, ms);
-    const totalSeconds = Math.floor(clamped / 1000);
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    const milliseconds = clamped % 1000;
-    return `${minutes.toString().padStart(2, '0')}:${seconds
+const formatAbsoluteTimeWithMs = (ms: number): string => {
+    const date = new Date(ms);
+    return `${date.getHours().toString().padStart(2, '0')}:${date
+        .getMinutes()
         .toString()
-        .padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
+        .padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}.${date
+        .getMilliseconds()
+        .toString()
+        .padStart(3, '0')}`;
 };
 
 const formatDuration = (ms: number | null): string => {
@@ -88,37 +87,56 @@ export default function LabelTimelinePanel({
         return null;
     }
 
-    const sessionStartMs = parseTimestampMs(sessionStartTimestamp);
     const latestMs = parseTimestampMs(latestBackendTimestamp);
+    const fallbackStartMs = parseTimestampMs(sessionStartTimestamp);
+
+    const axisStartMs = React.useMemo(() => {
+        const startCandidates = rows
+            .map((row) => parseTimestampMs(row.startTimestamp))
+            .filter((value): value is number => value !== null);
+
+        if (startCandidates.length > 0) {
+            return Math.min(...startCandidates);
+        }
+
+        if (fallbackStartMs !== null) {
+            return fallbackStartMs;
+        }
+
+        if (latestMs !== null) {
+            return latestMs - 60_000;
+        }
+
+        return Date.now() - 60_000;
+    }, [fallbackStartMs, latestMs, rows]);
 
     const axisEndMs = React.useMemo(() => {
         const endCandidates = rows
             .map((row) => parseTimestampMs(row.endTimestamp ?? latestBackendTimestamp))
             .filter((value): value is number => value !== null);
-        if (latestMs !== null) endCandidates.push(latestMs);
-        if (sessionStartMs === null || endCandidates.length === 0) {
-            return sessionStartMs !== null ? sessionStartMs + 60_000 : null;
-        }
-        const maxValue = Math.max(...endCandidates);
-        return Math.max(maxValue, sessionStartMs + 30_000);
-    }, [rows, latestBackendTimestamp, latestMs, sessionStartMs]);
 
-    const domainMs =
-        axisEndMs !== null && sessionStartMs !== null
-            ? Math.max(axisEndMs - sessionStartMs, 1)
-            : null;
+        if (latestMs !== null) endCandidates.push(latestMs);
+        if (endCandidates.length === 0) {
+            return axisStartMs + 60_000;
+        }
+
+        const maxValue = Math.max(...endCandidates);
+        return Math.max(maxValue, axisStartMs + 30_000);
+    }, [axisStartMs, rows, latestBackendTimestamp, latestMs]);
+
+    const domainMs = Math.max(axisEndMs - axisStartMs, 1);
 
     const ticks = React.useMemo(() => {
-        if (sessionStartMs === null || domainMs === null) return [];
         const tickCount = 6;
         return Array.from({ length: tickCount }, (_, index) => {
             const ratio = index / (tickCount - 1);
+            const absoluteMs = axisStartMs + Math.floor(domainMs * ratio);
             return {
                 ratio,
-                label: formatRelativeTime(Math.floor(domainMs * ratio)),
+                label: formatAbsoluteTime(absoluteMs),
             };
         });
-    }, [domainMs, sessionStartMs]);
+    }, [axisStartMs, domainMs]);
 
     const tableRows = [...rows].sort((a, b) => {
         const bStart = parseTimestampMs(b.startTimestamp) ?? 0;
@@ -223,13 +241,13 @@ export default function LabelTimelinePanel({
 
                 <div className="flex items-center gap-2">
                     <button
-                        className="rounded-md border border-[#D3D3D3] bg-white px-3 py-1 text-sm text-[#7A7A7A] hover:bg-[#F2F2F2] transition-colors"
+                        className="nodrag nopan rounded-md border border-[#D3D3D3] bg-white px-3 py-1 text-sm text-[#7A7A7A] hover:bg-[#F2F2F2] transition-colors"
                         onClick={onGraphViewClick}
                     >
                         Graph View
                     </button>
                     <button
-                        className="text-[#BFBFBF] hover:text-[#8F8F8F] text-xl leading-none transition-colors"
+                        className="nodrag nopan text-[#BFBFBF] hover:text-[#8F8F8F] text-xl leading-none transition-colors"
                         onClick={onClose}
                         aria-label="Close timeline panel"
                     >
@@ -264,16 +282,12 @@ export default function LabelTimelinePanel({
                             className="relative h-8 rounded-md bg-[#EEF3F2]"
                         >
                             {laneEntries.map((entry) => {
-                                if (sessionStartMs === null || domainMs === null) {
-                                    return null;
-                                }
-
                                 const startOffset = Math.max(
-                                    entry.startMs - sessionStartMs,
+                                    entry.startMs - axisStartMs,
                                     0
                                 );
                                 const endOffset = Math.max(
-                                    entry.endMs - sessionStartMs,
+                                    entry.endMs - axisStartMs,
                                     startOffset + 1
                                 );
                                 const leftPercent = (startOffset / domainMs) * 100;
@@ -345,16 +359,12 @@ export default function LabelTimelinePanel({
                                     startMs !== null && endMs !== null
                                         ? endMs - startMs
                                         : null;
-                                const relativeStart =
-                                    startMs !== null && sessionStartMs !== null
-                                        ? startMs - sessionStartMs
-                                        : null;
 
                                 return (
                                     <tr key={row.id} className="border-t border-[#EFEFEF]">
                                         <td className="px-3 py-2 text-[#5A5A5A]">
-                                            {relativeStart !== null
-                                                ? formatRelativeTimeWithMs(relativeStart)
+                                            {startMs !== null
+                                                ? formatAbsoluteTimeWithMs(startMs)
                                                 : '--:--'}
                                         </td>
                                         <td className="px-3 py-2 text-black">
