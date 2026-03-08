@@ -243,9 +243,8 @@ export default function LabelTimelinePanel({
         return groups;
     }, [packedEntries]);
 
-    const [highlightedSignals, setHighlightedSignals] = React.useState<
-        Array<'signal1' | 'signal2' | 'signal3' | 'signal4'>
-    >(['signal1']);
+    const [highlightedSignal, setHighlightedSignal] = React.useState<
+        'signal1' | 'signal2' | 'signal3' | 'signal4'>('signal1');
 
     const signalConfigs: Array<{
         key: 'signal1' | 'signal2' | 'signal3' | 'signal4';
@@ -261,15 +260,7 @@ export default function LabelTimelinePanel({
     const toggleSignal = (
         signalKey: 'signal1' | 'signal2' | 'signal3' | 'signal4'
     ) => {
-        setHighlightedSignals((previous) => {
-            if (previous.includes(signalKey)) {
-                if (previous.length === 1) {
-                    return previous;
-                }
-                return previous.filter((signal) => signal !== signalKey);
-            }
-            return [...previous, signalKey];
-        });
+        setHighlightedSignal(signalKey);
     };
 
     return (
@@ -315,7 +306,7 @@ export default function LabelTimelinePanel({
             {viewMode === 'graph' ? (
                 <div className="mb-5 rounded-[16px] border border-[#D3D3D3] bg-white p-3">
                     <div className="grid grid-cols-[1fr_140px] gap-4">
-                        <div className="h-[260px] rounded-[12px] border border-[#E2E2E2] bg-white p-2">
+                        <div className="h-[320px] rounded-[12px] border border-[#E2E2E2] bg-white p-2">
                             <ResponsiveContainer width="100%" height="100%">
                                 <LineChart data={graphData}>
                                     <CartesianGrid
@@ -335,7 +326,9 @@ export default function LabelTimelinePanel({
                                     <YAxis
                                         tick={{ fontSize: 11, fill: '#7A7A7A' }}
                                     />
-                                    {signalConfigs.map((signal) => (
+                                    {[...signalConfigs.filter((s) => s.key !== highlightedSignal),
+                                      ...signalConfigs.filter((s) => s.key === highlightedSignal),
+                                    ].map((signal) => (
                                         <Line
                                             key={signal.key}
                                             dataKey={signal.key}
@@ -343,16 +336,12 @@ export default function LabelTimelinePanel({
                                             isAnimationActive={false}
                                             dot={false}
                                             stroke={
-                                                highlightedSignals.includes(
-                                                    signal.key
-                                                )
-                                                    ? signal.color
-                                                    : '#D3D3D3'
+                                                highlightedSignal === signal.key
+                                                    ? '#FF0000'
+                                                    : '#D3D3D3' // red
                                             }
                                             strokeWidth={
-                                                highlightedSignals.includes(
-                                                    signal.key
-                                                )
+                                                highlightedSignal === signal.key
                                                     ? 2
                                                     : 1.2
                                             }
@@ -379,9 +368,7 @@ export default function LabelTimelinePanel({
                                             <span
                                                 className={cn(
                                                     'h-3 w-3 rounded-sm border',
-                                                    highlightedSignals.includes(
-                                                        signal.key
-                                                    )
+                                                    highlightedSignal === signal.key
                                                         ? 'border-[#2E7B75] bg-[#2E7B75]'
                                                         : 'border-[#BFBFBF] bg-white'
                                                 )}
@@ -396,17 +383,55 @@ export default function LabelTimelinePanel({
                                 <h4 className="mb-2 text-sm font-semibold text-black">
                                     Events
                                 </h4>
-                                <div className="space-y-2">
-                                    {[...new Set(rows.map((row) => row.label))]
-                                        .slice(0, 4)
-                                        .map((label) => (
-                                            <button
-                                                key={label}
-                                                className="nodrag nopan w-full rounded-md border border-[#BFD9D7] px-2 py-1 text-left text-sm text-[#204C49] hover:bg-[#EEF3F2]"
-                                            >
-                                                {label}
-                                            </button>
-                                        ))}
+                                <div className="max-h-[180px] space-y-2 overflow-y-auto pr-1">
+                                    {tableRows.length === 0 ? (
+                                        <div className="text-sm text-[#8A8A8A]">
+                                            No events yet.
+                                        </div>
+                                    ) : (
+                                        tableRows.map((row) => {
+                                            const startMs = parseTimestampMs(
+                                                row.startTimestamp
+                                            );
+                                            const isSelected =
+                                                //row.id === selectedGraphEventId;
+                                                false;
+
+                                            return (
+                                                <button
+                                                    key={row.id}
+                                                    className={cn(
+                                                        'nodrag nopan w-full rounded-md border px-2 py-1.5 text-left text-sm transition-colors',
+                                                        isSelected
+                                                            ? 'border-[#2E7B75] bg-[#E8F2F1] text-[#163B39]'
+                                                            : 'border-[#BFD9D7] text-[#204C49] hover:bg-[#EEF3F2]'
+                                                    )}
+                                                    onClick={() =>
+                                                        //handleGraphEventClick(row)
+                                                        console.log(row)
+                                                    }
+                                                >
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="truncate font-medium">
+                                                            {row.label}
+                                                        </span>
+                                                        {row.isInProgress && (
+                                                            <span className="text-xs text-[#5E8B87]">
+                                                                Live
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="mt-0.5 text-xs text-[#5A5A5A]">
+                                                        {startMs !== null
+                                                            ? formatAbsoluteTimeWithMs(
+                                                                  startMs
+                                                              )
+                                                            : '--:--'}
+                                                    </div>
+                                                </button>
+                                            );
+                                        })
+                                    )}
                                 </div>
                             </div>
                         </div>
