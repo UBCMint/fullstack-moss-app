@@ -108,7 +108,7 @@ export default function ComboBox({
                 <div className="flex items-center gap-3">
                     <button
                         className={cn(
-                            'mt-1 text-lg px-3 py-1 rounded-md border transition-colors',
+                            'nodrag nopan mt-1 text-lg px-3 py-1 rounded-md border transition-colors',
                             isTriggerActive
                                 ? 'bg-red-500 text-white border-red-500'
                                 : 'bg-[#2E7B75] text-white border-[#2E7B75]'
@@ -119,7 +119,7 @@ export default function ComboBox({
                     </button>
 
                     <button
-                        className="mt-1 text-lg px-2 py-1 rounded-md text-black hover:text-[#2E7B75] transition-colors"
+                        className="nodrag nopan mt-1 text-lg px-2 py-1 rounded-md text-black hover:text-[#2E7B75] transition-colors"
                         onClick={onPreviewOpen}
                     >
                         Preview ↗
@@ -132,7 +132,7 @@ export default function ComboBox({
                     <div className="mb-1 flex items-center justify-between">
                         <span className="text-sm text-black">Name</span>
                         <button
-                            className="text-[#BFBFBF] hover:text-[#8F8F8F] transition-colors"
+                            className="nodrag nopan text-[#BFBFBF] hover:text-[#8F8F8F] transition-colors"
                             onClick={onCloseLabelPopup}
                             aria-label="Close label popup"
                         >
@@ -145,7 +145,7 @@ export default function ComboBox({
                         value={labelInputValue}
                         onChange={(event) => onLabelInputChange(event.target.value)}
                         placeholder="Enter label here"
-                        className="w-full rounded-md border border-[#E2E2E2] px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-[#6CAFA4]"
+                        className="nodrag nopan w-full rounded-md border border-[#E2E2E2] px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-[#6CAFA4]"
                     />
 
                     <div className="mt-3 flex items-center justify-between">
@@ -158,7 +158,7 @@ export default function ComboBox({
                                     <button
                                         key={color}
                                         className={cn(
-                                            'h-3.5 w-3.5 rounded-full transition-all',
+                                            'nodrag nopan h-3.5 w-3.5 rounded-full transition-all',
                                             colorClassMap[color],
                                             isSelected
                                                 ? 'ring-2 ring-offset-2 ring-[#2E7B75]'
@@ -174,7 +174,7 @@ export default function ComboBox({
 
                     <div className="mt-3 flex justify-end">
                         <button
-                            className="rounded-md px-3 py-1 text-sm transition-colors bg-[#2E7B75] text-white hover:opacity-90"
+                            className="nodrag nopan rounded-md px-3 py-1 text-sm transition-colors bg-[#2E7B75] text-white hover:opacity-90"
                             onClick={onConfirmLabel}
                         >
                             Confirm

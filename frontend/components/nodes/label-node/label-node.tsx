@@ -19,42 +19,10 @@ interface LabeledMoment {
     source: 'Trigger';
 }
 
-const EEG_DATA_POST_ENDPOINT =
-    process.env.NEXT_PUBLIC_EEGDATA_POST_URL ??
-    'http://127.0.0.1:9000/api/eeg-data';
-
-const normalizeTimestampToIso = (value: unknown): string | null => {
-    if (value == null) return null;
-
-    if (typeof value === 'number') {
-        const date = new Date(value);
-        return Number.isNaN(date.getTime()) ? null : date.toISOString();
-    }
-
-    if (typeof value === 'string') {
-        const trimmed = value.trim();
-        if (!trimmed) return null;
-
-        if (/^\d+$/.test(trimmed)) {
-            const numeric = Number(trimmed);
-            if (!Number.isNaN(numeric)) {
-                const fromEpoch = new Date(numeric);
-                if (!Number.isNaN(fromEpoch.getTime())) {
-                    return fromEpoch.toISOString();
-                }
-            }
-        }
-
-        const parsed = Date.parse(trimmed);
-        return Number.isNaN(parsed) ? null : new Date(parsed).toISOString();
-    }
-
-    if (value instanceof Date) {
-        return Number.isNaN(value.getTime()) ? null : value.toISOString();
-    }
-
-    return null;
-};
+const API_BASE_URL =
+    process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:9000';
+const LABEL_SESSION_ID = process.env.NEXT_PUBLIC_LABEL_SESSION_ID ?? '1';
+const TIME_LABELS_ENDPOINT = `${API_BASE_URL}/api/sessions/${LABEL_SESSION_ID}/time-label`;
 
 export default function LabelNode({ id }: LabelNodeProps) {
     const [isConnected, setIsConnected] = React.useState(false);
@@ -73,6 +41,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const [pendingEndTimestamp, setPendingEndTimestamp] = React.useState<string | null>(null);
     const [labeledMoments, setLabeledMoments] = React.useState<LabeledMoment[]>([]);
     const labelsRef = React.useRef<LabeledMoment[]>([]);
+    const sentLabelIdsRef = React.useRef<Set<string>>(new Set());
     const previousStreamStateRef = React.useRef(false);
     const momentCounterRef = React.useRef(0);
 
@@ -141,89 +110,68 @@ export default function LabelNode({ id }: LabelNodeProps) {
     }, [labeledMoments]);
 
     React.useEffect(() => {
-        const handlePacket = (event: Event) => {
-            const customEvent = event as CustomEvent<{ latestTimestamp?: string | null }>;
-            const nextTimestamp = normalizeTimestampToIso(
-                customEvent.detail?.latestTimestamp
-            );
-            if (nextTimestamp) {
-                setSessionStartTimestamp((previousValue) => previousValue ?? nextTimestamp);
-                setLatestBackendTimestamp(nextTimestamp);
-            }
-        };
-
-        window.addEventListener('eeg-data-packet', handlePacket as EventListener);
-        return () => {
-            window.removeEventListener('eeg-data-packet', handlePacket as EventListener);
-        };
-    }, []);
-
-    React.useEffect(() => {
-        if (!dataStreaming || latestBackendTimestamp) {
+        if (!dataStreaming) {
             return;
         }
 
-        const warnTimeout = setTimeout(() => {
-            if (!latestBackendTimestamp) {
-                console.warn(
-                    'Label node has no EEG timestamp events yet. Ensure at least one node using useWebsocket is mounted and active.'
-                );
-            }
-        }, 2500);
+        const tick = () => {
+            const timestamp = new Date().toISOString();
+            setSessionStartTimestamp((previousValue) => previousValue ?? timestamp);
+            setLatestBackendTimestamp(timestamp);
+        };
 
-        return () => clearTimeout(warnTimeout);
-    }, [dataStreaming, latestBackendTimestamp]);
+        tick();
+        const interval = setInterval(tick, 300);
+        return () => clearInterval(interval);
+    }, [dataStreaming]);
 
     const postLabelsToApi = React.useCallback(async () => {
-        const labelsToPost = labelsRef.current;
-        if (labelsToPost.length === 0) {
+        const unsentLabels = labelsRef.current.filter(
+            (moment) => !sentLabelIdsRef.current.has(moment.id)
+        );
+
+        if (unsentLabels.length === 0) {
             return;
         }
-        /*
-        const payload = {
-            labelType: 'event-based',
-            labels: labelsToPost,
-        };
 
-        console.log('POST EEGData requested to:', EEG_DATA_POST_ENDPOINT, payload);
+        const payload = unsentLabels.map((moment) => ({
+            timestamp: moment.startTimestamp, // will need start and end timestamps, backend update
+            label: moment.label,
+        }));
+
+        console.log('POST time labels:', TIME_LABELS_ENDPOINT, payload);
+
         try {
-            const response = await fetch(EEG_DATA_POST_ENDPOINT, {
+            const response = await fetch(TIME_LABELS_ENDPOINT, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(payload),
             });
-            console.log('POST EEGData response status:', response.status);
 
-            if (response.ok) {
-                setLabeledMoments([]);
+            if (!response.ok) {
+                const errorBody = await response.text();
+                console.error(
+                    'POST time labels failed:',
+                    response.status,
+                    errorBody
+                );
+                return;
             }
+
+            unsentLabels.forEach((moment) => {
+                sentLabelIdsRef.current.add(moment.id);
+            });
+            console.log('POST time labels success:', unsentLabels.length);
         } catch (error) {
-            console.error('POST EEGData request failed:', error);
-        }*/
+            console.error('POST time labels request error:', error);
+        }
     }, []);
 
     React.useEffect(() => {
-        const handleWebSocketClosed = () => {
-            void postLabelsToApi();
-        };
-
-        window.addEventListener('eeg-websocket-disconnected', handleWebSocketClosed);
-        return () => {
-            window.removeEventListener('eeg-websocket-disconnected', handleWebSocketClosed);
-        };
-    }, [postLabelsToApi]);
-
-    React.useEffect(() => {
         const wasStreaming = previousStreamStateRef.current;
-        const streamJustStarted = !wasStreaming && dataStreaming;
         const streamJustStopped = wasStreaming && !dataStreaming;
-
-        if (streamJustStarted) {
-            setSessionStartTimestamp(null); // TODO huh
-            setLatestBackendTimestamp(null);
-        }
 
         if (streamJustStopped) {
             if (isTriggerActive) {
