@@ -24,22 +24,28 @@ export default function SettingsBar() {
     const [sessionId, setSessionId] = useState<string | null>(null);
 
     useEffect(() => {
-        async function fetchSessions() {
+        async function fetchOrCreateSession() {
             try {
                 const res = await fetch('/api/sessions');
                 const sessions = await res.json();
 
-                console.log('sessions response:', sessions);
-    
                 if (sessions.length > 0) {
                     setSessionId(sessions[0].id);
+                } else {
+                    const created = await fetch('/api/sessions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify('New Session'),
+                    });
+                    const session = await created.json();
+                    setSessionId(session.id);
                 }
             } catch (err) {
-                console.error('Failed to fetch sessions', err);
+                console.error('Failed to fetch or create session', err);
             }
         }
-    
-        fetchSessions();
+
+        fetchOrCreateSession();
     }, []);
     
     // useEffect(() => {
@@ -106,15 +112,13 @@ export default function SettingsBar() {
 
     return (
         <div className="flex justify-between items-center p-4 bg-white border-b">
-            {/* System Control Panel, Filters, Settings */}
+            {/* Session ID, Tutorial */}
             <Menubar>
+                <span className="px-3 py-1 text-sm">
+                    Session {sessionId ? sessionId.slice(0, 8) : 'ID'}
+                </span>
                 <MenubarMenu>
-                    <MenubarTrigger>
-                        Session {sessionId ? sessionId.slice(0, 8) : 'ID'}
-                    </MenubarTrigger>
-                </MenubarMenu>
-                <MenubarMenu>
-                    <MenubarTrigger>Tutorials</MenubarTrigger>
+                    <MenubarTrigger className="hover:cursor-pointer hover:underline">Tutorials</MenubarTrigger>
                 </MenubarMenu>
             </Menubar>
 
