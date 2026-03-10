@@ -18,15 +18,7 @@ import SignalGraphView from './signal-graph-full';
 export default function SignalGraphNode({ id }: { id?: string }) {
     const { renderData } = useWebsocket(20, 10);
 
-    const processedData = renderData.map((item) => ({
-        time: item.time,
-        signal1: item.signals[0],
-        signal2: item.signals[1],
-        signal3: item.signals[2],
-        signal4: item.signals[3],
-        signal5: item.signals[4],
-    }));
-
+    const processedData = renderData;
     const reactFlowInstance = useReactFlow();
     const [isConnected, setIsConnected] = React.useState(false);
     const { dataStreaming } = useGlobalContext()
