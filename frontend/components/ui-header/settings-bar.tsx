@@ -21,7 +21,7 @@ export default function SettingsBar() {
     const [leftTimerSeconds, setLeftTimerSeconds] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
-    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [sessionId, setSessionId] = useState<number | null>(null);
 
     useEffect(() => {
         async function fetchOrCreateSession() {
@@ -115,7 +115,7 @@ export default function SettingsBar() {
             {/* Session ID, Tutorial */}
             <Menubar>
                 <span className="px-3 py-1 text-sm">
-                    Session {sessionId ? sessionId.slice(0, 8) : 'ID'}
+                    Session {sessionId ?? 'ID'}
                 </span>
                 <MenubarMenu>
                     <MenubarTrigger className="hover:cursor-pointer hover:underline">Tutorials</MenubarTrigger>
