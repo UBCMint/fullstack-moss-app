@@ -284,23 +284,26 @@ export default function SettingsBar() {
 
     return (
         <div className="flex justify-between items-center p-4 bg-white border-b">
-            {/* Session ID, New, Tutorials */}
+            {/* Session ID, Tutorials */}
             <Menubar>
                 <span className="px-3 py-1 text-sm">
                     Session {activeSessionId ?? 'ID'}
                 </span>
-                <button
-                    onClick={handleNewClick}
-                    disabled={isSaving || isLoading || isFetchingSessions}
-                    className="flex items-center gap-1 px-3 py-1 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <Plus size={14} />
-                    New
-                </button>
                 <button className="px-3 py-1 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground hover:underline">
                     Tutorials
                 </button>
             </Menubar>
+
+            {/* New session button */}
+            <Button
+                variant="outline"
+                onClick={handleNewClick}
+                disabled={isSaving || isLoading || isFetchingSessions}
+                className="ml-2 flex items-center gap-1"
+            >
+                <Plus size={14} />
+                New
+            </Button>
 
             {/* slider */}
             <div className="flex-1 mx-4">
