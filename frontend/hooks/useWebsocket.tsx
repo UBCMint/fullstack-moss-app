@@ -2,6 +2,16 @@ import { useEffect, useState, useRef } from 'react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { ProcessingConfig } from '@/lib/processing';
 
+const DEFAULT_PROCESSING_CONFIG: ProcessingConfig = {
+    apply_bandpass: false,
+    use_iir: false,
+    l_freq: null,
+    h_freq: null,
+    downsample_factor: null,
+    sfreq: 256,
+    n_channels: 4,
+};
+
 export default function useWebsocket(
     chartSize: number,
     batchesPerSecond: number
@@ -23,7 +33,16 @@ export default function useWebsocket(
           wsRef.current.send(JSON.stringify(config))
           console.log('Sent processing config:', config)
         }
-    }      
+    }
+
+    useEffect(() => {
+        const handleConfigUpdate = (event: Event) => {
+            sendProcessingConfig((event as CustomEvent<ProcessingConfig>).detail);
+        };
+        window.addEventListener('processing-config-update', handleConfigUpdate);
+        return () => window.removeEventListener('processing-config-update', handleConfigUpdate);
+    }, []);
+
     const normalizeBatch = (batch: any) => {
         return batch.timestamps.map((time: number, i: number) => ({
             time,
@@ -65,10 +84,7 @@ export default function useWebsocket(
 
             ws.onopen = () => {
                 console.log('WebSocket connection opened.');
-
-                if (processingConfigRef.current) {
-                    ws.send(JSON.stringify(processingConfigRef.current))
-                }
+                ws.send(JSON.stringify(processingConfigRef.current ?? DEFAULT_PROCESSING_CONFIG));
             };
 
             ws.onmessage = (event) => {
