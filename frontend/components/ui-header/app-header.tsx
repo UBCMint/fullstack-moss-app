@@ -16,20 +16,20 @@ export default function AppHeader() {
     const [isOpen, setIsOpen] = useState<boolean>(false);
 
     return (
-        <header className="flex justify-between items-center p-2 border-b h-16">
+        <header className="flex justify-between items-center p-2 border-b h-25">
             {/* logo */}
             <div className="flex items-center">
                 <Image
                     src="/mint-logo.png"
                     alt="Logo"
                     width={56}
-                    height={56}
-                    className="h-14"
+                    height={50}
+                    className="h-14 w-auto object-contain pt-2 ml-2"
                 />
             </div>
 
             {/* update, issues */}
-            <div className="flex items-center space-x-4">
+            <div className="flex h-full items-center pt-2 space-x-4">
                 <Button
                     variant="link"
                     className="flex items-center space-x-1 px-3 py-2"

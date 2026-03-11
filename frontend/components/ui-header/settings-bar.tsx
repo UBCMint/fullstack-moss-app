@@ -50,6 +50,36 @@ export default function SettingsBar() {
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
+    const [sessionId, setSessionId] = useState<number | null>(null);
+
+    useEffect(() => {
+        async function fetchOrCreateSession() {
+            try {
+                const res = await fetch('/api/sessions');
+                const sessions = await res.json();
+
+                if (sessions.length > 0) {
+                    setSessionId(sessions[0].id);
+                } else {
+                    const created = await fetch('/api/sessions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify('New Session'),
+                    });
+                    const session = await created.json();
+                    setSessionId(session.id);
+                }
+            } catch (err) {
+                console.error('Failed to fetch or create session', err);
+            }
+        }
+
+        fetchOrCreateSession();
+    }, []);
+    
+    // useEffect(() => {
+    //     console.log('dataStreaming:', dataStreaming);
+    // });
     // Timer effect - starts/stops based on dataStreaming state
     useEffect(() => {
         if (dataStreaming) {
@@ -248,13 +278,13 @@ export default function SettingsBar() {
 
     return (
         <div className="flex justify-between items-center p-4 bg-white border-b">
-            {/* System Control Panel, Settings */}
+            {/* Session ID, Tutorial */}
             <Menubar>
+                <span className="px-3 py-1 text-sm">
+                    Session {sessionId ?? 'ID'}
+                </span>
                 <MenubarMenu>
-                    <MenubarTrigger>System Control Panel</MenubarTrigger>
-                </MenubarMenu>
-                <MenubarMenu>
-                    <MenubarTrigger>Settings</MenubarTrigger>
+                    <MenubarTrigger className="hover:cursor-pointer hover:underline">Tutorials</MenubarTrigger>
                 </MenubarMenu>
             </Menubar>
 
