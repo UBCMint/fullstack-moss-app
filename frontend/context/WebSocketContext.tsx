@@ -31,9 +31,16 @@ const DEFAULT_PROCESSING_CONFIG: ProcessingConfig = {
     n_channels: 4,
 };
 
+function formatTimestamp(raw: any): string {
+    const s = String(raw);
+    // ISO 8601: "2026-03-11T03:55:22.715574979Z" - extract "03:55:22"
+    if (s.includes('T')) return s.slice(11, 19);
+    return s;
+}
+
 function normalizeBatch(batch: any): DataPoint[] {
-    return batch.timestamps.map((time: number, i: number) => ({
-        time: String(time),
+    return batch.timestamps.map((time: any, i: number) => ({
+        time: formatTimestamp(time),
         signal1: batch.signals[0][i],
         signal2: batch.signals[1][i],
         signal3: batch.signals[2][i],
