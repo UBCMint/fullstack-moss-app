@@ -158,7 +158,10 @@ const ReactFlowInterface = () => {
     );
 
     const onNodesChange: OnNodesChange = useCallback(
-        (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
+        (changes) => {
+            setNodes((nds) => applyNodeChanges(changes, nds));
+            window.dispatchEvent(new Event('canvas-changed'));
+        },
         [setNodes]
     );
 

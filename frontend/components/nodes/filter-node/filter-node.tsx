@@ -196,23 +196,6 @@ export default function FilterNode({ id }: FilterNodeProps) {
                 isDataStreamOn={dataStreaming}
             />
 
-            {isConnected && (
-            <>
-                <input
-                type="range"
-                min={1}
-                max={100}
-                value={cutoff}
-                onChange={(e) => setCutoff(Number(e.target.value))}
-                />
-
-                <p className="text-xs text-muted-foreground">
-                {selectedFilter === 'lowpass'
-                    ? 'Frequencies below cutoff will pass through'
-                    : 'Frequencies above cutoff will pass through'}
-                </p>
-            </>
-            )}
         </div>
     );
 }

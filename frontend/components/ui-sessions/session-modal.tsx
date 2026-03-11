@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -20,7 +20,6 @@ import {
     CommandItem,
     CommandList,
 } from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { SessionSummary } from '@/lib/session-api';
 
@@ -49,7 +48,6 @@ export default function SessionModal({
     const [selectedSessionId, setSelectedSessionId] = useState<number | null>(
         null
     );
-    const [isSessionPickerOpen, setIsSessionPickerOpen] = useState(false);
     const [validationError, setValidationError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -57,7 +55,6 @@ export default function SessionModal({
             setSessionName('');
             setSelectedSessionId(null);
             setValidationError(null);
-            setIsSessionPickerOpen(false);
         }
     }, [open, mode]);
 
@@ -129,58 +126,35 @@ export default function SessionModal({
                     </div>
                 ) : (
                     <div className="space-y-2">
-                        <Popover
-                            open={isSessionPickerOpen}
-                            onOpenChange={setIsSessionPickerOpen}
-                        >
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    role="combobox"
-                                    aria-expanded={isSessionPickerOpen}
-                                    className="w-full justify-between"
-                                    disabled={isSubmitting || sessions.length === 0}
-                                >
-                                    {selectedSession
-                                        ? `${selectedSession.name} (ID ${selectedSession.id})`
-                                        : 'Select session'}
-                                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-[420px] p-0">
-                                <Command>
-                                    <CommandInput placeholder="Search by name or session ID..." />
-                                    <CommandList>
-                                        <CommandEmpty>No sessions found.</CommandEmpty>
-                                        <CommandGroup>
-                                            {sessions.map((session) => (
-                                                <CommandItem
-                                                    key={session.id}
-                                                    value={`${session.name} ${session.id}`}
-                                                    onSelect={() => {
-                                                        setSelectedSessionId(session.id);
-                                                        setIsSessionPickerOpen(false);
-                                                    }}
-                                                >
-                                                    <Check
-                                                        className={cn(
-                                                            'mr-2 h-4 w-4',
-                                                            selectedSessionId === session.id
-                                                                ? 'opacity-100'
-                                                                : 'opacity-0'
-                                                        )}
-                                                    />
-                                                    <span>{session.name}</span>
-                                                    <span className="ml-auto text-xs text-muted-foreground">
-                                                        ID {session.id}
-                                                    </span>
-                                                </CommandItem>
-                                            ))}
-                                        </CommandGroup>
-                                    </CommandList>
-                                </Command>
-                            </PopoverContent>
-                        </Popover>
+                        <Command className="border rounded-md">
+                            <CommandInput placeholder="Search by name or session ID..." />
+                            <CommandList>
+                                <CommandEmpty>No sessions found.</CommandEmpty>
+                                <CommandGroup>
+                                    {sessions.map((session) => (
+                                        <CommandItem
+                                            key={session.id}
+                                            value={`${session.name} ${session.id}`}
+                                            onSelect={() => setSelectedSessionId(session.id)}
+                                            disabled={isSubmitting}
+                                        >
+                                            <Check
+                                                className={cn(
+                                                    'mr-2 h-4 w-4',
+                                                    selectedSessionId === session.id
+                                                        ? 'opacity-100'
+                                                        : 'opacity-0'
+                                                )}
+                                            />
+                                            <span>{session.name}</span>
+                                            <span className="ml-auto text-xs text-muted-foreground">
+                                                ID {session.id}
+                                            </span>
+                                        </CommandItem>
+                                    ))}
+                                </CommandGroup>
+                            </CommandList>
+                        </Command>
                         {validationError ? (
                             <p className="text-sm text-red-600">{validationError}</p>
                         ) : null}
