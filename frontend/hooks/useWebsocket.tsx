@@ -24,6 +24,15 @@ export default function useWebsocket(
           console.log('Sent processing config:', config)
         }
     }      
+    const normalizeBatch = (batch: any) => {
+        return batch.timestamps.map((time: number, i: number) => ({
+            time,
+            signal1: batch.signals[0][i],
+            signal2: batch.signals[1][i],
+            signal3: batch.signals[2][i],
+            signal4: batch.signals[3][i],
+        }));
+    };
 
     useEffect(() => {
         console.log('data streaming:', dataStreaming);
@@ -76,7 +85,8 @@ export default function useWebsocket(
                 } else {
                     try {
                         const parsedData = JSON.parse(message);
-                        bufferRef.current.push(parsedData);
+                        const normalizedPoints = normalizeBatch(parsedData);
+                        bufferRef.current.push(...normalizedPoints);
                     } catch (e) {
                         console.error("Failed to parse non-confirmation message as JSON:", e, message);
                     }

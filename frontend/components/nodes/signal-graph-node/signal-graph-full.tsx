@@ -14,14 +14,13 @@ import { Button } from '@/components/ui/button';
 
 
 interface SignalGraphViewProps {
-   data: {
-       time: string;
-       signal1: number;
-       signal2: number;
-       signal3: number;
-       signal4: number;
-       signal5: number;
-   }[];
+    data: {
+        time: string;
+        signal1: number;
+        signal2: number;
+        signal3: number;
+        signal4: number;
+    }[];
 }
 
 
@@ -29,15 +28,12 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
    const { dataStreaming, setDataStreaming } = useGlobalContext();
    const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
 
-
-   const signals = [
-       { key: 'signal1', colour: '#0000ff', name: 'Signal 1' },
-       { key: 'signal2', colour: '#00ff00', name: 'Signal 2' },
-       { key: 'signal3', colour: '#FF00D0', name: 'Signal 3' },
-       { key: 'signal4', colour: '#FFFF00', name: 'Signal 4' },
-       { key: 'signal5', colour: '#ff0000', name: 'Signal 5' },
-   ];
-
+    const signals = [
+        {key: 'signal1', colour: '#0000ff', name: 'Signal 1'},
+        {key: 'signal2', colour: '#00ff00', name: 'Signal 2'},
+        {key: 'signal3', colour: '#FF00D0', name: 'Signal 3'},
+        {key: 'signal4', colour: '#FFFF00', name: 'Signal 4'},
+    ];
 
    const handleStartStop = () => {
        setDataStreaming(!dataStreaming);
