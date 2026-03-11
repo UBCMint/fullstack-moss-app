@@ -227,6 +227,7 @@ export default function SettingsBar() {
         setLeftTimerSeconds(0);
         window.dispatchEvent(new Event('pipeline-reset'));
         setIsNewDialogOpen(false);
+        notifications.success({ title: 'New session started' });
     };
 
     const handleCreateAndSaveSession = async (sessionName: string) => {
