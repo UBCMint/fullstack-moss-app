@@ -3,25 +3,30 @@ import React, {
     useContext,
     useState,
     ReactNode,
-    useEffect,
 } from 'react';
 
 type GlobalContextType = {
     dataStreaming: boolean;
     setDataStreaming: React.Dispatch<React.SetStateAction<boolean>>;
+    activeSessionId: number | null;
+    setActiveSessionId: React.Dispatch<React.SetStateAction<number | null>>;
 };
 
 const GlobalContext = createContext<GlobalContextType | undefined>(undefined);
 
 export const GlobalProvider = ({ children }: { children: ReactNode }) => {
     const [dataStreaming, setDataStreaming] = useState(false);
-
-    useEffect(() => {
-        console.log('Data streaming:', dataStreaming);
-    }, [dataStreaming]);
+    const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
 
     return (
-        <GlobalContext.Provider value={{ dataStreaming, setDataStreaming }}>
+        <GlobalContext.Provider
+            value={{
+                dataStreaming,
+                setDataStreaming,
+                activeSessionId,
+                setActiveSessionId,
+            }}
+        >
             {children}
         </GlobalContext.Provider>
     );
