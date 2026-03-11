@@ -1,6 +1,7 @@
 'use client';
 
-import { Menubar, MenubarMenu, MenubarTrigger } from '@/components/ui/menubar';
+import { Menubar } from '@/components/ui/menubar';
+import { Plus } from 'lucide-react';
 import { ProgressBar } from '@/components/ui/progressbar';
 import { Button } from '@/components/ui/button';
 import { useGlobalContext } from '@/context/GlobalContext';
@@ -40,6 +41,7 @@ export default function SettingsBar() {
     const [leftTimerSeconds, setLeftTimerSeconds] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
+    const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
     const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
     const [sessionModalMode, setSessionModalMode] = useState<'save' | 'load'>(
         'save'
@@ -49,37 +51,19 @@ export default function SettingsBar() {
     const [fetchingFor, setFetchingFor] = useState<'save' | 'load' | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
 
-    const [sessionId, setSessionId] = useState<number | null>(null);
-
+    // Track unsaved canvas changes
     useEffect(() => {
-        async function fetchOrCreateSession() {
-            try {
-                const res = await fetch('/api/sessions');
-                const sessions = await res.json();
-
-                if (sessions.length > 0) {
-                    setSessionId(sessions[0].id);
-                } else {
-                    const created = await fetch('/api/sessions', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify('New Session'),
-                    });
-                    const session = await created.json();
-                    setSessionId(session.id);
-                }
-            } catch (err) {
-                console.error('Failed to fetch or create session', err);
-            }
-        }
-
-        fetchOrCreateSession();
+        const handler = () => setIsDirty(true);
+        window.addEventListener('canvas-changed', handler);
+        window.addEventListener('reactflow-edges-changed', handler);
+        return () => {
+            window.removeEventListener('canvas-changed', handler);
+            window.removeEventListener('reactflow-edges-changed', handler);
+        };
     }, []);
-    
-    // useEffect(() => {
-    //     console.log('dataStreaming:', dataStreaming);
-    // });
+
     // Timer effect - starts/stops based on dataStreaming state
     useEffect(() => {
         if (dataStreaming) {
@@ -171,6 +155,7 @@ export default function SettingsBar() {
             setIsSaving(true);
             try {
                 await handleSaveToExistingSession(activeSessionId);
+                setIsDirty(false);
                 notifications.success({ title: 'Session saved successfully' });
             } catch (error) {
                 notifications.error({
@@ -224,6 +209,27 @@ export default function SettingsBar() {
         }
     };
 
+    const handleNewClick = () => {
+        if (isSaving || isLoading || isFetchingSessions) {
+            return;
+        }
+        if (isDirty) {
+            setIsNewDialogOpen(true);
+        } else {
+            handleConfirmNew();
+        }
+    };
+
+    const handleConfirmNew = () => {
+        setActiveSessionId(null);
+        setIsDirty(false);
+        setDataStreaming(false);
+        setLeftTimerSeconds(0);
+        window.dispatchEvent(new Event('pipeline-reset'));
+        setIsNewDialogOpen(false);
+        notifications.success({ title: 'New session started' });
+    };
+
     const handleCreateAndSaveSession = async (sessionName: string) => {
         setIsSaving(true);
         try {
@@ -231,6 +237,7 @@ export default function SettingsBar() {
             const createdSession = await createSession(sessionName);
             await saveFrontendState(createdSession.id, state);
             setActiveSessionId(createdSession.id);
+            setIsDirty(false);
             setIsSessionModalOpen(false);
             notifications.success({ title: 'Session saved successfully' });
         } catch (error) {
@@ -278,15 +285,26 @@ export default function SettingsBar() {
 
     return (
         <div className="flex justify-between items-center p-4 bg-white border-b">
-            {/* Session ID, Tutorial */}
+            {/* Session ID, Tutorials */}
             <Menubar>
                 <span className="px-3 py-1 text-sm">
-                    Session {sessionId ?? 'ID'}
+                    Session {activeSessionId ?? 'ID'}
                 </span>
-                <MenubarMenu>
-                    <MenubarTrigger className="hover:cursor-pointer hover:underline">Tutorials</MenubarTrigger>
-                </MenubarMenu>
+                <button className="px-3 py-1 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground hover:underline">
+                    Tutorials
+                </button>
             </Menubar>
+
+            {/* New session button */}
+            <Button
+                variant="outline"
+                onClick={handleNewClick}
+                disabled={isSaving || isLoading || isFetchingSessions}
+                className="ml-2 flex items-center gap-1"
+            >
+                <Plus size={14} />
+                New
+            </Button>
 
             {/* slider */}
             <div className="flex-1 mx-4">
@@ -352,6 +370,23 @@ export default function SettingsBar() {
                           : 'Load'}
                 </Button>
             </div>
+
+            <Dialog open={isNewDialogOpen} onOpenChange={setIsNewDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Start a new session?</DialogTitle>
+                        <DialogDescription>
+                            Your current session is unsaved. Hitting confirm will clear the current pipeline. Any unsaved changes will be lost.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-2 mt-4">
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button className="bg-red-500" onClick={handleConfirmNew}>Confirm</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <SessionModal
                 open={isSessionModalOpen}
