@@ -1,6 +1,7 @@
 'use client';
 
-import { Menubar, MenubarMenu, MenubarTrigger } from '@/components/ui/menubar';
+import { Menubar } from '@/components/ui/menubar';
+import { Plus } from 'lucide-react';
 import { ProgressBar } from '@/components/ui/progressbar';
 import { Button } from '@/components/ui/button';
 import { useGlobalContext } from '@/context/GlobalContext';
@@ -283,14 +284,22 @@ export default function SettingsBar() {
 
     return (
         <div className="flex justify-between items-center p-4 bg-white border-b">
-            {/* Session ID, Tutorial */}
+            {/* Session ID, New, Tutorials */}
             <Menubar>
                 <span className="px-3 py-1 text-sm">
                     Session {activeSessionId ?? 'ID'}
                 </span>
-                <MenubarMenu>
-                    <MenubarTrigger className="hover:cursor-pointer hover:underline">Tutorials</MenubarTrigger>
-                </MenubarMenu>
+                <button
+                    onClick={handleNewClick}
+                    disabled={isSaving || isLoading || isFetchingSessions}
+                    className="flex items-center gap-1 px-3 py-1 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    <Plus size={14} />
+                    New
+                </button>
+                <button className="px-3 py-1 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground hover:underline">
+                    Tutorials
+                </button>
             </Menubar>
 
             {/* slider */}
@@ -347,29 +356,6 @@ export default function SettingsBar() {
                 </Button>
                 <Button
                     variant="outline"
-                    onClick={handleNewClick}
-                    disabled={isSaving || isLoading || isFetchingSessions}
-                >
-                    New
-                </Button>
-                <Dialog open={isNewDialogOpen} onOpenChange={setIsNewDialogOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Start a new session?</DialogTitle>
-                            <DialogDescription>
-                                Your current session is unsaved. Hitting confirm will clear the current pipeline. Any unsaved changes will be lost.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <div className="flex justify-end gap-2 mt-4">
-                            <DialogClose asChild>
-                                <Button variant="outline">Cancel</Button>
-                            </DialogClose>
-                            <Button className="bg-red-500" onClick={handleConfirmNew}>Confirm</Button>
-                        </div>
-                    </DialogContent>
-                </Dialog>
-                <Button
-                    variant="outline"
                     onClick={handleLoadClick}
                     disabled={isSaving || isLoading || isFetchingSessions}
                 >
@@ -380,6 +366,23 @@ export default function SettingsBar() {
                           : 'Load'}
                 </Button>
             </div>
+
+            <Dialog open={isNewDialogOpen} onOpenChange={setIsNewDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Start a new session?</DialogTitle>
+                        <DialogDescription>
+                            Your current session is unsaved. Hitting confirm will clear the current pipeline. Any unsaved changes will be lost.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-2 mt-4">
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button className="bg-red-500" onClick={handleConfirmNew}>Confirm</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
             <SessionModal
                 open={isSessionModalOpen}
