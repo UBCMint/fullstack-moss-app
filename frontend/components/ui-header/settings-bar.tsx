@@ -46,6 +46,7 @@ export default function SettingsBar() {
     );
     const [sessions, setSessions] = useState<SessionSummary[]>([]);
     const [isFetchingSessions, setIsFetchingSessions] = useState(false);
+    const [fetchingFor, setFetchingFor] = useState<'save' | 'load' | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -153,6 +154,7 @@ export default function SettingsBar() {
         }
 
         setIsFetchingSessions(true);
+        setFetchingFor('save');
         try {
             const fetchedSessions = await getSessions();
             setSessions(fetchedSessions);
@@ -165,6 +167,7 @@ export default function SettingsBar() {
             });
         } finally {
             setIsFetchingSessions(false);
+            setFetchingFor(null);
         }
     };
 
@@ -174,6 +177,7 @@ export default function SettingsBar() {
         }
 
         setIsFetchingSessions(true);
+        setFetchingFor('load');
         try {
             const fetchedSessions = await getSessions();
             setSessions(fetchedSessions);
@@ -186,6 +190,7 @@ export default function SettingsBar() {
             });
         } finally {
             setIsFetchingSessions(false);
+            setFetchingFor(null);
         }
     };
 
@@ -296,25 +301,25 @@ export default function SettingsBar() {
                 </Dialog>
                 <Button
                     variant="outline"
-                    onClick={handleLoadClick}
-                    disabled={isSaving || isLoading || isFetchingSessions}
-                >
-                    {isLoading
-                        ? 'Loading...'
-                        : isFetchingSessions && sessionModalMode === 'load'
-                          ? 'Preparing...'
-                          : 'Load'}
-                </Button>
-                <Button
-                    variant="outline"
                     onClick={handleSaveClick}
                     disabled={isSaving || isLoading || isFetchingSessions}
                 >
                     {isSaving
                         ? 'Saving...'
-                        : isFetchingSessions && sessionModalMode === 'save'
+                        : fetchingFor === 'save'
                           ? 'Preparing...'
                           : 'Save'}
+                </Button>
+                <Button
+                    variant="outline"
+                    onClick={handleLoadClick}
+                    disabled={isSaving || isLoading || isFetchingSessions}
+                >
+                    {isLoading
+                        ? 'Loading...'
+                        : fetchingFor === 'load'
+                          ? 'Preparing...'
+                          : 'Load'}
                 </Button>
             </div>
 

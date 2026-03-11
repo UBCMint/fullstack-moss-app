@@ -184,7 +184,6 @@ const ReactFlowInterface = () => {
         event.preventDefault();
 
         const nodeType = event.dataTransfer.getData('application/reactflow');
-        console.log('🎯 Dropped nodeType:', nodeType);
 
         if (!nodeType) {
             return;
@@ -202,16 +201,7 @@ const ReactFlowInterface = () => {
             data: { label: `${nodeType}` },
         };
 
-        console.log('🆕 Creating new node:', newNode);
-
-        setNodes((nds) => {
-            const updatedNodes = [...nds, newNode];
-            console.log(
-                '📋 Updated nodes list:',
-                updatedNodes.map((n) => ({ id: n.id, type: n.type }))
-            );
-            return updatedNodes;
-        });
+        setNodes((nds) => [...nds, newNode]);
     };
 
     const isValidConnection = useCallback(
@@ -305,19 +295,6 @@ const ReactFlowInterface = () => {
                 </Panel>
                 <Panel position="top-left">
                     <Sidebar />
-                </Panel>
-
-                {/* Debug Panel */}
-                <Panel position="bottom-right">
-                    <div className="bg-white p-2 rounded border text-xs">
-                        <div>Nodes: {nodes.length}</div>
-                        <div>Edges: {edges.length}</div>
-                        <div className="mt-1 max-w-[260px]">
-                            {edges.map((e) => (
-                                <div key={e.id || `${e.source}-${e.target}`}>{`${e.source} → ${e.target}`}</div>
-                            ))}
-                        </div>
-                    </div>
                 </Panel>
 
                 <Background />
