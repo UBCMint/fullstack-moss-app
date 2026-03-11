@@ -3,7 +3,6 @@ import React from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import ComboBox from './combo-box';
-import useWebsocket from '@/hooks/useWebsocket';
 import { ProcessingConfig } from '@/lib/processing';
 
 interface FilterNodeProps {
@@ -22,8 +21,6 @@ export default function FilterNode({ id }: FilterNodeProps) {
     
     // Get data stream status from global context
     const { dataStreaming } = useGlobalContext();
-
-    const { sendProcessingConfig } = useWebsocket(0, 0)
 
     const buildConfig = (): ProcessingConfig => {
         if (!isConnected) {
@@ -138,9 +135,13 @@ export default function FilterNode({ id }: FilterNodeProps) {
     }, [checkConnectionStatus]);
 
     React.useEffect(() => {
-        if (!dataStreaming) return
-        sendProcessingConfig(buildConfig())
-    }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming])  
+        if (!dataStreaming) return;
+        window.dispatchEvent(
+            new CustomEvent<ProcessingConfig>('processing-config-update', {
+                detail: buildConfig(),
+            })
+        );
+    }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming]);
 
     return (
         <div className="relative">

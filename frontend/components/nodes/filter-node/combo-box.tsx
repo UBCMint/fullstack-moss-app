@@ -32,16 +32,15 @@ interface ComboBoxProps {
 export default function ComboBox({
     value = 'lowpass',
     onValueChange,
+    lowCutoff,
+    highCutoff,
+    setLowCutoff,
+    setHighCutoff,
     isConnected = false,
     isDataStreamOn = false,
 }: ComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const titleRef = React.useRef<HTMLSpanElement>(null);
-    const [sliderValue, setSliderValue] = React.useState([75]);
-    const [cutoff, setCutoff] = React.useState([75]);
-
-    const [lowCutoff, setLowCutoff] = React.useState([25]);
-    const [highCutoff, setHighCutoff] = React.useState([75]);
 
     const toggleExpanded = () => {
         setIsExpanded(!isExpanded);
@@ -140,21 +139,17 @@ export default function ComboBox({
                     paddingRight: '60px',
                 }}
             >
-                {value != 'bandpass' && (
+                {value !== 'bandpass' && (
                     <div>
                         <Slider
-                            value={sliderValue}
+                            value={value === 'lowpass' ? [highCutoff] : [lowCutoff]}
                             onValueChange={(val) => {
-                                setSliderValue(val);
-                        
                                 if (value === 'lowpass') {
-                                  setHighCutoff(val);   
+                                    setHighCutoff(val[0]);
+                                } else {
+                                    setLowCutoff(val[0]);
                                 }
-                        
-                                if (value === 'highpass') {
-                                  setLowCutoff(val);    
-                                }
-                              }}
+                            }}
                             max={100}
                             min={0}
                             step={1}
@@ -167,29 +162,19 @@ export default function ComboBox({
                     </div>
                 )}
 
-                {/* Single slider for lowpass and highpass */}
-                {value == 'bandpass' && (
+                {value === 'bandpass' && (
                     <div>
                         {/* Low cutoff */}
-                        <div>
-
-                            <Slider
-                                value={lowCutoff}
-                                onValueChange={(val) => {
-                                    // prevent low from going above high
-                                    const next =
-                                        val[0] >= highCutoff[0]
-                                            ? highCutoff[0] - 1
-                                            : val[0];
-                                    setLowCutoff([next]);
-                                }}
-                                min={0}
-                                max={100}
-                                step={1}
-                                className="w-full mb-1"
-                            />
-                        </div>
-
+                        <Slider
+                            value={[lowCutoff]}
+                            onValueChange={(val) => {
+                                setLowCutoff(Math.min(val[0], highCutoff - 1));
+                            }}
+                            min={0}
+                            max={100}
+                            step={1}
+                            className="w-full mb-1"
+                        />
                         <div className="flex justify-between items-center mb-5">
                             <span className="text-xs text-gray-500">0</span>
                             <span className="text-xs text-gray-500">Low Cutoff</span>
@@ -197,24 +182,16 @@ export default function ComboBox({
                         </div>
 
                         {/* High cutoff */}
-                        <div>
-                            <Slider
-                                value={highCutoff}
-                                onValueChange={(val) => {
-                                    // prevent high from going below low
-                                    const next =
-                                        val[0] <= lowCutoff[0]
-                                            ? lowCutoff[0] + 1
-                                            : val[0];
-                                    setHighCutoff([next]);
-                                }}
-                                min={0}
-                                max={100}
-                                step={1}
-                                className="w-full mb-1"
-                            />
-                        </div>
-
+                        <Slider
+                            value={[highCutoff]}
+                            onValueChange={(val) => {
+                                setHighCutoff(Math.max(val[0], lowCutoff + 1));
+                            }}
+                            min={0}
+                            max={100}
+                            step={1}
+                            className="w-full mb-1"
+                        />
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-xs text-gray-500">0</span>
                             <span className="text-xs text-gray-500">High Cutoff</span>
