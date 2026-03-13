@@ -50,7 +50,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const momentCounterRef = React.useRef(0);
 
     const { dataStreaming } = useGlobalContext();
-    const { renderData } = useWebsocket(300, 15);
+    const { renderData } = useWebsocket(300, 15); // TODO
 
     const reactFlowInstance = useReactFlow();
 
