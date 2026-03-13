@@ -4,11 +4,15 @@ import { useState } from 'react';
 
 export default function SourceNode() {
     const [isConnected, setIsConnected] = useState(false);
-    const { dataStreaming } = useGlobalContext()
+    const { dataStreaming } = useGlobalContext();
+
+    const handleClick = () => {
+        setIsConnected((prev) => !prev);
+    };
 
     return (
         <div
-            onClick={() => setIsConnected(!isConnected)}
+            onClick={handleClick}
             className="relative w-[396px] h-[96px] flex bg-white rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0"
         >
             {/* Status dot */}
@@ -47,7 +51,6 @@ export default function SourceNode() {
                         borderRadius: '50%',
                         zIndex: 10,
                     }}
-                    onConnect={() => setIsConnected(!isConnected)}
                 />
             </span>
         </div>
