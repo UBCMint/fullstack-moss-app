@@ -3,7 +3,7 @@
 import React from 'react';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
-import useWebsocket from '@/hooks/useWebsocket';
+import useNodeData from '@/hooks/useNodeData';
 import ComboBox, { LabelColor } from './label-combo-box';
 import { LabelGraphPoint, TimelineLabelRow } from './label-timeline-panel';
 
@@ -24,6 +24,46 @@ const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:9000';
 const LABEL_SESSION_ID = process.env.NEXT_PUBLIC_LABEL_SESSION_ID ?? '1';
 const TIME_LABELS_ENDPOINT = `${API_BASE_URL}/api/sessions/${LABEL_SESSION_ID}/time-label`;
+
+function normalizeNodeTimestamp(raw: unknown): string | null {
+    if (raw == null) return null;
+
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+        const epochMs = raw < 1_000_000_000_000 ? raw * 1000 : raw;
+        return new Date(epochMs).toISOString();
+    }
+
+    const value = String(raw).trim();
+    if (!value) return null;
+
+    if (/^\d+$/.test(value)) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return null;
+        const epochMs = value.length <= 10 ? numeric * 1000 : numeric;
+        return new Date(epochMs).toISOString();
+    }
+
+    const parsed = Date.parse(value);
+    if (!Number.isNaN(parsed)) {
+        return new Date(parsed).toISOString();
+    }
+
+    const timeOnlyMatch = value.match(
+        /^(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/
+    );
+    if (!timeOnlyMatch) return null;
+
+    const hours = Number(timeOnlyMatch[1]);
+    const minutes = Number(timeOnlyMatch[2]);
+    const seconds = Number(timeOnlyMatch[3]);
+    const milliseconds = Number(
+        (timeOnlyMatch[4] ?? '0').padEnd(3, '0').slice(0, 3)
+    );
+
+    const date = new Date();
+    date.setHours(hours, minutes, seconds, milliseconds);
+    return date.toISOString();
+}
 
 export default function LabelNode({ id }: LabelNodeProps) {
     const [isConnected, setIsConnected] = React.useState(false);
@@ -50,7 +90,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const momentCounterRef = React.useRef(0);
 
     const { dataStreaming } = useGlobalContext();
-    const { renderData } = useWebsocket(300, 15); // TODO
+    const { renderData } = useNodeData(300, 15);
 
     const reactFlowInstance = useReactFlow();
 
@@ -115,20 +155,20 @@ export default function LabelNode({ id }: LabelNodeProps) {
     }, [labeledMoments]);
 
     React.useEffect(() => {
-        if (!dataStreaming) {
+        if (!dataStreaming || renderData.length === 0) {
             return;
         }
 
-        const tick = () => {
-            const timestamp = new Date().toISOString();
-            setSessionStartTimestamp((previousValue) => previousValue ?? timestamp);
-            setLatestBackendTimestamp(timestamp);
-        };
+        const mostRecentPoint = renderData[renderData.length - 1];
+        const timestamp = normalizeNodeTimestamp(mostRecentPoint.time);
 
-        tick();
-        const interval = setInterval(tick, 300);
-        return () => clearInterval(interval);
-    }, [dataStreaming]);
+        if (!timestamp) {
+            return;
+        }
+
+        setSessionStartTimestamp((previousValue) => previousValue ?? timestamp);
+        setLatestBackendTimestamp(timestamp);
+    }, [dataStreaming, renderData]);
 
     const postLabelsToApi = React.useCallback(async () => {
         const unsentLabels = labelsRef.current.filter(
@@ -298,24 +338,14 @@ export default function LabelNode({ id }: LabelNodeProps) {
 
     const graphData = React.useMemo<LabelGraphPoint[]>(() => {
         return renderData
-            .map((item: any, index: number) => {
-                const signals: unknown = item?.signals;
-                const signalValues = Array.isArray(signals) ? signals : [];
-                const rawTime = item?.time;
-                const parsedTime = Number(rawTime);
-                const timeLabel = Number.isFinite(parsedTime)
-                    ? new Date(parsedTime).toISOString()
-                    : typeof rawTime === 'string'
-                    ? rawTime
-                    : new Date().toISOString();
-
+            .map((item, index: number) => {
                 return {
                     id: `graph-point-${index}`,
-                    time: timeLabel,
-                    signal1: Number(signalValues[0] ?? 0),
-                    signal2: Number(signalValues[1] ?? 0),
-                    signal3: Number(signalValues[2] ?? 0),
-                    signal4: Number(signalValues[3] ?? 0),
+                    time: item.time,
+                    signal1: Number(item.signal1 ?? 0),
+                    signal2: Number(item.signal2 ?? 0),
+                    signal3: Number(item.signal3 ?? 0),
+                    signal4: Number(item.signal4 ?? 0),
                 };
             })
             .slice(-300);

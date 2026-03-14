@@ -34,7 +34,7 @@ const DEFAULT_PROCESSING_CONFIG: ProcessingConfig = {
 function formatTimestamp(raw: any): string {
     const s = String(raw);
     // ISO 8601: "2026-03-11T03:55:22.715574979Z" - extract "03:55:22"
-    if (s.includes('T')) return s.slice(11, 19);
+    if (s.includes('T')) return s.slice(11, 23);
     return s;
 }
 
