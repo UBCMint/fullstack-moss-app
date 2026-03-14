@@ -60,6 +60,7 @@ const colorBorderMap: Record<LabelColor, string> = {
 };
 const VISIBLE_WINDOW_MS = 30_000;
 const TICK_INTERVAL_MS = 5_000;
+const LIVE_EDGE_EPSILON_PX = 4;
 
 const parseTimestampMs = (timestamp: string | null): number | null => {
     if (!timestamp) return null;
@@ -290,6 +291,33 @@ export default function LabelTimelinePanel({
         setHighlightedSignal(signalKey);
     };
 
+    const timelineScrollRef = React.useRef<HTMLDivElement | null>(null);
+    const isAtLiveEdgeRef = React.useRef(true);
+
+    const handleTimelineScroll = React.useCallback(() => {
+        const node = timelineScrollRef.current;
+        if (!node) {
+            return;
+        }
+
+        isAtLiveEdgeRef.current =
+            node.scrollLeft + node.clientWidth >=
+            node.scrollWidth - LIVE_EDGE_EPSILON_PX;
+    }, []);
+
+    React.useEffect(() => {
+        if (viewMode !== 'timeline') {
+            return;
+        }
+
+        const node = timelineScrollRef.current;
+        if (!node || !isAtLiveEdgeRef.current) {
+            return;
+        }
+
+        node.scrollLeft = Math.max(node.scrollWidth - node.clientWidth, 0);
+    }, [axisEndMs, laneGroups.length, virtualTrackWidthPercent, viewMode]);
+
     if (!isExpanded) {
         return null;
     }
@@ -470,7 +498,11 @@ export default function LabelTimelinePanel({
                 </div>
             ) : (
                 <div className="mb-5 rounded-[16px] border border-[#D3D3D3] bg-white p-3">
-                    <div className="w-full overflow-x-auto rounded-md border border-[#E2E2E2] pb-2">
+                    <div
+                        ref={timelineScrollRef}
+                        onScroll={handleTimelineScroll}
+                        className="w-full overflow-x-auto rounded-md border border-[#E2E2E2] pb-2"
+                    >
                         <div
                             className="min-w-full"
                             style={{ width: `${virtualTrackWidthPercent}%` }}
