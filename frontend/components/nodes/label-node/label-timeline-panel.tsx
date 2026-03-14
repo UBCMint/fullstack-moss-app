@@ -52,6 +52,11 @@ interface PackedTimelineEntry {
     laneIndex: number;
 }
 
+interface FocusWindowMs {
+    startMs: number;
+    endMs: number;
+}
+
 const colorBorderMap: Record<LabelColor, string> = {
     'teal-700': 'border-[#2E7B75]',
     'teal-500': 'border-[#6CAFA4]',
@@ -273,6 +278,11 @@ export default function LabelTimelinePanel({
 
     const [highlightedSignal, setHighlightedSignal] = React.useState<
         'signal1' | 'signal2' | 'signal3' | 'signal4'>('signal1');
+    const [selectedGraphEventId, setSelectedGraphEventId] = React.useState<
+        string | null
+    >(null);
+    const [focusWindowMs, setFocusWindowMs] =
+        React.useState<FocusWindowMs | null>(null);
 
     const signalConfigs: Array<{
         key: 'signal1' | 'signal2' | 'signal3' | 'signal4';
@@ -290,6 +300,71 @@ export default function LabelTimelinePanel({
     ) => {
         setHighlightedSignal(signalKey);
     };
+
+    // beginning of new, not sure if this works
+    const normalizedGraphData = React.useMemo(() => {
+        return graphData
+            .map((point) => {
+                const timeMs = parseTimestampMs(point.time);
+                if (timeMs === null) {
+                    return null;
+                }
+                return { ...point, timeMs };
+            })
+            .filter(
+                (
+                    point
+                ): point is LabelGraphPoint & {
+                    timeMs: number;
+                } => point !== null
+            );
+    }, [graphData]);
+
+    const displayedGraphData = React.useMemo<LabelGraphPoint[]>(() => {
+        if (!focusWindowMs) {
+            return graphData;
+        }
+
+        const focused = normalizedGraphData.filter(
+            (point) =>
+                point.timeMs >= focusWindowMs.startMs &&
+                point.timeMs <= focusWindowMs.endMs
+        );
+
+        if (focused.length === 0) {
+            return graphData;
+        }
+
+        return focused.map(({ timeMs: _timeMs, ...point }) => point);
+    }, [focusWindowMs, graphData, normalizedGraphData]);
+
+    const handleGraphEventClick = React.useCallback(
+        (row: TimelineLabelRow) => {
+            const startMs = parseTimestampMs(row.startTimestamp);
+            const endMs = parseTimestampMs(row.endTimestamp ?? latestBackendTimestamp);
+
+            if (startMs === null || endMs === null) {
+                return;
+            }
+
+            const durationMs = Math.max(endMs - startMs, 1_000);
+            const paddingMs = Math.max(Math.floor(durationMs * 0.1), 500);
+
+            setSelectedGraphEventId(row.id);
+            setFocusWindowMs({
+                startMs: startMs - paddingMs,
+                endMs: endMs + paddingMs,
+            });
+            // TODO: get data for focused window from backend.
+        },
+        [latestBackendTimestamp]
+    );
+
+    const handleReturnToLive = React.useCallback(() => {
+        setSelectedGraphEventId(null);
+        setFocusWindowMs(null);
+    }, []);
+    // end of new, not sure if this works
 
     const timelineScrollRef = React.useRef<HTMLDivElement | null>(null);
     const isAtLiveEdgeRef = React.useRef(true);
@@ -342,6 +417,14 @@ export default function LabelTimelinePanel({
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {viewMode === 'graph' && selectedGraphEventId && (
+                        <button
+                            className="nodrag nopan rounded-md border border-[#D3D3D3] bg-white px-3 py-1 text-sm text-[#7A7A7A] hover:bg-[#F2F2F2] transition-colors"
+                            onClick={handleReturnToLive}
+                        >
+                            Return to Live
+                        </button>
+                    )}
                     <button
                         className="nodrag nopan rounded-md border border-[#D3D3D3] bg-white px-3 py-1 text-sm text-[#7A7A7A] hover:bg-[#F2F2F2] transition-colors"
                         onClick={
@@ -367,7 +450,7 @@ export default function LabelTimelinePanel({
                     <div className="grid grid-cols-[1fr_140px] gap-4">
                         <div className="h-[320px] rounded-[12px] border border-[#E2E2E2] bg-white p-2">
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={graphData}>
+                                <LineChart data={displayedGraphData}>
                                     <CartesianGrid
                                         strokeDasharray="3 3"
                                         stroke="#E7E7E7"
@@ -453,8 +536,7 @@ export default function LabelTimelinePanel({
                                                 row.startTimestamp
                                             );
                                             const isSelected =
-                                                //row.id === selectedGraphEventId;
-                                                false;
+                                                row.id === selectedGraphEventId;
 
                                             return (
                                                 <button
@@ -465,10 +547,7 @@ export default function LabelTimelinePanel({
                                                             ? 'border-[#2E7B75] bg-[#E8F2F1] text-[#163B39]'
                                                             : 'border-[#BFD9D7] text-[#204C49] hover:bg-[#EEF3F2]'
                                                     )}
-                                                    onClick={() =>
-                                                        //handleGraphEventClick(row)
-                                                        console.log(row)
-                                                    }
+                                                    onClick={() => handleGraphEventClick(row)}
                                                 >
                                                     <div className="flex items-center justify-between gap-2">
                                                         <span className="truncate font-medium">

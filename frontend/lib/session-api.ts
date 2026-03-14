@@ -85,3 +85,19 @@ export async function loadFrontendState(sessionId: number): Promise<unknown> {
     return parseJsonResponse<unknown>(response);
 }
 
+export async function saveTimeLabels(
+    sessionId: number,
+    payload: { timestamp: string, label: string }[]
+): Promise<void> {
+    // second parameter: payload: { timestamp: string, label: string }[]
+    const response = await fetch(`/api/sessions/${sessionId}/time-label`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        throw new Error(await parseErrorMessage(response));
+    }
+}
