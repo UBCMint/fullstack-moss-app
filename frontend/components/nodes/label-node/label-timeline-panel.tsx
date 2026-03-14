@@ -278,10 +278,10 @@ export default function LabelTimelinePanel({
         label: string;
         color: string;
     }> = [
-        { key: 'signal1', label: 'Fp1', color: '#2E7B75' },
-        { key: 'signal2', label: 'Fp2', color: '#6CAFA4' },
-        { key: 'signal3', label: 'Cz', color: '#98CDBF' },
-        { key: 'signal4', label: 'Pz', color: '#D6E6D4' },
+        { key: 'signal1', label: 'Signal 1', color: '#2E7B75' },
+        { key: 'signal2', label: 'Signal 2', color: '#6CAFA4' },
+        { key: 'signal3', label: 'Signal 3', color: '#98CDBF' },
+        { key: 'signal4', label: 'Signal 4', color: '#D6E6D4' },
     ];
 
     const toggleSignal = (
