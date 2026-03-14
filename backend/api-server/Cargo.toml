@@ -31,3 +31,6 @@ env_logger = "0.11"
 
 # Shared logic crate
 shared-logic = { path = "../shared-logic" }
+
+# CSV serialization/deserialization
+csv = "1.4"
