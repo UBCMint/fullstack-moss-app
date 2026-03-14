@@ -68,7 +68,7 @@ export default function ComboBox({
                 'bg-white rounded-[30px] border-2 overflow-hidden border-[#D3D3D3]'
             )}
             style={{
-                width: 'fit-content',
+                width: isExpanded ? '760px' : 'fit-content',
                 minWidth: isExpanded ? '760px' : '396px',
             }}
         >

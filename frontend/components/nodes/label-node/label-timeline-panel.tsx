@@ -58,6 +58,8 @@ const colorBorderMap: Record<LabelColor, string> = {
     'teal-300': 'border-[#98CDBF]',
     'mint-100': 'border-[#D6E6D4]',
 };
+const VISIBLE_WINDOW_MS = 30_000;
+const TICK_INTERVAL_MS = 5_000;
 
 const parseTimestampMs = (timestamp: string | null): number | null => {
     if (!timestamp) return null;
@@ -133,10 +135,6 @@ export default function LabelTimelinePanel({
     isDataStreamOn,
     graphData,
 }: LabelTimelinePanelProps) {
-    if (!isExpanded) {
-        return null;
-    }
-
     const latestMs = parseTimestampMs(latestBackendTimestamp);
     const fallbackStartMs = parseTimestampMs(sessionStartTimestamp);
 
@@ -171,22 +169,24 @@ export default function LabelTimelinePanel({
         }
 
         const maxValue = Math.max(...endCandidates);
-        return Math.max(maxValue, axisStartMs + 30_000);
+        return Math.max(maxValue, axisStartMs + VISIBLE_WINDOW_MS);
     }, [axisStartMs, rows, latestBackendTimestamp, latestMs]);
 
-    const domainMs = Math.max(axisEndMs - axisStartMs, 1);
+    const elapsedDurationMs = Math.max(axisEndMs - axisStartMs, 1);
+    const virtualDurationMs = Math.max(elapsedDurationMs, VISIBLE_WINDOW_MS);
+    const virtualTrackWidthPercent = (virtualDurationMs / VISIBLE_WINDOW_MS) * 100;
 
     const ticks = React.useMemo(() => {
-        const tickCount = 6;
+        const tickCount = Math.floor(virtualDurationMs / TICK_INTERVAL_MS) + 1;
         return Array.from({ length: tickCount }, (_, index) => {
-            const ratio = index / (tickCount - 1);
-            const absoluteMs = axisStartMs + Math.floor(domainMs * ratio);
+            const offsetMs = index * TICK_INTERVAL_MS;
+            const absoluteMs = axisStartMs + offsetMs;
             return {
-                ratio,
+                ratio: offsetMs / virtualDurationMs,
                 label: formatAbsoluteTime(absoluteMs),
             };
-        });
-    }, [axisStartMs, domainMs]);
+        }).filter((tick) => tick.ratio >= 0 && tick.ratio <= 1.0001);
+    }, [axisStartMs, virtualDurationMs]);
 
     const tableRows = [...rows].sort((a, b) => {
         const bStart = parseTimestampMs(b.startTimestamp) ?? 0;
@@ -289,6 +289,10 @@ export default function LabelTimelinePanel({
     ) => {
         setHighlightedSignal(signalKey);
     };
+
+    if (!isExpanded) {
+        return null;
+    }
 
     return (
         <div className="mx-4 mb-4 rounded-[24px] border border-[#D3D3D3] bg-[#F8F9F8] p-4">
@@ -466,70 +470,82 @@ export default function LabelTimelinePanel({
                 </div>
             ) : (
                 <div className="mb-5 rounded-[16px] border border-[#D3D3D3] bg-white p-3">
-                <div className="mb-3 relative h-6 border-b border-[#D3D3D3]">
-                    {ticks.map((tick) => (
+                    <div className="w-full overflow-x-auto rounded-md border border-[#E2E2E2] pb-2">
                         <div
-                            key={`${tick.ratio}-${tick.label}`}
-                            className="absolute top-0 -translate-x-1/2 text-xs text-[#7A7A7A]"
-                            style={{ left: `${tick.ratio * 100}%` }}
+                            className="min-w-full"
+                            style={{ width: `${virtualTrackWidthPercent}%` }}
                         >
-                            {tick.label}
-                        </div>
-                    ))}
-                </div>
-
-                <div className="space-y-2">
-                    {laneGroups.length === 0 && (
-                        <div className="py-3 text-sm text-[#8A8A8A]">
-                            No labels yet. Start/stop Trigger to add moments.
-                        </div>
-                    )}
-
-                    {laneGroups.map((laneEntries, laneIndex) => (
-                        <div
-                            key={`timeline-lane-${laneIndex}`}
-                            className="relative h-8 rounded-md bg-[#EEF3F2]"
-                        >
-                            {laneEntries.map((entry) => {
-                                const startOffset = Math.max(
-                                    entry.startMs - axisStartMs,
-                                    0
-                                );
-                                const endOffset = Math.max(
-                                    entry.endMs - axisStartMs,
-                                    startOffset + 1
-                                );
-                                const leftPercent = (startOffset / domainMs) * 100;
-                                const widthPercent = Math.max(
-                                    ((endOffset - startOffset) / domainMs) * 100,
-                                    2
-                                );
-
-                                return (
+                            <div className="mb-3 relative h-6 border-b border-[#D3D3D3]">
+                                {ticks.map((tick) => (
                                     <div
-                                        key={entry.row.id}
-                                        className={cn(
-                                            'absolute top-0 h-full rounded-md border flex items-center px-3 text-sm text-[#204C49]',
-                                            colorClassMap[entry.row.color],
-                                            colorBorderMap[entry.row.color],
-                                            entry.row.isInProgress ? 'animate-pulse' : ''
-                                        )}
-                                        style={{
-                                            left: `${leftPercent}%`,
-                                            width: `${Math.min(
-                                                widthPercent,
-                                                100 - leftPercent
-                                            )}%`,
-                                        }}
+                                        key={`${tick.ratio}-${tick.label}`}
+                                        className="absolute top-0 -translate-x-1/2 text-xs text-[#7A7A7A]"
+                                        style={{ left: `${tick.ratio * 100}%` }}
                                     >
-                                        {entry.row.label}
-                                        {entry.row.isInProgress ? ' (recording)' : ''}
+                                        {tick.label}
                                     </div>
-                                );
-                            })}
+                                ))}
+                            </div>
+
+                            <div className="space-y-2">
+                                {laneGroups.length === 0 && (
+                                    <div className="py-3 text-sm text-[#8A8A8A]">
+                                        No labels yet. Start/stop Trigger to add moments.
+                                    </div>
+                                )}
+
+                                {laneGroups.map((laneEntries, laneIndex) => (
+                                    <div
+                                        key={`timeline-lane-${laneIndex}`}
+                                        className="relative h-8 w-full rounded-md bg-[#EEF3F2]"
+                                    >
+                                        {laneEntries.map((entry) => {
+                                            const startOffset = Math.max(
+                                                entry.startMs - axisStartMs,
+                                                0
+                                            );
+                                            const endOffset = Math.max(
+                                                entry.endMs - axisStartMs,
+                                                startOffset + 1
+                                            );
+                                            const leftPercent =
+                                                (startOffset / virtualDurationMs) * 100;
+                                            const widthPercent = Math.max(
+                                                ((endOffset - startOffset) /
+                                                    virtualDurationMs) *
+                                                    100,
+                                                2
+                                            );
+
+                                            return (
+                                                <div
+                                                    key={entry.row.id}
+                                                    className={cn(
+                                                        'absolute top-0 h-full rounded-md border flex items-center px-3 text-sm text-[#204C49]',
+                                                        colorClassMap[entry.row.color],
+                                                        colorBorderMap[entry.row.color],
+                                                        entry.row.isInProgress ? 'animate-pulse' : ''
+                                                    )}
+                                                    style={{
+                                                        left: `${leftPercent}%`,
+                                                        width: `${Math.min(
+                                                            widthPercent,
+                                                            100 - leftPercent
+                                                        )}%`,
+                                                    }}
+                                                >
+                                                    {entry.row.label}
+                                                    {entry.row.isInProgress
+                                                        ? ' (recording)'
+                                                        : ''}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                    ))}
-                </div>
+                    </div>
                 </div>
             )}
 
