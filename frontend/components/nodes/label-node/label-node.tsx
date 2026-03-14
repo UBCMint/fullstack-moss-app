@@ -6,7 +6,7 @@ import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
 import ComboBox, { LabelColor } from './label-combo-box';
 import { LabelGraphPoint, TimelineLabelRow } from './label-timeline-panel';
-import { saveTimeLabels } from '@/lib/session-api';
+import { saveTimeLabels, getSessions, createSession } from '@/lib/session-api';
 
 interface LabelNodeProps {
     id?: string;
@@ -21,10 +21,7 @@ interface LabeledMoment {
     source: 'Trigger';
 }
 
-const API_BASE_URL =
-    process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:9000';
 const LABEL_SESSION_ID = process.env.NEXT_PUBLIC_LABEL_SESSION_ID ?? '1';
-const TIME_LABELS_ENDPOINT = `${API_BASE_URL}/api/sessions/${LABEL_SESSION_ID}/time-label`;
 
 function normalizeNodeTimestamp(raw: unknown): string | null {
     if (raw == null) return null;
@@ -93,7 +90,21 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const { dataStreaming } = useGlobalContext();
     const { renderData } = useNodeData(300, 15);
 
+    const [sessionIdSentToBackend, setSessionIdSentToBackend] = React.useState<number | null>(null);
+
     const reactFlowInstance = useReactFlow();
+
+    React.useEffect(() => {
+        // when the thing is connected for the first time, send the session id to the backend
+        if (sessionIdSentToBackend !== null) {
+            return;
+        }
+        if (isConnected) {
+            void createSession('Label Session').then((session) => {
+                setSessionIdSentToBackend(session.id);
+            });
+        }
+    }, [isConnected]);
 
     const checkConnectionStatus = React.useCallback(() => {
         try {
@@ -181,42 +192,25 @@ export default function LabelNode({ id }: LabelNodeProps) {
             return;
         }
 
+        // TODO: should these be sent in number format?
         const payload = unsentLabels.map((moment) => ({
             timestamp: moment.startTimestamp, // will need start and end timestamps, backend update
             label: moment.label,
         }));
 
-        void saveTimeLabels(Number(LABEL_SESSION_ID), payload);
+        // first, get session ids from backend
+        const sessionId = await getSessions();
+        console.log('Session ids:', sessionId);
 
-        console.log('POST time labels:', TIME_LABELS_ENDPOINT, payload);
+        if (sessionIdSentToBackend === null) {
+            console.error('Session id not sent to backend');
+            return;
+        }
 
-        /*try {
-            const response = await fetch(TIME_LABELS_ENDPOINT, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-            });
-
-            if (!response.ok) {
-                const errorBody = await response.text();
-                console.error(
-                    'POST time labels failed:',
-                    response.status,
-                    errorBody
-                );
-                return;
-            }
-
-            unsentLabels.forEach((moment) => {
-                sentLabelIdsRef.current.add(moment.id);
-            });
-            console.log('POST time labels success:', unsentLabels.length);
-        } catch (error) {
-            console.error('POST time labels request error:', error);
-        }*/
-    }, []);
+        void saveTimeLabels(sessionIdSentToBackend, payload).then(() => {
+            console.log('POST time labels:', payload);
+        });
+    }, [sessionIdSentToBackend]);
 
     React.useEffect(() => {
         const wasStreaming = previousStreamStateRef.current;
