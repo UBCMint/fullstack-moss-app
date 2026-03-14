@@ -61,8 +61,35 @@ const colorBorderMap: Record<LabelColor, string> = {
 
 const parseTimestampMs = (timestamp: string | null): number | null => {
     if (!timestamp) return null;
+
+    if (/^\d+$/.test(timestamp)) {
+        const numeric = Number(timestamp);
+        if (Number.isFinite(numeric)) {
+            return timestamp.length <= 10 ? numeric * 1000 : numeric;
+        }
+    }
+
     const value = Date.parse(timestamp);
-    return Number.isNaN(value) ? null : value;
+    if (!Number.isNaN(value)) {
+        return value;
+    }
+
+    // Support truncated websocket timestamps like "HH:mm:ss" or "HH:mm:ss.SSS".
+    const timeOnlyMatch = timestamp.match(
+        /^(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/
+    );
+    if (!timeOnlyMatch) {
+        return null;
+    }
+
+    const hours = Number(timeOnlyMatch[1]);
+    const minutes = Number(timeOnlyMatch[2]);
+    const seconds = Number(timeOnlyMatch[3]);
+    const milliseconds = Number((timeOnlyMatch[4] ?? '0').padEnd(3, '0').slice(0, 3));
+
+    const baseDate = new Date();
+    baseDate.setHours(hours, minutes, seconds, milliseconds);
+    return baseDate.getTime();
 };
 
 const formatAbsoluteTime = (ms: number): string => {
