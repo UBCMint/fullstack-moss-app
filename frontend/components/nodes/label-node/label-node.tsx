@@ -6,6 +6,7 @@ import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
 import ComboBox, { LabelColor } from './label-combo-box';
 import { LabelGraphPoint, TimelineLabelRow } from './label-timeline-panel';
+import { saveTimeLabels } from '@/lib/session-api';
 
 interface LabelNodeProps {
     id?: string;
@@ -174,6 +175,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
         const unsentLabels = labelsRef.current.filter(
             (moment) => !sentLabelIdsRef.current.has(moment.id)
         );
+        // does it make more sense to keep track of index?
 
         if (unsentLabels.length === 0) {
             return;
@@ -184,9 +186,11 @@ export default function LabelNode({ id }: LabelNodeProps) {
             label: moment.label,
         }));
 
+        void saveTimeLabels(Number(LABEL_SESSION_ID), payload);
+
         console.log('POST time labels:', TIME_LABELS_ENDPOINT, payload);
 
-        try {
+        /*try {
             const response = await fetch(TIME_LABELS_ENDPOINT, {
                 method: 'POST',
                 headers: {
@@ -211,7 +215,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
             console.log('POST time labels success:', unsentLabels.length);
         } catch (error) {
             console.error('POST time labels request error:', error);
-        }
+        }*/
     }, []);
 
     React.useEffect(() => {
