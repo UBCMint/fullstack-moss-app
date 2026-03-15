@@ -372,13 +372,15 @@ pub async fn insert_time_labels(client: &DbClient, session_id: i32, labels: Vec<
     }
 
     let mut query_builder = sqlx::QueryBuilder::new(
-        "INSERT INTO time_labels (session_id, timestamp, label) "
+        "INSERT INTO time_labels (session_id, start_timestamp, end_timestamp, label, color) "
     );
 
     query_builder.push_values(labels.iter(), |mut b, label| {
         b.push_bind(session_id)
-            .push_bind(label.timestamp)
-            .push_bind(&label.label);
+            .push_bind(label.start_timestamp)
+            .push_bind(label.end_timestamp)
+            .push_bind(&label.label)
+            .push_bind(&label.color);
     });
 
     query_builder.build().execute(&**client).await?;
@@ -416,7 +418,7 @@ pub async fn get_time_labels_by_range(client: &DbClient, session_id: i32, start:
 
     let labels = sqlx::query_as!(
         TimeLabel,
-        "SELECT id, session_id, timestamp, label FROM time_labels WHERE session_id = $1 AND timestamp >= $2 AND timestamp <= $3 ORDER BY timestamp",
+        "SELECT id, session_id, start_timestamp, end_timestamp, label, color FROM time_labels WHERE session_id = $1 AND start_timestamp >= $2 AND start_timestamp <= $3 ORDER BY start_timestamp",
         session_id,
         start,
         end,

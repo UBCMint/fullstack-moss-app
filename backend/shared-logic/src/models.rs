@@ -54,16 +54,20 @@ pub struct FrontendState {
 pub struct TimeLabel {
     pub id: i32,
     pub session_id: i32,
-    pub timestamp: DateTime<Utc>,
+    pub start_timestamp: DateTime<Utc>,
+    pub end_timestamp: Option<DateTime<Utc>>,
     pub label: String,
+    pub color: String,
 }
 
 // Struct for a time label coming INTO the API from the frontend
 // No id (auto-generated) or session_id (comes from URL path)
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewTimeLabel {
-    pub timestamp: DateTime<Utc>,
+    pub start_timestamp: DateTime<Utc>,
+    pub end_timestamp: Option<DateTime<Utc>>,
     pub label: String,
+    pub color: String,
 }
 
 // Struct for a row of EEG data coming OUT of the DB
