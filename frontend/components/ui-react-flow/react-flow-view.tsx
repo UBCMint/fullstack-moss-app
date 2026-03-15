@@ -27,6 +27,7 @@ import SourceNode from '@/components/nodes/source-node';
 import FilterNode from '@/components/nodes/filter-node/filter-node';
 import MachineLearningNode from '@/components/nodes/machine-learning-node/machine-learning-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
+import WindowNode from '@/components/nodes/window-node/window-node';
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
 import {
@@ -42,6 +43,7 @@ const nodeTypes = {
     'filter-node': FilterNode,
     'machine-learning-node': MachineLearningNode,
     'signal-graph-node': SignalGraphNode,
+    'window-node': WindowNode,
 };
 
 let id = 0;

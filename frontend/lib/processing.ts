@@ -7,4 +7,8 @@ export type ProcessingConfig = {
     sfreq: number
     n_channels: number
 }
+export type WindowingConfig = {
+    chunk_size: number
+    overlap_size: number
+}
   
