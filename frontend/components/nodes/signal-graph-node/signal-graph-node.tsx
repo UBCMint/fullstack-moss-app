@@ -1,9 +1,9 @@
 import { Card } from '@/components/ui/card';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
-import useNodeData from '@/hooks/useNodeData';
-import React from 'react';
+// import useWebsocket from '@/hooks/useWebsocket';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { ArrowUpRight } from 'lucide-react';
+import React from 'react';
 
 import {
     Dialog,
@@ -16,12 +16,13 @@ import {
 import SignalGraphView from './signal-graph-full';
 
 export default function SignalGraphNode({ id }: { id?: string }) {
-    const { renderData } = useNodeData(20, 10);
+    // const { renderData } = useWebsocket(20, 10);
+
+    const { renderData, dataStreaming } = useGlobalContext();
 
     const processedData = renderData;
     const reactFlowInstance = useReactFlow();
     const [isConnected, setIsConnected] = React.useState(false);
-    const { dataStreaming } = useGlobalContext()
 
     // Determine if this Chart View node has an upstream path from a Source
     const checkConnectionStatus = React.useCallback(() => {

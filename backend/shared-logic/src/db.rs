@@ -353,7 +353,7 @@ pub async fn delete_session(client: &DbClient, session_id: i32) -> Result<(), Er
         .execute(&**client)
         .await?;
 
-    if (res.rows_affected() == 0) {
+    if res.rows_affected() == 0 {
         info!("No rows deleted, session id {} not found", session_id);
         return Err(Error::RowNotFound);
     } else {

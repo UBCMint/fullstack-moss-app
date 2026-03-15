@@ -1,9 +1,9 @@
 'use client';
-import React from 'react';
-import { Handle, Position, useReactFlow} from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
-import WindowComboBox, {type WindowOption} from './window-combo-box';
-import useWebsocket from '@/hooks/useWebsocket';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
+import React from 'react';
+import WindowComboBox, { type WindowOption } from './window-combo-box';
+// import useWebsocket from '@/hooks/useWebsocket';
 
 interface WindowNodeProps {
     id?: string;
@@ -24,23 +24,14 @@ export default function WindowNode({ id }: WindowNodeProps) {
     const reactFlowInstance = useReactFlow();
     
     // Get data stream status from global context
-    const { dataStreaming } = useGlobalContext();
+    const { dataStreaming, sendWindowingConfig } = useGlobalContext();
 
-    const { sendWindowingConfig } = useWebsocket(0, 0);
+    // const { sendWindowingConfig } = useWebsocket(0, 0);
 
-    const buildConfig = () => {
-        if (!isConnected) {
-        return {
-        chunk_size: DEFAULT_WINDOW_SIZE,
-        overlap_size: DEFAULT_OVERLAP_SIZE,
-        };
-    }
-    
-    return {
+    const buildConfig = () => ({
         chunk_size: windowSize,
         overlap_size: overlapSize,
-    };
-};
+    });
 
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
@@ -88,6 +79,10 @@ export default function WindowNode({ id }: WindowNodeProps) {
         Number.isInteger(overlapSize) &&
         overlapSize >= 0 &&
         overlapSize < windowSize;
+    
+    React.useEffect(() => {
+        sendWindowingConfig(buildConfig());
+    }, []);
 
     // Check connection status on mount and when edges might change
     React.useEffect(() => {
@@ -113,7 +108,7 @@ export default function WindowNode({ id }: WindowNodeProps) {
         if (!dataStreaming) return;
         if(!isValidConfig) return;
         sendWindowingConfig(buildConfig());
-    }, [windowSize, overlapSize, selectedOption, isConnected, dataStreaming])  
+    }, [windowSize, overlapSize, selectedOption, isConnected, dataStreaming]);
 
     return (
         <div className="relative">

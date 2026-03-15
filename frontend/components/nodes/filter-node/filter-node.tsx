@@ -1,9 +1,9 @@
 'use client';
-import React from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
-import ComboBox from './combo-box';
 import { ProcessingConfig } from '@/lib/processing';
+import { Handle, Position, useReactFlow } from '@xyflow/react';
+import React from 'react';
+import ComboBox from './combo-box';
 
 interface FilterNodeProps {
     id?: string;
@@ -20,7 +20,7 @@ export default function FilterNode({ id }: FilterNodeProps) {
     const reactFlowInstance = useReactFlow();
     
     // Get data stream status from global context
-    const { dataStreaming } = useGlobalContext();
+    const { dataStreaming, sendProcessingConfig } = useGlobalContext()
 
     const buildConfig = (): ProcessingConfig => {
         if (!isConnected) {
@@ -135,14 +135,14 @@ export default function FilterNode({ id }: FilterNodeProps) {
     }, [checkConnectionStatus]);
 
     React.useEffect(() => {
-        if (!dataStreaming) return;
-        window.dispatchEvent(
-            new CustomEvent<ProcessingConfig>('processing-config-update', {
-                detail: buildConfig(),
-            })
-        );
-    }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming]);
+        if (!dataStreaming) return
+        sendProcessingConfig(buildConfig())
+    }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming])  
 
+    React.useEffect(() => {
+        sendProcessingConfig(buildConfig());
+    }, []);
+    
     return (
         <div className="relative">
             {/* Input Handle - positioned to align with left circle */}
