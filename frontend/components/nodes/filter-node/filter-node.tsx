@@ -1,6 +1,10 @@
 'use client';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { ProcessingConfig } from '@/lib/processing';
+
+const dispatchProcessingConfig = (config: ProcessingConfig) => {
+    window.dispatchEvent(new CustomEvent('processing-config-update', { detail: config }));
+};
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import ComboBox from './combo-box';
@@ -19,8 +23,7 @@ export default function FilterNode({ id }: FilterNodeProps) {
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
     
-    // Get data stream status from global context
-    const { dataStreaming, sendProcessingConfig } = useGlobalContext()
+    const { dataStreaming } = useGlobalContext();
 
     const buildConfig = (): ProcessingConfig => {
         if (!isConnected) {
@@ -136,11 +139,11 @@ export default function FilterNode({ id }: FilterNodeProps) {
 
     React.useEffect(() => {
         if (!dataStreaming) return
-        sendProcessingConfig(buildConfig())
+        dispatchProcessingConfig(buildConfig())
     }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming])  
 
     React.useEffect(() => {
-        sendProcessingConfig(buildConfig());
+        dispatchProcessingConfig(buildConfig());
     }, []);
     
     return (

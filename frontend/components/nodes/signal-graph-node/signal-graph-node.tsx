@@ -1,7 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
-// import useWebsocket from '@/hooks/useWebsocket';
 import { useGlobalContext } from '@/context/GlobalContext';
+import useNodeData from '@/hooks/useNodeData';
 import { ArrowUpRight } from 'lucide-react';
 import React from 'react';
 
@@ -16,9 +16,8 @@ import {
 import SignalGraphView from './signal-graph-full';
 
 export default function SignalGraphNode({ id }: { id?: string }) {
-    // const { renderData } = useWebsocket(20, 10);
-
-    const { renderData, dataStreaming } = useGlobalContext();
+    const { dataStreaming } = useGlobalContext();
+    const { renderData } = useNodeData(20, 10);
 
     const processedData = renderData;
     const reactFlowInstance = useReactFlow();
