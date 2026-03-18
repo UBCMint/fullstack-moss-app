@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::Sender;
 use tokio_util::sync::CancellationToken;
 use crate::signal_processing::signal_processor::SignalProcessor;
+use crate::processing_pipeline::build_processing_pipeline;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EEGDataPacket {
@@ -16,8 +17,8 @@ pub struct EEGDataPacket {
 
 #[derive(Clone, Deserialize)]
 pub struct ProcessingConfig {
-    pub apply_bandpass: bool,
-    pub use_iir: bool,  // true for IIR, false for FIR
+    pub processing_steps: Vec<String>, 
+//    pub use_iir: bool,  // true for IIR, false for FIR
     pub l_freq: Option<f32>,
     pub h_freq: Option<f32>,
     pub downsample_factor: Option<u32>,
@@ -28,8 +29,7 @@ pub struct ProcessingConfig {
 impl Default for ProcessingConfig {
     fn default() -> Self {
         Self {
-            apply_bandpass: true,
-            use_iir: false,
+            processing_steps: vec![],
             l_freq: Some(1.0),
             h_freq: Some(50.0),
             downsample_factor: None,
@@ -216,18 +216,17 @@ fn process_and_send(
         return Err("Empty packet".to_string());
     }
 
-    // Apply bandpass filter
-    info!("starting signal processing");
-    info!("Before: {:?}", packet.signals);
-    if config.apply_bandpass {
-        packet.signals = if config.use_iir {
-            processor.apply_iir_bandpass(&packet.signals, config.sfreq, config.l_freq, config.h_freq)?
+    // apply processing steps in order using the hash map to call the corresponding functions
+    info!("Starting processing pipeline with steps: {:?}", config.processing_steps);
+    let pipeline = build_processing_pipeline();
+    for step in &config.processing_steps {
+        if let Some(process_fn) = pipeline.get(step) {
+            process_fn(processor, packet, config)?;
         } else {
-            processor.apply_fir_bandpass(&packet.signals, config.sfreq, config.l_freq, config.h_freq)?
-        };
+            return Err(format!("Unknown processing step: {}", step));
+        }
     }
-    info!("done signal processing");
-    info!("after: {:?}", packet.signals);
+    info!("Finished processing pipeline");
 
     //  // Log last 5 samples before filtering
     // for (ch_idx, channel) in packet.signals.iter().enumerate() {
