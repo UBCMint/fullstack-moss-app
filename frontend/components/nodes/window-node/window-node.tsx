@@ -3,7 +3,7 @@ import { useGlobalContext } from '@/context/GlobalContext';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import WindowComboBox, { type WindowOption } from './window-combo-box';
-// import useWebsocket from '@/hooks/useWebsocket';
+import { WindowingConfig } from '@/lib/processing';
 
 interface WindowNodeProps {
     id?: string;
@@ -23,12 +23,13 @@ export default function WindowNode({ id }: WindowNodeProps) {
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
     
-    // Get data stream status from global context
-    const { dataStreaming, sendWindowingConfig } = useGlobalContext();
+    const { dataStreaming } = useGlobalContext();
 
-    // const { sendWindowingConfig } = useWebsocket(0, 0);
+    const dispatchWindowingConfig = (config: WindowingConfig) => {
+        window.dispatchEvent(new CustomEvent('windowing-config-update', { detail: config }));
+    };
 
-    const buildConfig = () => ({
+    const buildConfig = (): WindowingConfig => ({
         chunk_size: windowSize,
         overlap_size: overlapSize,
     });
@@ -81,7 +82,7 @@ export default function WindowNode({ id }: WindowNodeProps) {
         overlapSize < windowSize;
     
     React.useEffect(() => {
-        sendWindowingConfig(buildConfig());
+        dispatchWindowingConfig(buildConfig());
     }, []);
 
     // Check connection status on mount and when edges might change
@@ -105,9 +106,8 @@ export default function WindowNode({ id }: WindowNodeProps) {
     }, [checkConnectionStatus]);
 
     React.useEffect(() => {
-        if (!dataStreaming) return;
         if(!isValidConfig) return;
-        sendWindowingConfig(buildConfig());
+        dispatchWindowingConfig(buildConfig());
     }, [windowSize, overlapSize, selectedOption, isConnected, dataStreaming]);
 
     return (

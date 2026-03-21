@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { useGlobalContext } from './GlobalContext';
-import { ProcessingConfig } from '@/lib/processing';
+import { ProcessingConfig, WindowingConfig } from '@/lib/processing';
 
 export type DataPoint = {
     time: string;
@@ -17,6 +17,7 @@ type Subscriber = (points: DataPoint[]) => void;
 type WebSocketContextType = {
     subscribe: (fn: Subscriber) => () => void;
     sendProcessingConfig: (config: ProcessingConfig) => void;
+    sendWindowingConfig: (config: WindowingConfig) => void;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
@@ -52,6 +53,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const { dataStreaming } = useGlobalContext();
     const wsRef = useRef<WebSocket | null>(null);
     const processingConfigRef = useRef<ProcessingConfig | null>(null);
+    const windowingConfigRef = useRef<WindowingConfig | null>(null);
     const subscribersRef = useRef<Set<Subscriber>>(new Set());
     const closingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isClosingGracefullyRef = useRef(false);
@@ -69,14 +71,29 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         }
     }, []);
 
-    // Forward processing-config-update events from filter node to backend
+    const sendWindowingConfig = useCallback((config: WindowingConfig) => {
+        windowingConfigRef.current = config;
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify(config));
+            console.log('Sent windowing config:', config);
+        }
+    }, []);
+
+    // Forward config events from nodes to backend
     useEffect(() => {
-        const handler = (event: Event) => {
+        const processingHandler = (event: Event) => {
             sendProcessingConfig((event as CustomEvent<ProcessingConfig>).detail);
         };
-        window.addEventListener('processing-config-update', handler);
-        return () => window.removeEventListener('processing-config-update', handler);
-    }, [sendProcessingConfig]);
+        const windowingHandler = (event: Event) => {
+            sendWindowingConfig((event as CustomEvent<WindowingConfig>).detail);
+        };
+        window.addEventListener('processing-config-update', processingHandler);
+        window.addEventListener('windowing-config-update', windowingHandler);
+        return () => {
+            window.removeEventListener('processing-config-update', processingHandler);
+            window.removeEventListener('windowing-config-update', windowingHandler);
+        };
+    }, [sendProcessingConfig, sendWindowingConfig]);
 
     // Manage WebSocket lifecycle
     useEffect(() => {
@@ -102,6 +119,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         ws.onopen = () => {
             console.log('WebSocket connection opened.');
             ws.send(JSON.stringify(processingConfigRef.current ?? DEFAULT_PROCESSING_CONFIG));
+            if (windowingConfigRef.current) {
+                ws.send(JSON.stringify(windowingConfigRef.current));
+            }
         };
 
         ws.onmessage = (event) => {
@@ -145,7 +165,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }, [dataStreaming]);
 
     return (
-        <WebSocketContext.Provider value={{ subscribe, sendProcessingConfig }}>
+        <WebSocketContext.Provider value={{ subscribe, sendProcessingConfig, sendWindowingConfig }}>
             {children}
         </WebSocketContext.Provider>
     );
