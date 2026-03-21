@@ -1,78 +1,37 @@
 'use client';
 import { useGlobalContext } from '@/context/GlobalContext';
-import { ProcessingConfig } from '@/lib/processing';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
-import ComboBox from './combo-box';
+import WindowComboBox, { type WindowOption } from './window-combo-box';
+// import useWebsocket from '@/hooks/useWebsocket';
 
-interface FilterNodeProps {
+interface WindowNodeProps {
     id?: string;
     // data?: any;
 }
 
-export default function FilterNode({ id }: FilterNodeProps) {
-    const [selectedFilter, setSelectedFilter] = React.useState('lowpass');
+export default function WindowNode({ id }: WindowNodeProps) {
+    const DEFAULT_WINDOW_SIZE = 64;
+    const DEFAULT_OVERLAP_SIZE = 0;
+
+    const [windowSize, setWindowSize] = React.useState<number>(DEFAULT_WINDOW_SIZE);
+    const [overlapSize, setOverlapSize] = React.useState<number>(DEFAULT_OVERLAP_SIZE);
+    const [selectedOption, setSelectedOption] = React.useState<WindowOption>('default');
+
     const [isConnected, setIsConnected] = React.useState(false);
-    const [lowCutoff, setLowCutoff] = React.useState(1)
-    const [highCutoff, setHighCutoff] = React.useState(50)
     
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
     
     // Get data stream status from global context
-    const { dataStreaming, sendProcessingConfig } = useGlobalContext()
+    const { dataStreaming, sendWindowingConfig } = useGlobalContext();
 
-    const buildConfig = (): ProcessingConfig => {
-        if (!isConnected) {
-          return {
-            apply_bandpass: false,
-            use_iir: false,
-            l_freq: null,
-            h_freq: null,
-            downsample_factor: null,
-            sfreq: 256,
-            n_channels: 4,
-          }
-        }
-      
-        switch (selectedFilter) {
-          case 'lowpass':
-            return {
-              apply_bandpass: true,
-              use_iir: false,
-              l_freq: null,
-              h_freq: highCutoff,
-              downsample_factor: null,
-              sfreq: 256,
-              n_channels: 4,
-            }
-      
-          case 'highpass':
-            return {
-              apply_bandpass: true,
-              use_iir: false,
-              l_freq: lowCutoff,
-              h_freq: null,
-              downsample_factor: null,
-              sfreq: 256,
-              n_channels: 4,
-            }
-      
-          case 'bandpass':
-            return {
-              apply_bandpass: true,
-              use_iir: false,
-              l_freq: lowCutoff,
-              h_freq: highCutoff,
-              downsample_factor: null,
-              sfreq: 256,
-              n_channels: 4,
-            }
+    // const { sendWindowingConfig } = useWebsocket(0, 0);
 
-            default:
-                throw new Error(`Unhandled filter type: ${selectedFilter}`)
-        }
-      }       
+    const buildConfig = () => ({
+        chunk_size: windowSize,
+        overlap_size: overlapSize,
+    });
 
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
@@ -114,6 +73,17 @@ export default function FilterNode({ id }: FilterNodeProps) {
         }
     }, [id, reactFlowInstance]);
     
+    const isValidConfig =
+        Number.isInteger(windowSize) &&
+        windowSize > 0 &&
+        Number.isInteger(overlapSize) &&
+        overlapSize >= 0 &&
+        overlapSize < windowSize;
+    
+    React.useEffect(() => {
+        sendWindowingConfig(buildConfig());
+    }, []);
+
     // Check connection status on mount and when edges might change
     React.useEffect(() => {
         checkConnectionStatus();
@@ -135,21 +105,18 @@ export default function FilterNode({ id }: FilterNodeProps) {
     }, [checkConnectionStatus]);
 
     React.useEffect(() => {
-        if (!dataStreaming) return
-        sendProcessingConfig(buildConfig())
-    }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming])  
+        if (!dataStreaming) return;
+        if(!isValidConfig) return;
+        sendWindowingConfig(buildConfig());
+    }, [windowSize, overlapSize, selectedOption, isConnected, dataStreaming]);
 
-    React.useEffect(() => {
-        sendProcessingConfig(buildConfig());
-    }, []);
-    
     return (
         <div className="relative">
             {/* Input Handle - positioned to align with left circle */}
             <Handle 
                 type="target" 
                 position={Position.Left}
-                id="filter-input"
+                id="window-input"
                 style={{ 
                     left: '24px',
                     top: '30px',
@@ -169,7 +136,7 @@ export default function FilterNode({ id }: FilterNodeProps) {
             <Handle 
                 type="source" 
                 position={Position.Right}
-                id="filter-output"
+                id="window-output"
                 style={{ 
                     right: '24px',
                     top: '30px',
@@ -186,17 +153,16 @@ export default function FilterNode({ id }: FilterNodeProps) {
             />
 
             {/* Just the ComboBox without Card wrapper */}
-            <ComboBox 
-                value={selectedFilter}
-                onValueChange={setSelectedFilter}
-                lowCutoff={lowCutoff}
-                highCutoff={highCutoff}
-                setLowCutoff={setLowCutoff}
-                setHighCutoff={setHighCutoff}
+            <WindowComboBox 
+                windowSize={windowSize}
+                overlapSize={overlapSize}
+                selectedOption={selectedOption}
+                setWindowSize={setWindowSize}
+                setOverlapSize={setOverlapSize}
+                setSelectedOption={setSelectedOption}
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
             />
-
         </div>
     );
 }

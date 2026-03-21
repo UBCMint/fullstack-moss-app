@@ -39,8 +39,23 @@ impl Default for ProcessingConfig {
     }
 }
 
+#[derive(Clone, Deserialize, Debug)]
+pub struct WindowingConfig {
+    pub chunk_size: usize,
+    pub overlap_size: usize,
+}
+
+impl Default for WindowingConfig {
+    fn default() -> Self {
+        Self {
+            chunk_size: 64,
+            overlap_size: 0,
+        }
+    }
+}
+
 // Async entry point for EEG data collection.
-pub async fn receive_eeg(tx:Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, processing_config: ProcessingConfig) {
+pub async fn receive_eeg(tx:Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, processing_config: ProcessingConfig, windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,) {
     info!("Starting EEG data receiver");
     let python_script_path = std::env::var("SIGNAL_PROCESSING_SCRIPT")
     .unwrap_or_else(|_| "../shared-logic/src/signal_processing/signalProcessing.py".to_string());
@@ -67,7 +82,7 @@ pub async fn receive_eeg(tx:Sender<Arc<EEGDataPacket>>, cancel_token: Cancellati
         };
         
         // Run collection loop
-        run_eeg_collection(inlet, tx, cancel_token, processing_config, sig_processor)
+        run_eeg_collection(inlet, tx, cancel_token, processing_config, sig_processor, windowing_rx)
     });
 
     // Handle results
@@ -100,16 +115,39 @@ fn setup_eeg_stream() -> Result<StreamInlet, String> {
 
 // Main EEG data collection loop.
 // Returns (successful_count, dropped_count) statistics.
-fn run_eeg_collection(inlet: StreamInlet, tx: Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, config: ProcessingConfig, processor: SignalProcessor) -> (u32, u32) {
+fn run_eeg_collection(inlet: StreamInlet,
+    tx: Sender<Arc<EEGDataPacket>>, 
+    cancel_token: CancellationToken,
+    config: ProcessingConfig,
+    processor: SignalProcessor,
+    mut windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,
+) -> (u32, u32) {
     let mut count = 0;
     let mut drop = 0;
+
+    
+    let mut windowing = windowing_rx.borrow().clone();
+
+    // Creates a buffer that stores overlapping eeg samples
+    let mut overlap_buffer: Vec<Vec<f64>> = vec![Vec::new(); 4];
+
     let mut packet = EEGDataPacket {
-        timestamps: Vec::with_capacity(65),
-        signals: vec![Vec::with_capacity(65); 4],
+        timestamps: Vec::with_capacity(windowing.chunk_size + 1),
+        signals: vec![Vec::with_capacity(windowing.chunk_size + 1); 4],
     };
+
     // Calculate the offset between LSL clock and Unix epoch
     let lsl_to_unix_offset = Utc::now().timestamp_nanos_opt().unwrap() as f64 / 1_000_000_000.0 - lsl::local_clock();
     loop {
+        if windowing_rx.has_changed().unwrap_or(false) {
+            windowing = windowing_rx.borrow().clone();
+            info!("Windowing config updated: chunk={}, overlap={}", windowing.chunk_size, windowing.overlap_size);
+            // Discard old buffer and start fresh with new config
+            packet.timestamps.clear();
+            for ch in &mut packet.signals { ch.clear(); }
+            for ch in &mut overlap_buffer { ch.clear(); }
+        }
+
         // Check for cancellation
         if cancel_token.is_cancelled() {
             info!("EEG data receiver cancelled.");
@@ -130,10 +168,34 @@ fn run_eeg_collection(inlet: StreamInlet, tx: Sender<Arc<EEGDataPacket>>, cancel
         // Pull sample with timeout of 1 sec. If it does not see data for 1s, it returns.
         match inlet.pull_sample(1.0) {
            Ok((sample, timestamp)) => {
-                match accumulate_sample(&sample, timestamp + lsl_to_unix_offset, &mut packet) {
+                match accumulate_sample(&sample, timestamp + lsl_to_unix_offset, &mut packet, windowing.chunk_size) {
                     Ok(true) => {
+                        // Window is full. Prepend overlap from previous window if there are any
+                        if windowing.overlap_size > 0 && !overlap_buffer[0].is_empty() {
+                            // Insert overlap samples at the front of the packet
+                            for (ch_idx, ch) in packet.signals.iter_mut().enumerate() {
+                                let mut new_ch = overlap_buffer[ch_idx].clone();
+                                new_ch.extend_from_slice(ch);
+                                *ch = new_ch;
+                            }
+
+                            // Timestamps: prepend placeholders (or track overlap timestamps)
+                            // For simplicity, pad with copies of the first timestamp
+                            let first_ts = packet.timestamps[0];
+                            let mut new_ts = vec![first_ts; windowing.overlap_size];
+                            new_ts.extend_from_slice(&packet.timestamps);
+                            packet.timestamps = new_ts;
+                        }
+
+                        // Save the tail as the new overlap_buffer
+                        let n = packet.signals[0].len();
+                        let keep = windowing.overlap_size.min(n);
+                        for (ch_idx, ch) in packet.signals.iter().enumerate() {
+                            overlap_buffer[ch_idx] = ch[n - keep..].to_vec();
+                        }
+                        
                         // Packet is full, send it
-                        info!("Packet is full, send it");
+                        info!("Packet is full, sending window: {} samples (overlap: {})", packet.signals[0].len(), keep);
                          match process_and_send(&mut packet, &processor, &config, &tx) {
                             Ok(_) => count += 1,
                             Err(e) => {
@@ -146,9 +208,7 @@ fn run_eeg_collection(inlet: StreamInlet, tx: Sender<Arc<EEGDataPacket>>, cancel
                             channel.clear();  
                         }
                     }
-                    Ok(false) => {
-                        // Sample added, but packet not full yet
-                    }
+                    Ok(false) => {} // Sample added, but packet not full yet
                     Err(e) => {
                          let error_msg = e.to_string();
                         if error_msg.contains("Invalid sample length: got 0 channels") {
@@ -179,7 +239,8 @@ fn run_eeg_collection(inlet: StreamInlet, tx: Sender<Arc<EEGDataPacket>>, cancel
 fn accumulate_sample(
     sample: &[f32], 
     timestamp: f64, 
-    packet: &mut EEGDataPacket
+    packet: &mut EEGDataPacket,
+    chunk_size: usize,
 ) -> Result<bool, String> {
     // Validate sample length
     if sample.len() < 4 {
@@ -188,7 +249,7 @@ fn accumulate_sample(
 
     // Convert timestamp
     let timestamp_dt = DateTime::from_timestamp(
-        timestamp as i64, 
+        timestamp as i64,
         (timestamp.fract() * 1_000_000_000.0) as u32
     ).unwrap_or_else(|| Utc::now());
  
@@ -202,7 +263,7 @@ fn accumulate_sample(
     }
 
     // Check if packet is full
-    Ok(packet.signals[0].len() >= 65)
+    Ok(packet.signals[0].len() >= chunk_size)
 }
 
 // calls the signalProcessing.py to process the packet and sends it

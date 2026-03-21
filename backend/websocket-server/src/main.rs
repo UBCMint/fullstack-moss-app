@@ -1,9 +1,10 @@
-use std::os::windows::process;
+// use std::os::windows::process;
 use std::{sync::Arc};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
+use tokio::sync::watch;
 use tokio_tungstenite::{
     accept_async,
     tungstenite::{Message},
@@ -12,10 +13,11 @@ use tokio_tungstenite::{
 use tokio_util::sync::CancellationToken;
 use shared_logic::bc::{start_broadcast};
 use shared_logic::db::{initialize_connection};
-use shared_logic::lsl::{ProcessingConfig}; // get ProcessingConfig from lsl.rs
+use shared_logic::lsl::{ProcessingConfig, WindowingConfig}; // get ProcessingConfig from lsl.rs
 use dotenvy::dotenv;
 use log::{info, error};
 use serde_json; // used to parse ProcessingConfig from JSON sent by frontend
+use serde_json::Value; // used to parse ProcessingConfig from JSON sent by frontend
 
 
 #[tokio::main]
@@ -75,81 +77,126 @@ async fn handle_ws(stream: TcpStream) {
     }
 }
 
-// handle_connection, starts a async broadcast task, 
-// then listens for incoming websocket closing request with the read stream in order to stop the broadcast task.
 async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
-    let ( write, mut read) = ws_stream.split();
-    // set up for the broadcast task
-    let write = Arc::new(Mutex::new(write)); 
+    let (write, mut read) = ws_stream.split();
+    let write = Arc::new(Mutex::new(write));
     let write_clone = write.clone();
     let cancel_token = CancellationToken::new();
     let cancel_clone = cancel_token.clone();
 
-    // setup registration for signal processing configuration
-    let signal_config = read.next().await;
+    let mut processing_config = ProcessingConfig::default();
+    let mut initial_windowing = WindowingConfig::default();
 
-    // we have the ProcessingConfig struct
-    // check if we received a message (two layers of unwrapping needed)
-    let processing_config: ProcessingConfig = match signal_config {
+    // Give the frontend a short window to send configs before we start
+    // Use a timeout so we don't block forever if only one config arrives
+    let config_timeout = tokio::time::Duration::from_millis(500);
+    let deadline = tokio::time::Instant::now() + config_timeout;
 
-        Some(Ok(config_json)) => {
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            info!("Config window elapsed, starting with current configs.");
+            break;
+        }
 
-            // here, we parse the json into a signal config struct using serde_json
-            let config_text = config_json.to_text().unwrap();
-
-            match serde_json::from_str(config_text) {
-                Ok(config) => config,
-                Err(e) => {
-                    error!("Error parsing signal configuration JSON: {}", e);
+        match tokio::time::timeout(remaining, read.next()).await {
+            Ok(Some(Ok(msg))) if msg.is_text() => {
+                let text = msg.to_text().unwrap();
+                if text == "clientClosing" {
+                    info!("Client closing during config phase.");
                     return;
                 }
-            }
-
-        }
-
-        Some(Err(e)) => {
-            error!("Error receiving signal configuration: {}", e);
-            return;
-        }
-
-        None => {
-            error!("No signal configuration received from client. Closing connection.");
-            return;
-        }
-    };
-
-    // spawns the broadcast task
-    let mut broadcast = Some(tokio::spawn(async move {
-        // pass ProcessingConfig into broadcast so it reaches receive_eeg
-        start_broadcast(write_clone, cancel_clone, processing_config).await;
-    }));
-
-
-    //listens for incoming messages 
-    while let Some(msg) = read.next().await {
-        match msg {
-            Ok(msg) if msg.is_text() => { //prep for closing, this currently will not be called, waiting for frontend
-                let text = msg.to_text().unwrap();
-                info!("Received request: {}", text);
-                if text == "clientClosing" {
-                    handle_prep_close(&mut broadcast,&cancel_token, &write.clone()).await;
+                match parse_config_message(text) {
+                    ConfigMessage::Processing(cfg) => {
+                        info!("Received ProcessingConfig");
+                        processing_config = cfg;
+                    }
+                    ConfigMessage::Windowing(cfg) => {
+                        info!("Received WindowingConfig: chunk={}, overlap={}", cfg.chunk_size, cfg.overlap_size);
+                        initial_windowing = cfg;
+                    }
+                    ConfigMessage::Unknown => {
+                        info!("Non-config message during config phase: {}", text);
+                        break;
+                    }
                 }
             }
-            Ok(Message::Close(frame)) => { //handles closing.
-                info!("Received a close request from the client");
-                // cancel_token.cancel(); // remove after frontend updates
-                let mut write = write.lock().await;
-                let _ = write.send(Message::Close(frame)).await;
+            Ok(Some(Err(e))) => { error!("Error receiving config: {}", e); return; }
+            Ok(None) => { error!("Connection closed during config phase."); return; }
+            Err(_) => {
+                // Timeout elapsed
+                info!("Config timeout, starting with received configs.");
+                break;
+            }
+            Ok(_) => {}
+        }
+    }
+
+    info!("Starting broadcast with chunk={}, overlap={}", initial_windowing.chunk_size, initial_windowing.overlap_size);
+
+    let (windowing_tx, windowing_rx) = watch::channel(initial_windowing);
+
+    let mut broadcast = Some(tokio::spawn(async move {
+        start_broadcast(write_clone, cancel_clone, processing_config, windowing_rx).await;
+    }));
+
+    while let Some(msg) = read.next().await {
+        match msg {
+            Ok(msg) if msg.is_text() => {
+                let text = msg.to_text().unwrap();
+                if text == "clientClosing" {
+                    handle_prep_close(&mut broadcast, &cancel_token, &write).await;
+                    break;
+                }
+                match parse_config_message(text) {
+                    ConfigMessage::Windowing(cfg) => {
+                        info!("Windowing update: chunk={}, overlap={}", cfg.chunk_size, cfg.overlap_size);
+                        let _ = windowing_tx.send(cfg);
+                    }
+                    ConfigMessage::Processing(_) => {
+                        info!("Processing config update received");
+                    }
+                    ConfigMessage::Unknown => {
+                        error!("Unknown mid-stream message: {}", text);
+                    }
+                }
+            }
+            Ok(Message::Close(frame)) => {
+                let mut w = write.lock().await;
+                let _ = w.send(Message::Close(frame)).await;
                 break;
             }
             Ok(_) => continue,
-            Err(e) => {
-                error!("Read error (client likely disconnected): {}", e);
-                break;
-            }
+            Err(e) => { error!("Read error: {}", e); break; }
         }
     }
     info!("Client disconnected.");
+}
+
+// Discriminate config type by which fields are present
+enum ConfigMessage {
+    Processing(ProcessingConfig),
+    Windowing(WindowingConfig),
+    Unknown,
+}
+
+fn parse_config_message(text: &str) -> ConfigMessage {
+    let Ok(value) = serde_json::from_str::<Value>(text) else {
+        return ConfigMessage::Unknown;
+    };
+    if value.get("chunk_size").is_some() {
+        match serde_json::from_value::<WindowingConfig>(value) {
+            Ok(cfg) => ConfigMessage::Windowing(cfg),
+            Err(e) => { error!("Failed to parse WindowingConfig: {}", e); ConfigMessage::Unknown }
+        }
+    } else if value.get("apply_bandpass").is_some() {
+        match serde_json::from_value::<ProcessingConfig>(value) {
+            Ok(cfg) => ConfigMessage::Processing(cfg),
+            Err(e) => { error!("Failed to parse ProcessingConfig: {}", e); ConfigMessage::Unknown }
+        }
+    } else {
+        ConfigMessage::Unknown
+    }
 }
 
 // handle_prep_close uses the cancel_token to stop the broadcast sender task, and sends a "prep close complete" message to the client
