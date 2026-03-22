@@ -2,8 +2,8 @@ import { Card } from '@/components/ui/card';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
-import { ArrowUpRight } from 'lucide-react';
-import React from 'react';
+import { ArrowUpRight, Download } from 'lucide-react';
+import React, { useState } from 'react';
 
 import {
     Dialog,
@@ -14,6 +14,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import SignalGraphView from './signal-graph-full';
+import ExportDialog from '@/components/ui/export-dialog';
 
 export default function SignalGraphNode({ id }: { id?: string }) {
     const { dataStreaming } = useGlobalContext();
@@ -22,6 +23,8 @@ export default function SignalGraphNode({ id }: { id?: string }) {
     const processedData = renderData;
     const reactFlowInstance = useReactFlow();
     const [isConnected, setIsConnected] = React.useState(false);
+    const { activeSessionId } = useGlobalContext();
+    const [isExportOpen, setIsExportOpen] = useState(false);
 
     // Determine if this Chart View node has an upstream path from a Source
     const checkConnectionStatus = React.useCallback(() => {
@@ -98,7 +101,7 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                             Chart View
                         </span>
                         {isConnected && (
-                            <div className="w-full mt-[50px] transition-all duration-300 ease-in-out">
+                            <div className="w-full mt-[50px] transition-all duration-300 ease-in-out flex items-center gap-3">
                                 <DialogTrigger asChild>
                                     <button
                                         className="font-geist text-[14px] font-normal leading-tight text-black flex items-center gap-1 hover:opacity-80 transition"
@@ -106,6 +109,15 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                                         Preview <ArrowUpRight size={14} className="transition-transform duration-200 hover:scale-110" />
                                     </button>
                                 </DialogTrigger>
+                                <button
+                                    className="font-geist text-[14px] font-normal leading-tight text-black flex items-center gap-1 hover:opacity-80 transition"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsExportOpen(true);
+                                    }}
+                                >
+                                    Export <Download size={14} className="transition-transform duration-200 hover:scale-110" />
+                                </button>
                             </div>
                         )}
                     </div>
@@ -122,9 +134,9 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                 </div>
 
 
-                <DialogContent 
-                    className="items-center justify-center w-screen h-screen max-w-none max-h-none" 
-                    style={{ backgroundColor : '#EAF1F0'}}
+                <DialogContent
+                    className="items-center justify-center w-screen h-screen max-w-none max-h-none"
+                    style={{ backgroundColor: '#EAF1F0' }}
                 >
                     <DialogHeader>
                         <DialogTitle></DialogTitle>
@@ -135,6 +147,13 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                     </div>
                 </DialogContent>
             </Card>
+
+            {/* Export dialog — outside the ReactFlow Dialog to avoid nesting */}
+            <ExportDialog
+                open={isExportOpen}
+                sessionId={activeSessionId}
+                onOpenChange={setIsExportOpen}
+            />
         </Dialog>
     );
 }
