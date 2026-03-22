@@ -64,11 +64,11 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                <ResponsiveContainer width="100%" height="100%">
                    <LineChart data={data} syncId="SignalChart">
                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                       <XAxis dataKey="time" />
+                       <XAxis dataKey="time" interval={Math.floor(data.length / 10)} />
                        <YAxis
                            type="number"
-                           domain={[0, 100]}
-                           ticks={[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]}
+                           domain={['auto', 'auto']}
+
                        />
                        {signals.map((s) => (
                            <Line
@@ -120,7 +120,7 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
 
            {/* ---- BOTTOM HALF: TABLE ---- */}
            <div className="bg-white border shadow-lg rounded-2xl p-4 overflow-auto">
-               <DataTable data={data} />
+                <DataTable data={data} rowCount={50} />
            </div>
 
 
