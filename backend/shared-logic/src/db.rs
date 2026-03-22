@@ -5,7 +5,7 @@ use sqlx::{
 };
 use tokio::time::{self, Duration};
 use log::{info, error, warn};
-use chrono::{DateTime, Utc};
+use chrono::{Date, DateTime, Utc};
 use dotenvy::dotenv;
 use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
 use crate::{lsl::EEGDataPacket};
@@ -167,6 +167,7 @@ pub async fn insert_batch_eeg(client: &DbClient, session_id: i32, packet: &EEGDa
         }
     );
 
+    query_builder.push(" ON CONFLICT (session_id, time) DO NOTHING");
     query_builder.build().execute(&**client).await?;
     info!("EEG packet inserted successfully - {} data", packet.timestamps.len());
     Ok(())
@@ -494,4 +495,35 @@ pub async fn get_earliest_eeg_timestamp(client: &DbClient, session_id: i32) -> R
     .await?;
 
     Ok(row.earliest_time)
+}
+
+/// Helper function for eeg data to get the start and end timestamps for a given session
+/// 
+/// Returns the start and end timestamps on success.
+pub async fn get_eeg_time_range(client: &DbClient, session_id: i32, options: ExportOptions) -> Result<(DateTime<Utc>, DateTime<Utc>), Error> {
+    // check for time range, else use defaults
+    // for end time, we default to the current time
+    // for start time, we default to the earliest timestamp for the session
+    let end_time = match options.end_time {
+        Some(t) => t,
+        None => Utc::now(),
+    };
+
+    let start_time = match options.start_time {
+        Some(t) => t,
+        None => {
+            // we call the helper function above to get the earliest timestamp
+            match get_earliest_eeg_timestamp(&app_state.db_client, session_id).await {
+                Ok(Some(t)) => t,
+                Ok(None) => return Err((StatusCode::NOT_FOUND, format!("No EEG data found for session {}", session_id))),
+                Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get earliest EEG timestamp: {}", e))),
+            }
+        }
+    };
+
+    if start_time > end_time {
+        return Err((StatusCode::BAD_REQUEST, "start_time cannot be after end_time".to_string()));
+    }
+
+    Ok((start_time, end_time))
 }

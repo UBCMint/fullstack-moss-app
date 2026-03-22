@@ -23,7 +23,7 @@ use axum::http::{HeaderMap, HeaderValue, header};
 use axum::response::IntoResponse;
 
 // shared logic library
-use shared_logic::db::{initialize_connection, DbClient};
+use shared_logic::db::{DbClient, get_eeg_time_range, initialize_connection, export_eeg_data_as_csv};
 use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState};
 
 // Define application state
@@ -226,34 +226,16 @@ async fn export_eeg_data(
         return Err((StatusCode::BAD_REQUEST, format!("Unsupported export format: {}", request.options.format)));
     }
 
-    // check for time range, else use defaults
-    // for end time, we default to the current time
-    // for start time, we default to the earliest timestamp for the session
-    let end_time = match request.options.end_time {
-        Some(t) => t,
-        None => Utc::now(),
-    };
-
-    let start_time = match request.options.start_time {
-        Some(t) => t,
-        None => {
-            // we call the helper function in db.rs to get the earliest timestamp
-            match shared_logic::db::get_earliest_eeg_timestamp(&app_state.db_client, session_id).await {
-                Ok(Some(t)) => t,
-                Ok(None) => return Err((StatusCode::NOT_FOUND, format!("No EEG data found for session {}", session_id))),
-                Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get earliest EEG timestamp: {}", e))),
-            }
-        }
-    };
-
-    if start_time > end_time {
-        return Err((StatusCode::BAD_REQUEST, "start_time cannot be after end_time".to_string()));
-    }
+    let (start_time, end_time) = get_eeg_time_range(&app_state.db_client, session_id, &request.options)
+        .await.map_err(|e| {
+            error!("Failed to get EEG time range: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get EEG time range: {}", e))
+        })?;
 
     let header_included = request.options.includeHeader;
 
     // finally call the export function in db.rs
-    let return_csv = match shared_logic::db::export_eeg_data_as_csv(&app_state.db_client, session_id, start_time, end_time, header_included).await {
+    let return_csv = match export_eeg_data_as_csv(&app_state.db_client, session_id, start_time, end_time, header_included).await {
         Ok(csv_data) => csv_data,
         Err(e) => {
             error!("Failed to export EEG data: {}", e);
