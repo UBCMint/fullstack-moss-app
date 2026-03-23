@@ -7,10 +7,17 @@ import {
    ResponsiveContainer,
    XAxis,
    YAxis,
+   Brush,
 } from 'recharts';
 import { useGlobalContext } from '@/context/GlobalContext';
-import { DivideCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from '@/components/ui/dialog';
 
 
 interface SignalGraphViewProps {
@@ -24,15 +31,26 @@ interface SignalGraphViewProps {
 }
 
 
+const TABLE_PREVIEW_ROWS = 50;
+
 export default function SignalGraphView({ data }: SignalGraphViewProps) {
    const { dataStreaming, setDataStreaming } = useGlobalContext();
    const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
 
-    const signals = [
-        {key: 'signal1', colour: '#0000ff', name: 'Signal 1'},
-        {key: 'signal2', colour: '#00ff00', name: 'Signal 2'},
-        {key: 'signal3', colour: '#FF00D0', name: 'Signal 3'},
-        {key: 'signal4', colour: '#FFFF00', name: 'Signal 4'},
+   const [brushRange, setBrushRange] = useState<{ start: number; end: number } | null>(null);
+
+   const activeBrushStart = brushRange?.start ?? 0;
+   const activeBrushEnd = brushRange?.end ?? Math.max(0, data.length - 1);
+   const visibleCount = activeBrushEnd - activeBrushStart + 1;
+
+   const timeStart = data.length > 0 ? data[0].time : null;
+   const timeEnd = data.length > 0 ? data[data.length - 1].time : null;
+
+ const signals = [
+        {key: 'signal1', colour: '#0000ff', name: 'Channel 1'},
+        {key: 'signal2', colour: '#00ff00', name: 'Channel 2'},
+        {key: 'signal3', colour: '#FF00D0', name: 'Channel 3'},
+        {key: 'signal4', colour: '#FF0000', name: 'Channel 4'},
     ];
 
    const handleStartStop = () => {
@@ -41,9 +59,7 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
 
 
    return (
-       // take full height of the container
        <div className="w-full h-full grid gap-4">
-
 
            {/* ---- HEAD BUTTONS ---- */}
            <div className="flex justify-end mt-[-30px] space-x-[26px]">
@@ -53,22 +69,23 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                >
                    {dataStreaming ? 'Stop Data Stream' : 'Start Data Stream'}
                </Button>
-
-
                <Button className='bg-[#2E7B75] text-white'> Save </Button>
            </div>
 
-
            {/* ---- TOP HALF: CHART ---- */}
-           <div className="flex flex-col h-[55vh] border bg-white shadow-lg rounded-2xl p-4 overflow-hidden">
+           <div className="flex flex-col h-[55vh] border bg-white shadow-lg rounded-2xl p-4 overflow-hidden relative">
                <ResponsiveContainer width="100%" height="100%">
-                   <LineChart data={data} syncId="SignalChart">
+                   <LineChart data={data} syncId="SignalChart" margin={{ top: 10, right: 30, bottom: 10, left: 20 }}>
                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                       <XAxis dataKey="time" interval={Math.floor(data.length / 10)} />
+                       <XAxis dataKey="time" interval="preserveStartEnd" />
                        <YAxis
                            type="number"
                            domain={['auto', 'auto']}
-
+                           tickCount={50}
+                           tickFormatter={(v) => Number(v).toFixed(1)}
+                           width={70}
+                           tick={{ fontSize: 15, fill: '#666' }}
+                           label={{ value: 'Amplitude (µV)', angle: -90, position: 'insideLeft', dy: 60, dx: -10 }}
                        />
                        {signals.map((s) => (
                            <Line
@@ -81,34 +98,42 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                                name={s.name}
                            />
                        ))}
+                       <Brush
+                           dataKey="time"
+                           startIndex={activeBrushStart}
+                           endIndex={activeBrushEnd}
+                           height={24}
+                           stroke="#2E7B75"
+                           fill="#EAF1F0"
+                           travellerWidth={8}
+                           onChange={(range) => {
+                               if (range.startIndex !== undefined && range.endIndex !== undefined) {
+                                   setBrushRange({ start: range.startIndex, end: range.endIndex });
+                               }
+                           }}
+                       />
                    </LineChart>
                </ResponsiveContainer>
 
+               {/* X axis label — pinned to left of brush */}
+               <div className="absolute bottom-[38px] left-[90px] text-md text-[#666]">Time (hh:mm:ss.sss)</div>
 
                {/* Signal selector */}
                <div className="flex gap-4 justify-center mt-2">
                    {signals.map((s) => {
                        const isSelected = selectedSignal === s.key;
                        const anySelected = selectedSignal !== null;
-
-
                        return (
                            <button
                                key={s.key}
-                               onClick={() =>
-                                   setSelectedSignal(isSelected ? null : s.key)
-                               }
+                               onClick={() => setSelectedSignal(isSelected ? null : s.key)}
                                className="flex items-center gap-4 px-3 py-1 rounded transition"
                            >
                                <span
                                    className="w-7 h-0.5"
-                                   style={{
-                                       backgroundColor: anySelected ? (isSelected ? s.colour : '#C0C0C0') : s.colour,
-                                   }}
+                                   style={{ backgroundColor: anySelected ? (isSelected ? s.colour : '#C0C0C0') : s.colour }}
                                />
-                               <span
-                                   className={anySelected ? (isSelected ? 'text-black' : 'text-gray-400') : 'text-black'}
-                               >
+                               <span className={anySelected ? (isSelected ? 'text-black' : 'text-gray-400') : 'text-black'}>
                                    {s.name}
                                </span>
                            </button>
@@ -117,12 +142,41 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                </div>
            </div>
 
+           {/* ---- DISPLAY INFO ---- */}
+           <div className="bg-white border shadow-lg rounded-2xl px-5 py-3 text-xs text-[#0D585F] flex flex-wrap gap-x-6 gap-y-1">
+               <span><span className="font-semibold">Buffered points:</span> {data.length}</span>
+               <span><span className="font-semibold">Visible window:</span> {visibleCount} samples (~{(visibleCount / 256).toFixed(2)}s at 256Hz) - drag the brush to scroll</span>
+               {data.length > 0 && (
+                   <span><span className="font-semibold">Full time range:</span> {timeStart} to {timeEnd}</span>
+               )}
+               <span><span className="font-semibold">Y-axis:</span> auto-scaled to actual signal range (µV)</span>
+               <span><span className="font-semibold">Channels:</span> 4 (EEG)</span>
+           </div>
 
            {/* ---- BOTTOM HALF: TABLE ---- */}
            <div className="bg-white border shadow-lg rounded-2xl p-4 overflow-auto">
-                <DataTable data={data} rowCount={50} />
+               <div className="flex justify-between items-center mb-2">
+                   <span className="text-xs text-[#0D585F] font-semibold">Last {TABLE_PREVIEW_ROWS} samples</span>
+                   <Dialog>
+                       <DialogTrigger asChild>
+                           <button className="text-xs text-[#2E7B75] underline hover:opacity-70 transition">
+                               Expand full table
+                           </button>
+                       </DialogTrigger>
+                       <DialogContent className="w-[90vw] max-w-none h-[85vh] flex flex-col">
+                           <DialogHeader>
+                               <DialogTitle className="text-[#0D585F]">
+                                   All data: {data.length} points
+                               </DialogTitle>
+                           </DialogHeader>
+                           <div className="flex-1 overflow-auto">
+                               <DataTable data={data} rowCount={data.length} />
+                           </div>
+                       </DialogContent>
+                   </Dialog>
+               </div>
+               <DataTable data={data} rowCount={TABLE_PREVIEW_ROWS} />
            </div>
-
 
        </div>
    );
