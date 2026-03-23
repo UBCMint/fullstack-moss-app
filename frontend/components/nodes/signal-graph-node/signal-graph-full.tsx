@@ -116,7 +116,7 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                </ResponsiveContainer>
 
                {/* X axis label — pinned to left of brush */}
-               <div className="absolute bottom-[38px] left-[90px] text-md text-[#666]">Time (hh:mm:ss.sss)</div>
+               <div className="absolute bottom-[38px] left-[90px] text-md text-[#666]">Time (HH:MM:SS.mmm)</div>
 
                {/* Signal selector */}
                <div className="flex gap-4 justify-center mt-2">
