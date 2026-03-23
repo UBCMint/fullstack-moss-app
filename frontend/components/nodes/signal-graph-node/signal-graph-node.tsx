@@ -1,9 +1,9 @@
 import { Card } from '@/components/ui/card';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
-import useWebsocket from '@/hooks/useWebsocket';
-import React from 'react';
 import { useGlobalContext } from '@/context/GlobalContext';
+import useNodeData from '@/hooks/useNodeData';
 import { ArrowUpRight } from 'lucide-react';
+import React from 'react';
 
 import {
     Dialog,
@@ -16,20 +16,12 @@ import {
 import SignalGraphView from './signal-graph-full';
 
 export default function SignalGraphNode({ id }: { id?: string }) {
-    const { renderData } = useWebsocket(20, 10);
+    const { dataStreaming } = useGlobalContext();
+    const { renderData } = useNodeData(20, 10);
 
-    const processedData = renderData.map((item) => ({
-        time: item.time,
-        signal1: item.signals[0],
-        signal2: item.signals[1],
-        signal3: item.signals[2],
-        signal4: item.signals[3],
-        signal5: item.signals[4],
-    }));
-
+    const processedData = renderData;
     const reactFlowInstance = useReactFlow();
     const [isConnected, setIsConnected] = React.useState(false);
-    const { dataStreaming } = useGlobalContext()
 
     // Determine if this Chart View node has an upstream path from a Source
     const checkConnectionStatus = React.useCallback(() => {
@@ -130,18 +122,17 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                 </div>
 
 
-                <DialogContent className="w-[80vw] h-[80vh] max-w-none max-h-none">
+                <DialogContent 
+                    className="items-center justify-center w-screen h-screen max-w-none max-h-none" 
+                    style={{ backgroundColor : '#EAF1F0'}}
+                >
                     <DialogHeader>
-                        <DialogTitle>Signal Graph</DialogTitle>
-                        <DialogDescription>
-                            Here is a preview of the signal graph.
-                        </DialogDescription>
+                        <DialogTitle></DialogTitle>
+                        <DialogDescription></DialogDescription>
                     </DialogHeader>
-                    <Card>
-                        <div className="w-full h-full">
-                            <SignalGraphView data={isConnected ? processedData : []} />
-                        </div>
-                    </Card>
+                    <div className="w-[85vw] h-[90vh]">
+                        <SignalGraphView data={isConnected ? processedData : []} />
+                    </div>
                 </DialogContent>
             </Card>
         </Dialog>

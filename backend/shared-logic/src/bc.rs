@@ -2,7 +2,7 @@ use tokio::sync::broadcast;
 use tokio::sync::broadcast::Receiver;
 
 use crate::mockeeg::{generate_mock_data};
-use crate::lsl::{EEGDataPacket, ProcessingConfig, receive_eeg};
+use crate::lsl::{EEGDataPacket, ProcessingConfig, WindowingConfig, receive_eeg};
 use crate::db::{insert_batch_eeg, get_db_client};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt};
@@ -15,6 +15,7 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio_util::sync::CancellationToken;
+use tokio::sync::watch;
 
 use log::{info, error};
 
@@ -24,6 +25,7 @@ pub async fn start_broadcast(
     cancel_token: CancellationToken,
     processing_config: ProcessingConfig, // takes in signal processing configuration from frontend
     session_id: i32, // takes in session id to tag incoming data with the correct session
+    windowing_rx: watch::Receiver<WindowingConfig> // takes in windowing configuration from frontend
 ) {
     let (tx, _rx) = broadcast::channel::<Arc<EEGDataPacket>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
     let rx_ws = tx.subscribe();
@@ -43,7 +45,7 @@ pub async fn start_broadcast(
     let sender_token = cancel_token.clone(); 
     let sender = tokio::spawn(async move {
         // use the ProcessingConfig provided by the client instead of default
-        receive_eeg(tx_clone, sender_token, processing_config).await;
+        receive_eeg(tx_clone, sender_token, processing_config, windowing_rx).await;
     });
 
     // Subscribe for websocket Receiver 

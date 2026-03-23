@@ -9,7 +9,7 @@ import Cross1 from '@/components/radix/cross1';
 import NodeButton from './node-button';
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
-import { MagnifyingGlassIcon } from '@radix-ui/react-icons';
+import { ChevronDown } from 'lucide-react';
 
 
 export default function Sidebar() {
@@ -39,9 +39,16 @@ export default function Sidebar() {
             description: 'Visualize data and create charts',
             category: 'Nodes',
         },
+        {
+            id: 'window-node',
+            label: 'Window Node',
+            description: 'Configure windowing parameters for data streams',
+            category: 'Nodes',
+        }
     ];
 
     const [searchTerm, setSearchTerm] = useState('');
+    const [collapsed, setCollapsed] = useState(false);
 
     const filteredNodes = AvailableNodes.filter((node) =>
         node.label.toLowerCase().includes(searchTerm.toLowerCase())
@@ -53,32 +60,42 @@ export default function Sidebar() {
                 <Card className="max-h-[calc(100vh-2rem)] flex flex-col ">
                     <CardHeader className="flex flex-row items-center justify-between pb-4">
                         <CardTitle className="font-ibmplex font-semibold text-xl text-black">Menu</CardTitle>
-                        <Cross1 />
+                        <button
+                            onClick={() => setCollapsed(!collapsed)}
+                            className="p-1 rounded hover:bg-gray-100"
+                            aria-label={collapsed ? 'Expand menu' : 'Collapse menu'}
+                        >
+                            {collapsed ? <ChevronDown size={15} /> : <Cross1 />}
+                        </button>
                     </CardHeader>
 
-                    <div className='pb-4'>
-                            <Input
-                                type="text"
-                                placeholder="Search"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="items-center px-7 py-2 mx-4 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 placeholder-gray-500"
-                            />
-                    </div>
+                    {!collapsed && (
+                        <>
+                            <div className='pb-4'>
+                                <Input
+                                    type="text"
+                                    placeholder="Search"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="items-center px-7 py-2 mx-4 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 placeholder-gray-500"
+                                />
+                            </div>
 
-                    <CardContent className="overflow-y-auto flex-1 px-4 pb-4 space-y-3">
-                        {(searchTerm ? filteredNodes : AvailableNodes).map((node) => (
-                            <NodeButton
-                                key={node.id}
-                                id={node.id}
-                                label={node.label}
-                                description={node.description}
-                            />
-                        ))}
-                    </CardContent>
+                            <CardContent className="overflow-y-auto flex-1 px-4 pb-4 space-y-3">
+                                {(searchTerm ? filteredNodes : AvailableNodes).map((node) => (
+                                    <NodeButton
+                                        key={node.id}
+                                        id={node.id}
+                                        label={node.label}
+                                        description={node.description}
+                                    />
+                                ))}
+                            </CardContent>
+                        </>
+                    )}
                 </Card>
             </ResizablePanel>
-            <ResizableHandle withHandle className="bg-border-none" />
+            <ResizableHandle withHandle className={collapsed ? 'invisible' : 'bg-border-none'} />
             <ResizablePanel defaultSize={40} minSize={5} />
         </ResizablePanelGroup>
     );

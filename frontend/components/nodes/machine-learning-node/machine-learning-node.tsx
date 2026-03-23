@@ -135,7 +135,6 @@ export default function MachineLearningNode({ id }: MachineLearningNodeProps) {
                     cursor: 'crosshair',
                     pointerEvents: 'all',
                 }}
-                className="hover:border-blue-500"
             />
             {/* Only one target on the left and one source on the right */}
             {/* Just the MLComboBox without Card wrapper */}

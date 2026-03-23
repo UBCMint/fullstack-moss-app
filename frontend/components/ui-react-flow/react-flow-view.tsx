@@ -27,18 +27,23 @@ import SourceNode from '@/components/nodes/source-node';
 import FilterNode from '@/components/nodes/filter-node/filter-node';
 import MachineLearningNode from '@/components/nodes/machine-learning-node/machine-learning-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
+import WindowNode from '@/components/nodes/window-node/window-node';
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
+import {
+    FrontendWorkspaceState,
+    isFrontendWorkspaceState,
+} from '@/lib/frontend-state';
 
 import { useEffect, useState } from 'react';
 import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
-import { headers } from 'next/headers';
 
 const nodeTypes = {
     'source-node': SourceNode,
     'filter-node': FilterNode,
     'machine-learning-node': MachineLearningNode,
     'signal-graph-node': SignalGraphNode,
+    'window-node': WindowNode,
 };
 
 let id = 0;
@@ -62,6 +67,52 @@ const ReactFlowInterface = () => {
         };
         window.addEventListener('pipeline-reset', listener);
         return () => window.removeEventListener('pipeline-reset', listener);
+    }, [setNodes, setEdges]);
+
+    useEffect(() => {
+        const exportListener = () => {
+            const state: FrontendWorkspaceState = {
+                nodes,
+                edges,
+            };
+
+            window.dispatchEvent(
+                new CustomEvent('frontend-state-response', {
+                    detail: state,
+                })
+            );
+        };
+
+        window.addEventListener('request-frontend-state', exportListener);
+        return () =>
+            window.removeEventListener('request-frontend-state', exportListener);
+    }, [nodes, edges]);
+
+    useEffect(() => {
+        const importListener = (event: Event) => {
+            const customEvent = event as CustomEvent<unknown>;
+            if (!isFrontendWorkspaceState(customEvent.detail)) {
+                return;
+            }
+
+            const importedState = customEvent.detail;
+            setNodes(importedState.nodes);
+            setEdges(importedState.edges);
+
+            // Keep generated IDs unique after loading nodes with node_{n} IDs.
+            const maxNodeIndex = importedState.nodes.reduce((max, node) => {
+                const match = /^node_(\d+)$/.exec(node.id);
+                if (!match) {
+                    return max;
+                }
+                return Math.max(max, Number(match[1]));
+            }, -1);
+            id = Math.max(id, maxNodeIndex + 1);
+        };
+
+        window.addEventListener('restore-frontend-state', importListener);
+        return () =>
+            window.removeEventListener('restore-frontend-state', importListener);
     }, [setNodes, setEdges]);
 
     // Helper to notify components that edges have changed
@@ -109,7 +160,10 @@ const ReactFlowInterface = () => {
     );
 
     const onNodesChange: OnNodesChange = useCallback(
-        (changes) => setNodes((nds) => applyNodeChanges(changes, nds)),
+        (changes) => {
+            setNodes((nds) => applyNodeChanges(changes, nds));
+            window.dispatchEvent(new Event('canvas-changed'));
+        },
         [setNodes]
     );
 
@@ -135,7 +189,6 @@ const ReactFlowInterface = () => {
         event.preventDefault();
 
         const nodeType = event.dataTransfer.getData('application/reactflow');
-        console.log('🎯 Dropped nodeType:', nodeType);
 
         if (!nodeType) {
             return;
@@ -153,16 +206,7 @@ const ReactFlowInterface = () => {
             data: { label: `${nodeType}` },
         };
 
-        console.log('🆕 Creating new node:', newNode);
-
-        setNodes((nds) => {
-            const updatedNodes = [...nds, newNode];
-            console.log(
-                '📋 Updated nodes list:',
-                updatedNodes.map((n) => ({ id: n.id, type: n.type }))
-            );
-            return updatedNodes;
-        });
+        setNodes((nds) => [...nds, newNode]);
     };
 
     const isValidConnection = useCallback(
@@ -256,19 +300,6 @@ const ReactFlowInterface = () => {
                 </Panel>
                 <Panel position="top-left">
                     <Sidebar />
-                </Panel>
-
-                {/* Debug Panel */}
-                <Panel position="bottom-right">
-                    <div className="bg-white p-2 rounded border text-xs">
-                        <div>Nodes: {nodes.length}</div>
-                        <div>Edges: {edges.length}</div>
-                        <div className="mt-1 max-w-[260px]">
-                            {edges.map((e) => (
-                                <div key={e.id || `${e.source}-${e.target}`}>{`${e.source} → ${e.target}`}</div>
-                            ))}
-                        </div>
-                    </div>
                 </Panel>
 
                 <Background />

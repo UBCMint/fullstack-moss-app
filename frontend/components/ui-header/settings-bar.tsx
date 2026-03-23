@@ -1,11 +1,13 @@
 'use client';
 
-import { Menubar, MenubarMenu, MenubarTrigger } from '@/components/ui/menubar';
-import { Slider } from '@/components/ui/slider';
+import { Menubar } from '@/components/ui/menubar';
+import { Plus } from 'lucide-react';
+import { ProgressBar } from '@/components/ui/progressbar';
 import { Button } from '@/components/ui/button';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { Timer } from '@/components/ui/timer';
 import { useEffect, useRef, useState } from 'react';
+import SessionModal from '@/components/ui-sessions/session-modal';
 import {
     Dialog,
     DialogContent,
@@ -15,15 +17,53 @@ import {
     DialogTrigger,
     DialogClose,
 } from '@/components/ui/dialog';
+import { useNotifications } from '@/components/notifications';
+import {
+    createSession,
+    getSessions,
+    loadFrontendState,
+    saveFrontendState,
+    SessionSummary,
+} from '@/lib/session-api';
+import {
+    FrontendWorkspaceState,
+    isFrontendWorkspaceState,
+} from '@/lib/frontend-state';
 
 export default function SettingsBar() {
-    const { dataStreaming, setDataStreaming } = useGlobalContext();
+    const {
+        dataStreaming,
+        setDataStreaming,
+        activeSessionId,
+        setActiveSessionId,
+    } = useGlobalContext();
+    const notifications = useNotifications();
     const [leftTimerSeconds, setLeftTimerSeconds] = useState(0);
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
-    // useEffect(() => {
-    //     console.log('dataStreaming:', dataStreaming);
-    // });
+    const [isNewDialogOpen, setIsNewDialogOpen] = useState(false);
+    const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
+    const [sessionModalMode, setSessionModalMode] = useState<'save' | 'load'>(
+        'save'
+    );
+    const [sessions, setSessions] = useState<SessionSummary[]>([]);
+    const [isFetchingSessions, setIsFetchingSessions] = useState(false);
+    const [fetchingFor, setFetchingFor] = useState<'save' | 'load' | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isDirty, setIsDirty] = useState(false);
+
+    // Track unsaved canvas changes
+    useEffect(() => {
+        const handler = () => setIsDirty(true);
+        window.addEventListener('canvas-changed', handler);
+        window.addEventListener('reactflow-edges-changed', handler);
+        return () => {
+            window.removeEventListener('canvas-changed', handler);
+            window.removeEventListener('reactflow-edges-changed', handler);
+        };
+    }, []);
+
     // Timer effect - starts/stops based on dataStreaming state
     useEffect(() => {
         if (dataStreaming) {
@@ -54,7 +94,7 @@ export default function SettingsBar() {
         if (leftTimerSeconds >= 300 && dataStreaming) {
             setDataStreaming(false);
         }
-    }, [leftTimerSeconds, dataStreaming]);
+    }, [leftTimerSeconds, dataStreaming, setDataStreaming]);
 
 
     const handleStartStop = () => {
@@ -76,6 +116,166 @@ export default function SettingsBar() {
         setIsResetDialogOpen(false);
     };
 
+    const requestFrontendState = async (): Promise<FrontendWorkspaceState> =>
+        new Promise((resolve, reject) => {
+            const timeout = window.setTimeout(() => {
+                reject(new Error('Timed out while collecting frontend state.'));
+            }, 4000);
+
+            const responseListener = (event: Event) => {
+                window.clearTimeout(timeout);
+                const customEvent = event as CustomEvent<unknown>;
+                if (!isFrontendWorkspaceState(customEvent.detail)) {
+                    reject(new Error('Frontend state payload is invalid.'));
+                    return;
+                }
+                resolve(customEvent.detail);
+            };
+
+            window.addEventListener('frontend-state-response', responseListener, {
+                once: true,
+            });
+            window.dispatchEvent(new Event('request-frontend-state'));
+        });
+
+    const getErrorMessage = (error: unknown) =>
+        error instanceof Error ? error.message : 'Unexpected error';
+
+    const handleSaveToExistingSession = async (sessionId: number) => {
+        const state = await requestFrontendState();
+        await saveFrontendState(sessionId, state);
+    };
+
+    const handleSaveClick = async () => {
+        if (isSaving || isLoading || isFetchingSessions) {
+            return;
+        }
+
+        if (activeSessionId !== null) {
+            setIsSaving(true);
+            try {
+                await handleSaveToExistingSession(activeSessionId);
+                setIsDirty(false);
+                notifications.success({ title: 'Session saved successfully' });
+            } catch (error) {
+                notifications.error({
+                    title: 'Save failed',
+                    description: getErrorMessage(error),
+                });
+            } finally {
+                setIsSaving(false);
+            }
+            return;
+        }
+
+        setIsFetchingSessions(true);
+        setFetchingFor('save');
+        try {
+            const fetchedSessions = await getSessions();
+            setSessions(fetchedSessions);
+            setSessionModalMode('save');
+            setIsSessionModalOpen(true);
+        } catch (error) {
+            notifications.error({
+                title: 'Save failed',
+                description: getErrorMessage(error),
+            });
+        } finally {
+            setIsFetchingSessions(false);
+            setFetchingFor(null);
+        }
+    };
+
+    const handleLoadClick = async () => {
+        if (isSaving || isLoading || isFetchingSessions) {
+            return;
+        }
+
+        setIsFetchingSessions(true);
+        setFetchingFor('load');
+        try {
+            const fetchedSessions = await getSessions();
+            setSessions(fetchedSessions);
+            setSessionModalMode('load');
+            setIsSessionModalOpen(true);
+        } catch (error) {
+            notifications.error({
+                title: 'Load failed',
+                description: getErrorMessage(error),
+            });
+        } finally {
+            setIsFetchingSessions(false);
+            setFetchingFor(null);
+        }
+    };
+
+    const handleNewClick = () => {
+        if (isSaving || isLoading || isFetchingSessions) {
+            return;
+        }
+        if (isDirty) {
+            setIsNewDialogOpen(true);
+        } else {
+            handleConfirmNew();
+        }
+    };
+
+    const handleConfirmNew = () => {
+        setActiveSessionId(null);
+        setIsDirty(false);
+        setDataStreaming(false);
+        setLeftTimerSeconds(0);
+        window.dispatchEvent(new Event('pipeline-reset'));
+        setIsNewDialogOpen(false);
+        notifications.success({ title: 'New session started' });
+    };
+
+    const handleCreateAndSaveSession = async (sessionName: string) => {
+        setIsSaving(true);
+        try {
+            const state = await requestFrontendState();
+            const createdSession = await createSession(sessionName);
+            await saveFrontendState(createdSession.id, state);
+            setActiveSessionId(createdSession.id);
+            setIsDirty(false);
+            setIsSessionModalOpen(false);
+            notifications.success({ title: 'Session saved successfully' });
+        } catch (error) {
+            notifications.error({
+                title: 'Save failed',
+                description: getErrorMessage(error),
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleLoadSession = async (sessionId: number) => {
+        setIsLoading(true);
+        try {
+            const loadedPayload = await loadFrontendState(sessionId);
+            if (!isFrontendWorkspaceState(loadedPayload)) {
+                throw new Error('Loaded session payload has an invalid format.');
+            }
+
+            window.dispatchEvent(
+                new CustomEvent('restore-frontend-state', {
+                    detail: loadedPayload,
+                })
+            );
+            setActiveSessionId(sessionId);
+            setIsSessionModalOpen(false);
+            notifications.success({ title: 'Session loaded successfully' });
+        } catch (error) {
+            notifications.error({
+                title: 'Load failed',
+                description: getErrorMessage(error),
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Format seconds to MM:SS
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -85,31 +285,34 @@ export default function SettingsBar() {
 
     return (
         <div className="flex justify-between items-center p-4 bg-white border-b">
-            {/* System Control Panel, Filters, Settings */}
+            {/* Session ID, Tutorials */}
             <Menubar>
-                <MenubarMenu>
-                    <MenubarTrigger>System Control Panel</MenubarTrigger>
-                </MenubarMenu>
-                <MenubarMenu>
-                    <MenubarTrigger>Filters</MenubarTrigger>
-                </MenubarMenu>
-                <MenubarMenu>
-                    <MenubarTrigger>Settings</MenubarTrigger>
-                </MenubarMenu>
+                <span className="px-3 py-1 text-sm">
+                    Session {activeSessionId ?? 'ID'}
+                </span>
+                <button className="px-3 py-1 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground hover:underline">
+                    Tutorials
+                </button>
             </Menubar>
+
+            {/* New session button */}
+            <Button
+                variant="outline"
+                onClick={handleNewClick}
+                disabled={isSaving || isLoading || isFetchingSessions}
+                className="ml-2 flex items-center gap-1"
+            >
+                <Plus size={14} />
+                New
+            </Button>
 
             {/* slider */}
             <div className="flex-1 mx-4">
-                <Slider
-                    value={[(leftTimerSeconds / 300) * 100]}
-                    max={100}
-                    step={1}
-                    disabled
-                />
+                <ProgressBar value={(leftTimerSeconds / 300) * 100} />
             </div>
 
             {/* Timer */}
-            <div className="mx-4">
+            <div className="pr-4">
                 <Timer
                     leftTime={formatTime(leftTimerSeconds)}
                     rightTime="05:00"
@@ -117,7 +320,7 @@ export default function SettingsBar() {
             </div>
 
 
-            {/* start/stop, load, save */}
+            {/* start/stop, reset, save, load */}
             <div className="flex space-x-2">
                 <Button
                     onClick={handleStartStop}
@@ -144,8 +347,56 @@ export default function SettingsBar() {
                         </div>
                     </DialogContent>
                 </Dialog>
-                <Button variant="outline">Save</Button>
+                <Button
+                    variant="outline"
+                    onClick={handleSaveClick}
+                    disabled={isSaving || isLoading || isFetchingSessions}
+                >
+                    {isSaving
+                        ? 'Saving...'
+                        : fetchingFor === 'save'
+                          ? 'Preparing...'
+                          : 'Save'}
+                </Button>
+                <Button
+                    variant="outline"
+                    onClick={handleLoadClick}
+                    disabled={isSaving || isLoading || isFetchingSessions}
+                >
+                    {isLoading
+                        ? 'Loading...'
+                        : fetchingFor === 'load'
+                          ? 'Preparing...'
+                          : 'Load'}
+                </Button>
             </div>
+
+            <Dialog open={isNewDialogOpen} onOpenChange={setIsNewDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Start a new session?</DialogTitle>
+                        <DialogDescription>
+                            Your current session is unsaved. Hitting confirm will clear the current pipeline. Any unsaved changes will be lost.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-2 mt-4">
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button className="bg-red-500" onClick={handleConfirmNew}>Confirm</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <SessionModal
+                open={isSessionModalOpen}
+                mode={sessionModalMode}
+                sessions={sessions}
+                isSubmitting={isSaving || isLoading}
+                onOpenChange={setIsSessionModalOpen}
+                onSave={handleCreateAndSaveSession}
+                onLoad={handleLoadSession}
+            />
         </div>
     );
 }
