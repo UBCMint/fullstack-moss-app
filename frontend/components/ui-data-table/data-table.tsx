@@ -45,16 +45,16 @@ const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
                             Time
                         </TableHead>
                         <TableHead className="text-center font-medium text-[#0D585F]">
-                            Signal 1
+                            Channel 1
                         </TableHead>
                         <TableHead className="text-center font-medium text-[#0D585F]">
-                            Signal 2
+                            Channel 2
                         </TableHead>
                         <TableHead className="text-center font-medium text-[#0D585F]">
-                            Signal 3
+                            Channel 3
                         </TableHead>
                         <TableHead className="text-center font-medium text-[#0D585F]">
-                            Signal 4
+                            Channel 4
                         </TableHead>
                     </TableRow>
                 </TableHeader>
