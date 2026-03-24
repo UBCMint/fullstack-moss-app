@@ -74,6 +74,12 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
 
            {/* ---- TOP HALF: CHART ---- */}
            <div className="flex flex-col h-[55vh] border bg-white shadow-lg rounded-2xl p-4 overflow-hidden relative">
+               {data.length === 0 && (
+                   <div className="absolute inset-0 flex flex-col items-center justify-center z-10 rounded-2xl bg-white">
+                       <p className="text-gray-400 font-medium text-sm">No data yet</p>
+                       <p className="text-gray-300 text-xs mt-1">Start the data stream to see signal data</p>
+                   </div>
+               )}
                <ResponsiveContainer width="100%" height="100%">
                    <LineChart data={data} syncId="SignalChart" margin={{ top: 10, right: 30, bottom: 10, left: 20 }}>
                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -85,7 +91,7 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                            tickFormatter={(v) => Number(v).toFixed(1)}
                            width={70}
                            tick={{ fontSize: 15, fill: '#666' }}
-                           label={{ value: 'Amplitude (µV)', angle: -90, position: 'insideLeft', dy: 60, dx: -10 }}
+                           label={{ value: 'Frequency (Hz)', angle: -90, position: 'insideLeft', dy: 60, dx: -10 }}
                        />
                        {signals.map((s) => (
                            <Line
@@ -149,7 +155,7 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                {data.length > 0 && (
                    <span><span className="font-semibold">Full time range:</span> {timeStart} to {timeEnd}</span>
                )}
-               <span><span className="font-semibold">Y-axis:</span> auto-scaled to actual signal range (µV)</span>
+               <span><span className="font-semibold">Y-axis:</span> auto-scaled to actual frequency (Hz)</span>
                <span><span className="font-semibold">Channels:</span> 4 (EEG)</span>
            </div>
 
@@ -159,7 +165,10 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                    <span className="text-xs text-[#0D585F] font-semibold">Last {TABLE_PREVIEW_ROWS} samples</span>
                    <Dialog>
                        <DialogTrigger asChild>
-                           <button className="text-xs text-[#2E7B75] underline hover:opacity-70 transition">
+                           <button
+                               disabled={data.length === 0}
+                               className="text-xs text-[#2E7B75] underline hover:opacity-70 transition disabled:opacity-30 disabled:cursor-not-allowed disabled:no-underline"
+                           >
                                Expand full table
                            </button>
                        </DialogTrigger>
@@ -175,7 +184,10 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                        </DialogContent>
                    </Dialog>
                </div>
-               <DataTable data={data} rowCount={TABLE_PREVIEW_ROWS} />
+               {data.length === 0
+                   ? <p className="text-gray-300 text-sm text-center py-6">No samples yet</p>
+                   : <DataTable data={data} rowCount={TABLE_PREVIEW_ROWS} />
+               }
            </div>
 
        </div>
