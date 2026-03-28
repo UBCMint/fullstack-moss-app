@@ -20,7 +20,17 @@ pub enum Node {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct WindowConfig {
-    pub size: usize,
+    pub chunk_size: usize,
+    pub overlap_size: usize,
+}
+
+impl Default for WindowConfig {
+    fn default() -> Self {
+        Self {
+            chunk_size: 64,
+            overlap_size: 0,
+        }
+    }
 }
 
 // Fields moved from ProcessingConfig in lsl.rs
