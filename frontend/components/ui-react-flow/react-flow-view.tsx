@@ -36,8 +36,15 @@ import {
 } from '@/lib/frontend-state';
 
 import { useEffect, useState } from 'react';
+<<<<<<< HEAD
 import { X, Ellipsis, RotateCw, RotateCcw, LockKeyhole } from 'lucide-react';
 import { Alert, AlertDescription } from '../ui/alert';
+=======
+import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
+import { useWebSocketContext } from '@/context/WebSocketContext';
+import { PipelinePayload } from '@/lib/pipeline';
+import { useGlobalContext } from '@/context/GlobalContext';
+>>>>>>> 32f50af (Frontend websocket change to pipeline)
 
 const nodeTypes = {
     'source-node': SourceNode,
@@ -47,6 +54,100 @@ const nodeTypes = {
     'window-node': WindowNode,
 };
 
+// defines backend types for React Flow types
+const typeMap: Record<string, string> = {
+  'source-node': 'source',
+  'filter-node': 'preprocessing',
+  'window-node': 'window',
+  'machine-learning-node': 'ml',
+};
+
+// allow for defaults of the filtering node to still be applied if user doesn't specify them in the UI
+const DEFAULT_PROCESSING = {
+    apply_bandpass: false,
+    use_iir: false,
+    l_freq: null,
+    h_freq: null,
+    downsample_factor: null,
+    sfreq: 256,
+    n_channels: 4,
+};
+const DEFAULT_WINDOWING = {
+    chunk_size: 64,
+    overlap_size: 0,
+};
+
+const topoSort = (nodes: Node[], edges: Edge[]) => {
+  const incoming = new Map<string, number>(); // count of incoming edges for each node
+  const outgoing = new Map<string, string[]>(); // list of target nodes for each node
+
+  // Initialize maps to 0 incoming and empty outgoing 
+  nodes.forEach((n) => {
+    incoming.set(n.id, 0);
+    outgoing.set(n.id, []);
+  });
+
+  edges.forEach((e) => {
+    if (!outgoing.has(e.source)) return; 
+    outgoing.get(e.source)!.push(e.target); // Add target to outgoing list of source
+    incoming.set(e.target, (incoming.get(e.target) ?? 0) + 1); // Increment incoming count for target
+  });
+
+  const queue = nodes
+    .filter((n) => (incoming.get(n.id) ?? 0) === 0)
+    .map((n) => n.id);
+
+  const ordered: string[] = [];
+
+  // Kahn's algorithm for topological sorting 
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    ordered.push(id);
+
+    for (const target of outgoing.get(id) ?? []) {
+      const next = (incoming.get(target) ?? 0) - 1;
+      incoming.set(target, next);
+      if (next === 0) queue.push(target);
+    }
+  }
+
+  // In case of cycles or disconnected nodes
+  nodes.forEach((n) => {
+    if (!ordered.includes(n.id)) ordered.push(n.id);
+  });
+
+  return ordered.map((id) => nodes.find((n) => n.id === id)!).filter(Boolean);
+};
+
+// Converts React Flow state to backend pipeline format
+const buildPipelinePayload = (
+  nodes: Node[],
+  edges: Edge[],
+  sessionId: string
+): PipelinePayload => {
+  const orderedNodes = topoSort(nodes, edges); // Ensure nodes are in execution order
+
+  return {
+    session_id: sessionId,
+    nodes: orderedNodes.map((n) => {
+      const type = typeMap[n.type ?? ''] ?? n.type ?? 'unknown'; // Map to backend type
+      const config = (n.data as { config?: Record<string, any> })?.config ?? {}; 
+
+      if(type == 'preprocessing') {
+        return {type, config: {...DEFAULT_PROCESSING, ...config}}; //apply defaults if not specified by user
+      }
+
+      if(type == 'window') {
+        return {type, config: {...DEFAULT_WINDOWING, ...config}};
+      }
+
+        return {type,config};
+    }),
+  };
+};
+
+
+
 let id = 0;
 const getId = () => `node_${id++}`;
 
@@ -55,6 +156,7 @@ const ReactFlowInterface = () => {
     const [edges, setEdges] = useEdgesState<Edge>([]);
     const { screenToFlowPosition } = useReactFlow();
     const [isControlsOpen, setIsControlsOpen] = useState(false);
+
     const [open, setOpen] = useState(true);
     const [showPipelineWarning, setShowPipelineWarning] = useState(false);
 
@@ -65,6 +167,9 @@ const ReactFlowInterface = () => {
             return () => clearTimeout(timer);
         }
     }, [showPipelineWarning]);
+
+    const { sendPipelinePayload } = useWebSocketContext(); 
+    const {activeSessionId} = useGlobalContext(); 
 
     // Listen for global pipeline reset to clear nodes/edges
     useEffect(() => {
@@ -169,6 +274,14 @@ const ReactFlowInterface = () => {
         },
         [nodes, setEdges]
     );
+
+    // Send updated pipeline to backend on any changes to nodes, edges, or active session
+    useEffect(() => {
+        if (nodes.length === 0) return;
+        if(activeSessionId== null) return; //no session yet
+        const payload = buildPipelinePayload(nodes, edges, String(activeSessionId));
+        sendPipelinePayload(payload);
+    }, [nodes, edges, activeSessionId, sendPipelinePayload]);
 
     const onNodesChange: OnNodesChange = useCallback(
         (changes) => {

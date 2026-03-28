@@ -1,10 +1,6 @@
 'use client';
 import { useGlobalContext } from '@/context/GlobalContext';
-import { ProcessingConfig } from '@/lib/processing';
 
-const dispatchProcessingConfig = (config: ProcessingConfig) => {
-    window.dispatchEvent(new CustomEvent('processing-config-update', { detail: config }));
-};
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import ComboBox from './combo-box';
@@ -25,7 +21,7 @@ export default function FilterNode({ id }: FilterNodeProps) {
     
     const { dataStreaming } = useGlobalContext();
 
-    const buildConfig = (): ProcessingConfig => {
+    const buildConfig = () => {
         if (!isConnected) {
           return {
             apply_bandpass: false,
@@ -76,6 +72,18 @@ export default function FilterNode({ id }: FilterNodeProps) {
                 throw new Error(`Unhandled filter type: ${selectedFilter}`)
         }
       }       
+
+    // write config to node data for later retrieval when dispatching pipeline payload
+    const pushConfigToNodeData = React.useCallback(() => {
+        if (!id) return;
+        const config = buildConfig();
+        reactFlowInstance.setNodes((nds) =>
+            nds.map((n) =>
+                n.id === id ? { ...n, data: { ...n.data, config } } : n
+            )
+        );
+    }, [id, reactFlowInstance, selectedFilter, lowCutoff, highCutoff, isConnected]);
+
 
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
@@ -137,14 +145,10 @@ export default function FilterNode({ id }: FilterNodeProps) {
         };
     }, [checkConnectionStatus]);
 
+    // Push config to node data and dispatch processing config when relevant state changes
     React.useEffect(() => {
-        if (!dataStreaming) return
-        dispatchProcessingConfig(buildConfig())
-    }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming])  
-
-    React.useEffect(() => {
-        dispatchProcessingConfig(buildConfig());
-    }, []);
+        pushConfigToNodeData();
+    }, [pushConfigToNodeData]);
     
     return (
         <div className="relative">

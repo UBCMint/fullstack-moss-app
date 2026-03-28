@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useRef, useCallback, ReactNode } from 'react';
 import { useGlobalContext } from './GlobalContext';
-import { ProcessingConfig, WindowingConfig } from '@/lib/processing';
+import { PipelinePayload } from '@/lib/pipeline';
 
 export type DataPoint = {
     time: string;
@@ -17,21 +17,10 @@ type Subscriber = (points: DataPoint[]) => void;
 
 type WebSocketContextType = {
     subscribe: (fn: Subscriber) => () => void;
-    sendProcessingConfig: (config: ProcessingConfig) => void;
-    sendWindowingConfig: (config: WindowingConfig) => void;
+    sendPipelinePayload: (payload: PipelinePayload) => void;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
-
-const DEFAULT_PROCESSING_CONFIG: ProcessingConfig = {
-    apply_bandpass: false,
-    use_iir: false,
-    l_freq: null,
-    h_freq: null,
-    downsample_factor: null,
-    sfreq: 256,
-    n_channels: 4,
-};
 
 function formatTimestamp(raw: any): string {
     const s = String(raw);
@@ -57,8 +46,7 @@ function normalizeBatch(batch: any): DataPoint[] {
 export function WebSocketProvider({ children }: { children: ReactNode }) {
     const { dataStreaming, activeSessionId } = useGlobalContext();
     const wsRef = useRef<WebSocket | null>(null);
-    const processingConfigRef = useRef<ProcessingConfig | null>(null);
-    const windowingConfigRef = useRef<WindowingConfig | null>(null);
+    const pipelinePayloadRef = useRef<PipelinePayload | null>(null);
     const subscribersRef = useRef<Set<Subscriber>>(new Set());
     const closingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isClosingGracefullyRef = useRef(false);
@@ -68,37 +56,13 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         return () => subscribersRef.current.delete(fn);
     }, []);
 
-    const sendProcessingConfig = useCallback((config: ProcessingConfig) => {
-        processingConfigRef.current = config;
+    const sendPipelinePayload = useCallback((payload: PipelinePayload) => {
+        pipelinePayloadRef.current = payload;
         if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify(config));
-            console.log('Sent processing config:', config);
+            wsRef.current.send(JSON.stringify(payload));
+            console.log('Sent pipeline payload:', payload);
         }
     }, []);
-
-    const sendWindowingConfig = useCallback((config: WindowingConfig) => {
-        windowingConfigRef.current = config;
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify(config));
-            console.log('Sent windowing config:', config);
-        }
-    }, []);
-
-    // Forward config events from nodes to backend
-    useEffect(() => {
-        const processingHandler = (event: Event) => {
-            sendProcessingConfig((event as CustomEvent<ProcessingConfig>).detail);
-        };
-        const windowingHandler = (event: Event) => {
-            sendWindowingConfig((event as CustomEvent<WindowingConfig>).detail);
-        };
-        window.addEventListener('processing-config-update', processingHandler);
-        window.addEventListener('windowing-config-update', windowingHandler);
-        return () => {
-            window.removeEventListener('processing-config-update', processingHandler);
-            window.removeEventListener('windowing-config-update', windowingHandler);
-        };
-    }, [sendProcessingConfig, sendWindowingConfig]);
 
     // Manage WebSocket lifecycle
     useEffect(() => {
@@ -124,10 +88,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
         ws.onopen = () => {
             console.log('WebSocket connection opened.');
-            ws.send(JSON.stringify({
-                session_id: activeSessionId,
-                processing_config: processingConfigRef.current ?? DEFAULT_PROCESSING_CONFIG,
-            }));
+            ws.send(JSON.stringify(processingConfigRef.current ?? DEFAULT_PROCESSING_CONFIG));
             if (windowingConfigRef.current) {
                 ws.send(JSON.stringify(windowingConfigRef.current));
             }
@@ -174,7 +135,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }, [dataStreaming, activeSessionId]);
 
     return (
-        <WebSocketContext.Provider value={{ subscribe, sendProcessingConfig, sendWindowingConfig }}>
+        <WebSocketContext.Provider value={{ subscribe, sendPipelinePayload }}>
             {children}
         </WebSocketContext.Provider>
     );
