@@ -76,6 +76,7 @@ export default function FilterNode({ id }: FilterNodeProps) {
     // write config to node data for later retrieval when dispatching pipeline payload
     const pushConfigToNodeData = React.useCallback(() => {
         if (!id) return;
+        if (!isConnected) return; // Don't push config if not connected
         const config = buildConfig();
         reactFlowInstance.setNodes((nds) =>
             nds.map((n) =>
