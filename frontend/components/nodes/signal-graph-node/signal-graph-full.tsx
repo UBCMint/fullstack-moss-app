@@ -28,12 +28,13 @@ interface SignalGraphViewProps {
         signal3: number;
         signal4: number;
     }[];
+    onTimeframeChange?: (start: string, end: string) => void;
 }
 
 
 const TABLE_PREVIEW_ROWS = 50;
 
-export default function SignalGraphView({ data }: SignalGraphViewProps) {
+export default function SignalGraphView({ data, onTimeframeChange }: SignalGraphViewProps) {
    const { dataStreaming, setDataStreaming } = useGlobalContext();
    const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
 
@@ -69,7 +70,6 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                >
                    {dataStreaming ? 'Stop Data Stream' : 'Start Data Stream'}
                </Button>
-               <Button className='bg-[#2E7B75] text-white'> Save </Button>
            </div>
 
            {/* ---- TOP HALF: CHART ---- */}
@@ -115,6 +115,9 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                            onChange={(range) => {
                                if (range.startIndex !== undefined && range.endIndex !== undefined) {
                                    setBrushRange({ start: range.startIndex, end: range.endIndex });
+                                   if (data.length > 0 && onTimeframeChange) {
+                                       onTimeframeChange(data[range.startIndex].time, data[range.endIndex].time);
+                                   }
                                }
                            }}
                        />
