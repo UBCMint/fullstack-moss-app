@@ -16,7 +16,8 @@ use shared_logic::db::{initialize_connection};
 use shared_logic::lsl::{ProcessingConfig, WindowingConfig}; // get ProcessingConfig from lsl.rs
 use dotenvy::dotenv;
 use log::{info, error};
-use serde_json::{Deserialize, Value}; // used to parse ProcessingConfig from JSON sent by frontend
+use serde::Deserialize;
+use serde_json::Value; // used to parse ProcessingConfig from JSON sent by frontend
 
 
 #[derive(Deserialize)]
@@ -91,6 +92,7 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
 
     let mut processing_config = ProcessingConfig::default();
     let mut initial_windowing = WindowingConfig::default();
+    let signal_config = read.next().await;
 
     // we have the WebSocketInitMessage struct, with a session id and processing config
     // check if we received a message (some unwrapping needed)
@@ -126,7 +128,7 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
   
   
     let session_id = init_message.session_id;
-    processing_config = init_message.processing_config.
+    processing_config = init_message.processing_config;
   
     // Give the frontend a short window to send configs before we start
     // Use a timeout so we don't block forever if only one config arrives
