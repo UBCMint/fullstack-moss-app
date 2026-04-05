@@ -3,8 +3,9 @@ import { NextRequest } from 'next/server';
 
 export async function POST(
     req: NextRequest,
-    { params }: { params: { session_id: string } }
+    context: { params: Promise<{ session_id: string }> }
 ) {
+    const params = await context.params;
     const body = await req.text();
 
     const response = await forwardToBackend({

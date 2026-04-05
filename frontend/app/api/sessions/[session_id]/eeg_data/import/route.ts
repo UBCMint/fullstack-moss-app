@@ -11,8 +11,9 @@ const DEFAULT_API_BASES = [
 
 export async function POST(
     req: NextRequest,
-    { params }: { params: { session_id: string } }
+    context: { params: Promise<{ session_id: string }> }
 ) {
+    const params = await context.params;
     const csvBody = await req.text();
     const path = `/api/sessions/${params.session_id}/eeg_data/import`;
 
