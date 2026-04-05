@@ -24,7 +24,7 @@ pub async fn start_broadcast(
     write: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,  
     cancel_token: CancellationToken,
     processing_config: ProcessingConfig, // takes in signal processing configuration from frontend
-    windowing_rx: watch::Receiver<WindowingConfig> // takes in windowing configuration from frontend
+    windowing_rx: watch::Receiver<WindowingConfig>, // takes in windowing configuration from frontend
     session_id: i32, // takes in session id to tag incoming data with the correct session
 ) {
     let (tx, _rx) = broadcast::channel::<Arc<EEGDataPacket>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
