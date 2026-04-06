@@ -34,8 +34,11 @@ const DEFAULT_PROCESSING_CONFIG: ProcessingConfig = {
 
 function formatTimestamp(raw: any): string {
     const s = String(raw);
-    // ISO 8601: "2026-03-11T03:55:22.715574979Z" - extract "03:55:22"
-    if (s.includes('T')) return s.slice(11, 19);
+    // ISO 8601 with T: "2026-03-11T03:55:22.715574979Z"
+    if (s.includes('T')) return s.slice(11, 23);
+    // Space-separated: "2025-07-17 21:13:42.408185+00"
+    const spaceIdx = s.indexOf(' ');
+    if (spaceIdx !== -1) return s.slice(spaceIdx + 1, spaceIdx + 13);
     return s;
 }
 
