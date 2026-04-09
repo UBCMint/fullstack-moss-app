@@ -36,7 +36,8 @@ import {
 } from '@/lib/frontend-state';
 
 import { useEffect, useState } from 'react';
-import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
+import { X, Ellipsis, RotateCw, RotateCcw, LockKeyhole } from 'lucide-react';
+import { Alert, AlertDescription } from '../ui/alert';
 
 const nodeTypes = {
     'source-node': SourceNode,
@@ -54,6 +55,8 @@ const ReactFlowInterface = () => {
     const [edges, setEdges] = useEdgesState<Edge>([]);
     const { screenToFlowPosition } = useReactFlow();
     const [isControlsOpen, setIsControlsOpen] = useState(false);
+    const [open, setOpen] = useState(true);
+    const [showPipelineWarning, setShowPipelineWarning] = useState(false);
 
     // Listen for global pipeline reset to clear nodes/edges
     useEffect(() => {
@@ -190,8 +193,14 @@ const ReactFlowInterface = () => {
 
         const nodeType = event.dataTransfer.getData('application/reactflow');
 
-        if (!nodeType) {
-            return;
+        if (!nodeType) return;
+
+        if (nodeType === 'source-node') {
+            const existingSource = nodes.find((n) => n.type === 'source-node');
+            if (existingSource) {
+                setShowPipelineWarning(true);
+                return;
+            }
         }
 
         const position = screenToFlowPosition({
@@ -259,6 +268,32 @@ const ReactFlowInterface = () => {
                 attributionPosition="bottom-left"
                 isValidConnection={isValidConnection}
             >
+                {open && (
+                    <div className="flex justify-center items-center absolute top-24 left-1/2 transform -translate-x-1/2 z-10">
+                        <Alert className="w-[288px] h-[98px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
+                            <LockKeyhole className='h-3.5 w-3.5'/>
+                            <AlertDescription>
+                                <h3 className='flex justify-center'><b>Data & Privacy</b></h3>
+                                <p className='text-[0.75rem] mt-2'> Your data stays on your device and is never uploaded to the cloud.</p>
+                            </AlertDescription>
+                            <button onClick={() => setOpen(false)} className="ml-2">
+                                <X className="h-3 w-3" />
+                            </button>
+                        </Alert>
+                    </div>
+                )}
+                {showPipelineWarning && (
+                    <div className="flex justify-center items-center absolute top-3 left-1/2 transform -translate-x-1/2 z-10">
+                        <Alert className="w-[300px] bg-[#FFF4E1] text-black flex justify-between items-start p-3 font-ibmplex border border-[#F5A623]">
+                            <AlertDescription className="text-[0.75rem]">
+                                Only one pipeline can be active at a time.
+                            </AlertDescription>
+                            <button onClick={() => setShowPipelineWarning(false)} className="ml-2">
+                                <X className="h-3 w-3" />
+                            </button>
+                        </Alert>
+                    </div>
+                )}
                 <Panel position="top-right" style={{
                     display: 'flex',
                     flexDirection: 'column',
