@@ -19,10 +19,18 @@ import { exportEEGData } from '@/lib/eeg-api';
 
 interface SignalDataPoint {
     time: string;
+    rawTime?: string;
     signal1: number;
     signal2: number;
     signal3: number;
     signal4: number;
+}
+
+function formatTimestamp(raw: string): string {
+    if (raw.includes('T')) return raw.slice(11, 23);
+    const spaceIdx = raw.indexOf(' ');
+    if (spaceIdx !== -1) return raw.slice(spaceIdx + 1, spaceIdx + 13);
+    return raw;
 }
 
 function parseEEG(csvContent: string): SignalDataPoint[] {
@@ -37,7 +45,7 @@ function parseEEG(csvContent: string): SignalDataPoint[] {
 
         // find signal columns by exact channel number patterns
         const signalIndices = [0, 1, 2, 3].map((chNum) => {
-            const patterns = [`ch${chNum}`, `channel${chNum}`, `signal${chNum + 1}`, `signal_${chNum + 1}`];
+            const patterns = [`ch${chNum + 1}`, `channel${chNum + 1}`, `signal${chNum + 1}`, `signal_${chNum + 1}`];
             return header.findIndex((h) => patterns.includes(h));
         });
 
@@ -47,11 +55,12 @@ function parseEEG(csvContent: string): SignalDataPoint[] {
         for (let i = 1; i < lines.length; i++) {
             const cols = lines[i].trim().split(',').map((c) => c.trim());
             if (!cols[timeColIdx]) continue;
-            
+
             const vals = signalIndices.map((idx) => parseFloat(cols[idx]));
             if (vals.every((v) => !isNaN(v))) {
                 data.push({
-                    time: cols[timeColIdx],
+                    time: formatTimestamp(cols[timeColIdx]),
+                    rawTime: cols[timeColIdx],
                     signal1: vals[0],
                     signal2: vals[1],
                     signal3: vals[2],
@@ -125,12 +134,10 @@ export default function SignalGraphNode({ id }: { id?: string }) {
         const { timeframeStart, timeframeEnd } = currentNode.data as { timeframeStart?: string; timeframeEnd?: string };
         if (!timeframeStart || !timeframeEnd) return;
 
-        console.log('restored timeframe:', { timeframeStart, timeframeEnd });
         (async () => {
             try {
                 const csvContent = await exportEEGData(activeSessionId, { start_time: timeframeStart, end_time: timeframeEnd });
-                setSeedData(parseEEG(csvContent)); // store as seed data
-                console.log('loaded saved data');
+                setSeedData(parseEEG(csvContent));
             } catch (err) {
                 console.debug('export failed', err);
                 setSeedData([]);
@@ -226,7 +233,7 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                     </DialogHeader>
                     <div className="w-[85vw] h-[90vh]">
                         <SignalGraphView
-                            data={seedData.length > 0 ? seedData : (isConnected ? renderData : [])}
+                            data={renderData.length > 0 ? renderData : seedData}
                             onTimeframeChange={handleTimeframeChange}
                         />
                     </div>

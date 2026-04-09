@@ -23,6 +23,7 @@ import {
 interface SignalGraphViewProps {
     data: {
         time: string;
+        rawTime?: string;
         signal1: number;
         signal2: number;
         signal3: number;
@@ -40,8 +41,9 @@ export default function SignalGraphView({ data, onTimeframeChange }: SignalGraph
 
    const [brushRange, setBrushRange] = useState<{ start: number; end: number } | null>(null);
 
-   const activeBrushStart = brushRange?.start ?? 0;
-   const activeBrushEnd = brushRange?.end ?? Math.max(0, data.length - 1);
+   const maxIndex = Math.max(0, data.length - 1);
+   const activeBrushStart = Math.min(brushRange?.start ?? 0, maxIndex);
+   const activeBrushEnd = Math.min(brushRange?.end ?? maxIndex, maxIndex);
    const visibleCount = activeBrushEnd - activeBrushStart + 1;
 
    const timeStart = data.length > 0 ? data[0].time : null;
@@ -116,7 +118,9 @@ export default function SignalGraphView({ data, onTimeframeChange }: SignalGraph
                                if (range.startIndex !== undefined && range.endIndex !== undefined) {
                                    setBrushRange({ start: range.startIndex, end: range.endIndex });
                                    if (data.length > 0 && onTimeframeChange) {
-                                       onTimeframeChange(data[range.startIndex].time, data[range.endIndex].time);
+                                       const startTs = data[range.startIndex].rawTime ?? data[range.startIndex].time;
+                                       const endTs = data[range.endIndex].rawTime ?? data[range.endIndex].time;
+                                       onTimeframeChange(startTs, endTs);
                                    }
                                }
                            }}
