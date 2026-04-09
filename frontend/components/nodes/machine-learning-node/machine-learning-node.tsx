@@ -11,7 +11,7 @@ interface MachineLearningNodeProps {
 
 export default function MachineLearningNode({ id }: MachineLearningNodeProps) {
     const [selectedPrediction, setSelectedPrediction] =
-        React.useState('stress');
+        React.useState('Stress');
     const [isConnected, setIsConnected] = React.useState(false);
 
     // Get React Flow instance
@@ -19,6 +19,20 @@ export default function MachineLearningNode({ id }: MachineLearningNodeProps) {
 
     // Get data stream status from global context
     const { dataStreaming } = useGlobalContext();
+
+    const pushConfigToNodeData = React.useCallback(() => {
+        if (!id) return;
+        const config = { model: selectedPrediction };
+        reactFlowInstance.setNodes((nds) =>
+            nds.map((n) =>
+                n.id === id ? { ...n, data: { ...n.data, config } } : n
+            )
+        );
+    }, [id, reactFlowInstance, selectedPrediction]);
+
+    React.useEffect(() => {
+        pushConfigToNodeData();
+    }, [pushConfigToNodeData]);
 
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {

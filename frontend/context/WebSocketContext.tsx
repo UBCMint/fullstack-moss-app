@@ -88,9 +88,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
         ws.onopen = () => {
             console.log('WebSocket connection opened.');
-            ws.send(JSON.stringify(processingConfigRef.current ?? DEFAULT_PROCESSING_CONFIG));
-            if (windowingConfigRef.current) {
-                ws.send(JSON.stringify(windowingConfigRef.current));
+            if (pipelinePayloadRef.current) {
+                ws.send(JSON.stringify(pipelinePayloadRef.current));
+                console.log('Sent pipeline payload on open:', pipelinePayloadRef.current);
             }
         };
 

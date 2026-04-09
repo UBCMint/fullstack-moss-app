@@ -36,15 +36,11 @@ import {
 } from '@/lib/frontend-state';
 
 import { useEffect, useState } from 'react';
-<<<<<<< HEAD
 import { X, Ellipsis, RotateCw, RotateCcw, LockKeyhole } from 'lucide-react';
 import { Alert, AlertDescription } from '../ui/alert';
-=======
-import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
 import { useWebSocketContext } from '@/context/WebSocketContext';
 import { PipelinePayload } from '@/lib/pipeline';
 import { useGlobalContext } from '@/context/GlobalContext';
->>>>>>> 32f50af (Frontend websocket change to pipeline)
 
 const nodeTypes = {
     'source-node': SourceNode,
