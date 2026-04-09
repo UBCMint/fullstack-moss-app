@@ -58,6 +58,14 @@ const ReactFlowInterface = () => {
     const [open, setOpen] = useState(true);
     const [showPipelineWarning, setShowPipelineWarning] = useState(false);
 
+    // Auto-dismiss pipeline warning after 30 seconds
+    useEffect(() => {
+        if (showPipelineWarning) {
+            const timer = setTimeout(() => setShowPipelineWarning(false), 30000);
+            return () => clearTimeout(timer);
+        }
+    }, [showPipelineWarning]);
+
     // Listen for global pipeline reset to clear nodes/edges
     useEffect(() => {
         const listener = () => {
@@ -270,11 +278,13 @@ const ReactFlowInterface = () => {
             >
                 {open && (
                     <div className="flex justify-center items-center absolute top-24 left-1/2 transform -translate-x-1/2 z-10">
-                        <Alert className="w-[288px] h-[98px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
-                            <LockKeyhole className='h-3.5 w-3.5'/>
-                            <AlertDescription>
-                                <h3 className='flex justify-center'><b>Data & Privacy</b></h3>
-                                <p className='text-[0.75rem] mt-2'> Your data stays on your device and is never uploaded to the cloud.</p>
+                        <Alert className="w-[288px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
+                            <AlertDescription className="flex-1">
+                                <div className="flex items-center gap-5">
+                                    <LockKeyhole className='h-3.5 w-3.5 flex-shrink-0'/>
+                                    <h3 className="font-bold text-sm">Data Storage & Privacy</h3>
+                                </div>
+                                <p className='text-[0.75rem] mt-1 ml-8'>Your data stays on your device and is never uploaded to the cloud.</p>
                             </AlertDescription>
                             <button onClick={() => setOpen(false)} className="ml-2">
                                 <X className="h-3 w-3" />
@@ -284,8 +294,8 @@ const ReactFlowInterface = () => {
                 )}
                 {showPipelineWarning && (
                     <div className="flex justify-center items-center absolute top-3 left-1/2 transform -translate-x-1/2 z-10">
-                        <Alert className="w-[300px] bg-[#FFF4E1] text-black flex justify-between items-start p-3 font-ibmplex border border-[#F5A623]">
-                            <AlertDescription className="text-[0.75rem]">
+                        <Alert className="w-[300px] bg-[#FFF4E1] text-black flex justify-between items-start p-3 font-ibmplex border-2 border-[#F0E4CA]">
+                            <AlertDescription className="text-[0.75rem] text-center w-full">
                                 Only one pipeline can be active at a time.
                             </AlertDescription>
                             <button onClick={() => setShowPipelineWarning(false)} className="ml-2">
