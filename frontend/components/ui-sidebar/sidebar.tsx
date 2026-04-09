@@ -46,6 +46,12 @@ export default function Sidebar() {
             category: 'Nodes',
         },
         {
+            id: 'resampling-node',
+            label: 'Resampling Node',
+            description: 'Resample EEG data to a target frequency',
+            category: 'Nodes',
+        },
+        {
             id: 'window-node',
             label: 'Window Node',
             description: 'Configure windowing parameters for data streams',

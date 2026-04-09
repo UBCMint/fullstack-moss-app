@@ -27,6 +27,7 @@ import SourceNode from '@/components/nodes/source-node';
 import ArtifactNode from '@/components/nodes/artifact-node/artifact-node';
 import FilterNode from '@/components/nodes/filter-node/filter-node';
 import MachineLearningNode from '@/components/nodes/machine-learning-node/machine-learning-node';
+import ResamplingNode from '@/components/nodes/resampling-node/resampling-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
 import WindowNode from '@/components/nodes/window-node/window-node';
 
@@ -44,6 +45,7 @@ const nodeTypes = {
     'source-node': SourceNode,
     'artifact-node': ArtifactNode,
     'filter-node': FilterNode,
+    'resampling-node': ResamplingNode,
     'machine-learning-node': MachineLearningNode,
     'signal-graph-node': SignalGraphNode,
     'window-node': WindowNode,
@@ -245,8 +247,13 @@ const ReactFlowInterface = () => {
                 return sourceNode.type === 'source-node';
             }
 
-            // Allow Source → Filter or Artifact → Filter
+            // Allow Source / Artifact / Resampling → Filter
             if (targetNode.type === 'filter-node') {
+                return sourceNode.type === 'source-node' || sourceNode.type === 'artifact-node' || sourceNode.type === 'resampling-node';
+            }
+
+            // Allow Source / Artifact → Resampling
+            if (targetNode.type === 'resampling-node') {
                 return sourceNode.type === 'source-node' || sourceNode.type === 'artifact-node';
             }
 
