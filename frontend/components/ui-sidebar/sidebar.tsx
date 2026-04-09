@@ -22,6 +22,12 @@ export default function Sidebar() {
             category: 'Nodes',
         },
         {
+            id: 'artifact-node',
+            label: 'Artifact Node',
+            description: 'Preprocessing step for artifact removal',
+            category: 'Nodes',
+        },
+        {
             id: 'filter-node',
             label: 'Filter Node',
             description: 'Filter and process data streams',
