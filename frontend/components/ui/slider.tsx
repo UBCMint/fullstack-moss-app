@@ -36,7 +36,7 @@ const Slider = React.forwardRef<
                 {/* thumb + label */}
                 <SliderPrimitive.Thumb className="relative block h-4 w-4 rounded-full bg-[#7AB5AD]">
                     <span
-                        className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-gray-700 px-1 py-[1px] rounded"
+                        className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-gray-500 px-1 py-[1px] rounded"
                     >
                         {current} Hz
                     </span>

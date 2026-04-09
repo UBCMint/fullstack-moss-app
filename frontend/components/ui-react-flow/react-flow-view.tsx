@@ -24,6 +24,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import SourceNode from '@/components/nodes/source-node';
+import ArtifactNode from '@/components/nodes/artifact-node/artifact-node';
 import FilterNode from '@/components/nodes/filter-node/filter-node';
 import MachineLearningNode from '@/components/nodes/machine-learning-node/machine-learning-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
@@ -41,6 +42,7 @@ import { Alert, AlertDescription } from '../ui/alert';
 
 const nodeTypes = {
     'source-node': SourceNode,
+    'artifact-node': ArtifactNode,
     'filter-node': FilterNode,
     'machine-learning-node': MachineLearningNode,
     'signal-graph-node': SignalGraphNode,
@@ -238,9 +240,14 @@ const ReactFlowInterface = () => {
                 return sourceNode.type === 'filter-node';
             }
 
-            // Allow Source → Filter; block Source → ML handled above
-            if (targetNode.type === 'filter-node') {
+            // Allow Source -> Artifact
+            if (targetNode.type === 'artifact-node') {
                 return sourceNode.type === 'source-node';
+            }
+
+            // Allow Source → Filter or Artifact → Filter
+            if (targetNode.type === 'filter-node') {
+                return sourceNode.type === 'source-node' || sourceNode.type === 'artifact-node';
             }
 
             return true;

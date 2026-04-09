@@ -78,12 +78,16 @@ jobs:
             }
 
             // Assign PR author
-            await github.rest.issues.addAssignees({
-              owner,
-              repo,
-              issue_number: prNumber,
-              assignees: [author]
-            });
+            try {
+              await github.rest.issues.addAssignees({
+                owner,
+                repo,
+                issue_number: prNumber,
+                assignees: [author]
+              });
+            } catch (err) {
+              console.log("Could not assign author:", err.message);
+            }
 
             // Get existing labels
             const existingLabels = await github.rest.issues.listLabelsOnIssue({
@@ -126,12 +130,16 @@ jobs:
 
             // Request reviewers
             if (reviewersToAdd.size > 0) {
-              await github.rest.pulls.requestReviewers({
-                owner,
-                repo,
-                pull_number: prNumber,
-                reviewers: [...reviewersToAdd]
-              });
+              try {
+                await github.rest.pulls.requestReviewers({
+                  owner,
+                  repo,
+                  pull_number: prNumber,
+                  reviewers: [...reviewersToAdd]
+                });
+              } catch (err) {
+                console.log("Could not request reviewers:", err.message);
+              }
             }
 
         
