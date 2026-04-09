@@ -52,7 +52,7 @@ export default function ArtifactComboBox({
             {/* Header / Toggle */}
             <button
                 onClick={toggleExpanded}
-                className="w-full h-[70px] px-4 flex items-center justify-between transition-colors"
+                className="w-full h-[90px] px-4 flex items-center justify-between transition-colors"
             >
                 <div className="flex items-center">
                     <div
@@ -91,60 +91,54 @@ export default function ArtifactComboBox({
             </button>
 
 
-            {/* Exanded Section */}
+            {/* Expanded Section */}
             <div
-                className="overflow-hidden bg-gray-50/50"
+                className="overflow-hidden"
                 style={{
-                    maxHeight: isExpanded ? '320px' : '0px',
+                    maxHeight: isExpanded ? '360px' : '0px',
                     opacity: isExpanded ? 1 : 0,
                     transition: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
                 }}
             >
                 <div
-                    className="flex flex-col space-y-4 pt-2"
-                    style={{
-                        paddingLeft: '60px',
-                        paddingRight: '60px',
-                        paddingBottom: '20px',
-                    }}
+                    className="flex flex-col pt-0 pb-5"
+                    style={{ paddingLeft: '60px', paddingRight: '60px' }}
                 >
-                    {/* Mode Toggle */}
-                    <div className="flex flex-col space-y-2">
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                                type="radio"
-                                className="w-4 h-4 text-black border-gray-300 focus:ring-black"
-                                checked={mode === 'auto'}
-                                onChange={() => onModeChange('auto')}
-                            />
-                            <span className="text-sm font-medium text-gray-800">Auto Calibrate</span> <span className="text-sm italic text-gray-400">(Recommended)</span>
-
-                        </label>
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                                type="radio"
-                                className="w-4 h-4 text-black border-gray-300 focus:ring-black"
-                                checked={mode === 'manual'}
-                                onChange={() => onModeChange('manual')}
-                            />
-                            <span className="text-sm font-medium text-gray-800">Manual Calibration</span>
-                        </label>
+                    {/* Mode options — styled list items */}
+                    <div className="flex flex-col space-y-0.5">
+                        <button
+                            onClick={() => onModeChange('auto')}
+                            className={cn(
+                                'text-left px-3 py-1 text-sm rounded-lg transition-colors',
+                                mode === 'auto' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+                            )}
+                        >
+                            Auto Calibrate <span className="italic text-gray-400">(Recommended)</span>
+                        </button>
+                        <button
+                            onClick={() => onModeChange('manual')}
+                            className={cn(
+                                'text-left px-3 py-1 text-sm rounded-lg transition-colors',
+                                mode === 'manual' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+                            )}
+                        >
+                            Manually Calibration
+                        </button>
                     </div>
 
-                    {/* Checkboxes (dropdown enabled only if manual) */}
-                    <div 
+                    {/* Checkboxes — visible only in manual mode */}
+                    <div
                         className="overflow-hidden transition-all duration-300 ease-in-out"
                         style={{
                             maxHeight: mode === 'manual' ? '100px' : '0px',
                             opacity: mode === 'manual' ? 1 : 0,
-                            marginTop: mode === 'manual' ? '0.5rem' : '0px',
                         }}
                     >
-                        <div className="flex flex-col space-y-2 pl-6 mb-2">
+                        <div className="flex flex-col space-y-1 pl-3 mt-1">
                             <label className="flex items-center space-x-2 cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    className="w-4 h-4 rounded text-black border-gray-300 focus:ring-black"
+                                    className="w-4 h-4 rounded accent-[#509693]"
                                     checked={selectedArtifacts.includes('eye_blink')}
                                     onChange={() => handleArtifactToggle('eye_blink')}
                                 />
@@ -153,7 +147,7 @@ export default function ArtifactComboBox({
                             <label className="flex items-center space-x-2 cursor-pointer">
                                 <input
                                     type="checkbox"
-                                    className="w-4 h-4 rounded text-black border-gray-300 focus:ring-black"
+                                    className="w-4 h-4 rounded accent-[#509693]"
                                     checked={selectedArtifacts.includes('muscle_tension')}
                                     onChange={() => handleArtifactToggle('muscle_tension')}
                                 />
@@ -163,12 +157,10 @@ export default function ArtifactComboBox({
                     </div>
 
                     {/* Intensity Slider */}
-                    <div className="pt-2 w-full">
-                        <div className="h-px bg-gray-200 w-full mb-4" />
-                        <div className="flex flex-col space-y-5">
-                            <div className="flex items-center justify-between">
-                                <span className="text-sm font-bold text-gray-400">Filter Intensity</span>
-                            </div>
+                    <div className="pt-3 w-full">
+                        <div className="h-px bg-gray-200 w-full mb-3" />
+                        <span className="text-xs font-bold tracking-widest text-gray-400 uppercase">Filter Intensity</span>
+                        <div className="mt-5 mb-1">
                             <Slider
                                 value={[intensity]}
                                 onValueChange={(val) => onIntensityChange(val[0])}
@@ -176,6 +168,10 @@ export default function ArtifactComboBox({
                                 step={1}
                                 className="w-full"
                             />
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>0</span>
+                            <span>100</span>
                         </div>
                     </div>
                 </div>
