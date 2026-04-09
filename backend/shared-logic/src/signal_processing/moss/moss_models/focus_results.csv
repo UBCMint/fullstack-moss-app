@@ -1,0 +1,6 @@
+subject,accuracy,balanced_acc,n_segments
+name,100.0,100.0,29
+subjecta,80.6,80.9,170
+subjectb,84.6,85.7,149
+subjectc,35.8,39.3,148
+subjectd,58.4,66.2,137
