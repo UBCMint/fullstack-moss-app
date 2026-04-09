@@ -24,6 +24,7 @@ pub async fn start_broadcast(
     write: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,  
     cancel_token: CancellationToken,
     processing_config: ProcessingConfig, // takes in signal processing configuration from frontend
+    session_id: i32, // takes in session id to tag incoming data with the correct session
     windowing_rx: watch::Receiver<WindowingConfig> // takes in windowing configuration from frontend
 ) {
     let (tx, _rx) = broadcast::channel::<Arc<EEGDataPacket>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
@@ -55,7 +56,7 @@ pub async fn start_broadcast(
 
     // Subscribe for database Receiver 
     tokio::spawn(async move { 
-        db_receiver( rx_db).await;
+        db_receiver( rx_db, session_id).await;
     });
 
     //waits for sender to complete. 
@@ -111,7 +112,10 @@ pub async fn ws_receiver(write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>,
 
 //db_broadcast_receiver takes EEGDataPacket  struct from the broadcast sender and inserts it into the database
 // it inserts as a batch of 100.
-pub async fn db_receiver(mut rx_db: Receiver<Arc<EEGDataPacket>>){
+pub async fn db_receiver(
+    mut rx_db: Receiver<Arc<EEGDataPacket>>,
+    session_id: i32,
+){
     let db_client = get_db_client();
 
     let mut packet_count = 0; // for debug purposes
@@ -131,7 +135,7 @@ pub async fn db_receiver(mut rx_db: Receiver<Arc<EEGDataPacket>>){
                 // Insert the packet directly
                 tokio::spawn(async move {
                     let now = Instant::now(); // for debug purposes
-                    if let Err(e) = insert_batch_eeg(&db_client_clone, &eeg_packet).await {
+                    if let Err(e) = insert_batch_eeg(&db_client_clone, session_id, &eeg_packet).await {
                         error!("Packet insert failed: {:?}", e);
                     }
                     info!("Packet insert took {:?}", now.elapsed()); // for debug purposes
