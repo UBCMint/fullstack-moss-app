@@ -6,6 +6,7 @@ import { ProcessingConfig, WindowingConfig } from '@/lib/processing';
 
 export type DataPoint = {
     time: string;
+    rawTime: string;
     signal1: number;
     signal2: number;
     signal3: number;
@@ -34,14 +35,18 @@ const DEFAULT_PROCESSING_CONFIG: ProcessingConfig = {
 
 function formatTimestamp(raw: any): string {
     const s = String(raw);
-    // ISO 8601: "2026-03-11T03:55:22.715574979Z" - extract "03:55:22"
-    if (s.includes('T')) return s.slice(11, 19);
+    // ISO 8601 with T: "2026-03-11T03:55:22.715574979Z"
+    if (s.includes('T')) return s.slice(11, 23);
+    // Space-separated: "2025-07-17 21:13:42.408185+00"
+    const spaceIdx = s.indexOf(' ');
+    if (spaceIdx !== -1) return s.slice(spaceIdx + 1, spaceIdx + 13);
     return s;
 }
 
 function normalizeBatch(batch: any): DataPoint[] {
     return batch.timestamps.map((time: any, i: number) => ({
         time: formatTimestamp(time),
+        rawTime: String(time),
         signal1: batch.signals[0][i],
         signal2: batch.signals[1][i],
         signal3: batch.signals[2][i],
@@ -50,7 +55,7 @@ function normalizeBatch(batch: any): DataPoint[] {
 }
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
-    const { dataStreaming } = useGlobalContext();
+    const { dataStreaming, activeSessionId } = useGlobalContext();
     const wsRef = useRef<WebSocket | null>(null);
     const processingConfigRef = useRef<ProcessingConfig | null>(null);
     const windowingConfigRef = useRef<WindowingConfig | null>(null);
@@ -110,6 +115,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
             return;
         }
 
+        if (!activeSessionId) return;
         if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) return;
 
         console.log('Opening WebSocket connection...');
@@ -118,7 +124,10 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
 
         ws.onopen = () => {
             console.log('WebSocket connection opened.');
-            ws.send(JSON.stringify(processingConfigRef.current ?? DEFAULT_PROCESSING_CONFIG));
+            ws.send(JSON.stringify({
+                session_id: activeSessionId,
+                processing_config: processingConfigRef.current ?? DEFAULT_PROCESSING_CONFIG,
+            }));
             if (windowingConfigRef.current) {
                 ws.send(JSON.stringify(windowingConfigRef.current));
             }
@@ -162,7 +171,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
             }
             wsRef.current = null;
         };
-    }, [dataStreaming]);
+    }, [dataStreaming, activeSessionId]);
 
     return (
         <WebSocketContext.Provider value={{ subscribe, sendProcessingConfig, sendWindowingConfig }}>

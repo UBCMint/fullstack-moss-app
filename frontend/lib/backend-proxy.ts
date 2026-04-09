@@ -11,13 +11,16 @@ type ForwardOptions = {
     path: string;
     method: 'GET' | 'POST';
     body?: string;
+    contentType?: string;
 };
 
 export async function forwardToBackend(
     options: ForwardOptions
 ): Promise<Response> {
     const headers: Record<string, string> = {};
-    if (options.method === 'POST') {
+    if (options.contentType) {
+        headers['Content-Type'] = options.contentType;
+    } else if (options.method === 'POST') {
         headers['Content-Type'] = 'application/json';
     }
 

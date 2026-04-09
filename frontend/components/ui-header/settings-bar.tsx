@@ -320,7 +320,7 @@ export default function SettingsBar() {
             </div>
 
 
-            {/* start/stop, reset, save, load */}
+            {/* start/stop, reset, import, export, save, load */}
             <div className="flex space-x-2">
                 <Button
                     onClick={handleStartStop}
@@ -349,14 +349,15 @@ export default function SettingsBar() {
                 </Dialog>
                 <Button
                     variant="outline"
+
                     onClick={handleSaveClick}
                     disabled={isSaving || isLoading || isFetchingSessions}
                 >
                     {isSaving
                         ? 'Saving...'
                         : fetchingFor === 'save'
-                          ? 'Preparing...'
-                          : 'Save'}
+                            ? 'Preparing...'
+                            : 'Save'}
                 </Button>
                 <Button
                     variant="outline"
@@ -366,8 +367,8 @@ export default function SettingsBar() {
                     {isLoading
                         ? 'Loading...'
                         : fetchingFor === 'load'
-                          ? 'Preparing...'
-                          : 'Load'}
+                            ? 'Preparing...'
+                            : 'Load'}
                 </Button>
             </div>
 

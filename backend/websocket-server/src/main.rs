@@ -16,9 +16,15 @@ use shared_logic::db::{initialize_connection};
 use shared_logic::lsl::{ProcessingConfig, WindowingConfig}; // get ProcessingConfig from lsl.rs
 use dotenvy::dotenv;
 use log::{info, error};
-use serde_json; // used to parse ProcessingConfig from JSON sent by frontend
+use serde::Deserialize;
 use serde_json::Value; // used to parse ProcessingConfig from JSON sent by frontend
 
+
+#[derive(Deserialize)]
+struct WebSocketInitMessage{
+    session_id: i32,
+    processing_config: ProcessingConfig,
+}
 
 #[tokio::main]
 async fn main() {
@@ -86,7 +92,44 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
 
     let mut processing_config = ProcessingConfig::default();
     let mut initial_windowing = WindowingConfig::default();
+    let signal_config = read.next().await;
 
+    // we have the WebSocketInitMessage struct, with a session id and processing config
+    // check if we received a message (some unwrapping needed)
+    let init_message: WebSocketInitMessage = match signal_config {
+        Some(Ok(msg)) => {
+            let text = match msg.to_text() {
+                Ok(t) => t,
+                Err(e) => {
+                    error!("Failed to convert init message to text: {}", e);
+                    return;
+                }
+            };
+
+            match serde_json::from_str::<WebSocketInitMessage>(text) {
+                Ok(init_msg) => init_msg,
+                Err(e) => {
+                    error!("Failed to parse init message JSON: {}", e);
+                    return;
+                }
+          }
+      }
+      
+      Some(Err(e)) => {
+        error!("Error receiving initialization message: {}", e);
+        return;
+      }
+      
+      None => {
+        error!("No initialization message received from client. Closing connection.");
+        return;
+      }
+    };
+  
+  
+    let session_id = init_message.session_id;
+    processing_config = init_message.processing_config;
+  
     // Give the frontend a short window to send configs before we start
     // Use a timeout so we don't block forever if only one config arrives
     let config_timeout = tokio::time::Duration::from_millis(500);
@@ -132,13 +175,17 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
         }
     }
 
+
     info!("Starting broadcast with chunk={}, overlap={}", initial_windowing.chunk_size, initial_windowing.overlap_size);
 
     let (windowing_tx, windowing_rx) = watch::channel(initial_windowing);
 
+    // spawns the broadcast task
     let mut broadcast = Some(tokio::spawn(async move {
-        start_broadcast(write_clone, cancel_clone, processing_config, windowing_rx).await;
+        // pass ProcessingConfig, WindowingConfig receiver, and session_id into broadcast
+        start_broadcast(write_clone, cancel_clone, processing_config, session_id, windowing_rx).await;
     }));
+
 
     while let Some(msg) = read.next().await {
         match msg {
