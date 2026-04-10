@@ -30,6 +30,7 @@ import MachineLearningNode from '@/components/nodes/machine-learning-node/machin
 import ResamplingNode from '@/components/nodes/resampling-node/resampling-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
 import WindowNode from '@/components/nodes/window-node/window-node';
+import LabelNode from '@/components/nodes/label-node/label-node';
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
 import {
@@ -49,6 +50,7 @@ const nodeTypes = {
     'machine-learning-node': MachineLearningNode,
     'signal-graph-node': SignalGraphNode,
     'window-node': WindowNode,
+    'label-node': LabelNode,
 };
 
 let id = 0;

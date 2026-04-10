@@ -56,6 +56,12 @@ export default function Sidebar() {
             label: 'Window Node',
             description: 'Configure windowing parameters for data streams',
             category: 'Nodes',
+        },
+        {
+            id: 'label-node',
+            label: 'Labeling Node',
+            description: 'Label data and create labels',
+            category: 'Nodes',
         }
     ];
 
