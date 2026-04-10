@@ -21,7 +21,6 @@ interface LabeledMoment {
     source: 'Trigger';
 }
 
-const LABEL_SESSION_ID = process.env.NEXT_PUBLIC_LABEL_SESSION_ID ?? '1';
 
 function normalizeNodeTimestamp(raw: unknown): string | null {
     if (raw == null) return null;
@@ -100,7 +99,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
             return;
         }
         if (isConnected) {
-            void createSession('Label Session').then((session) => {
+            void createSession(`Label Session ${new Date().toISOString()}`).then((session) => {
                 setSessionIdSentToBackend(session.id);
             });
         }

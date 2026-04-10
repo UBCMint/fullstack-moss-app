@@ -1139,8 +1139,6 @@ checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 [[package]]
 name = "lsl"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1853f0e53f4c3f03d0275a146de3cbf57462b0bb8f32fa822f024b17faf9dfa"
 dependencies = [
  "lsl-sys",
 ]

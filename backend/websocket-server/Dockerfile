@@ -28,6 +28,9 @@ COPY .sqlx ./.sqlx
 # Copy shared-logic source (it's a library used by both servers)
 COPY shared-logic/src ./shared-logic/src
 
+# Copy patched lsl crate to override the broken crates.io version
+COPY lsl-patched ./lsl-patched
+
 # Create dummy main.rs files for workspace members to cache dependencies
 # IMPORTANT: Use async main with tokio macro since the real code uses #[tokio::main]
 RUN mkdir -p websocket-server/src api-server/src && \
