@@ -22,6 +22,12 @@ export default function Sidebar() {
             category: 'Nodes',
         },
         {
+            id: 'artifact-node',
+            label: 'Artifact Node',
+            description: 'Preprocessing step for artifact removal',
+            category: 'Nodes',
+        },
+        {
             id: 'filter-node',
             label: 'Filter Node',
             description: 'Filter and process data streams',
@@ -37,6 +43,12 @@ export default function Sidebar() {
             id: 'signal-graph-node',
             label: 'Chart Node',
             description: 'Visualize data and create charts',
+            category: 'Nodes',
+        },
+        {
+            id: 'resampling-node',
+            label: 'Resampling Node',
+            description: 'Resample EEG data to a target frequency',
             category: 'Nodes',
         },
         {
