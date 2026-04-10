@@ -22,7 +22,6 @@ interface LabeledMoment {
     source: 'Trigger';
 }
 
-
 function normalizeNodeTimestamp(raw: unknown): string | null {
     if (raw == null) return null;
 
@@ -430,8 +429,27 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 }}
             />
 
+            {/* Output Handle - positioned to align with right circle */}
+            <Handle
+                type="source"
+                position={Position.Right}
+                id="labeling-output"
+                style={{
+                    right: '24px',
+                    top: '30px',
+                    transform: 'translateY(-50%)',
+                    width: '28px',
+                    height: '28px',
+                    backgroundColor: 'transparent',
+                    border: '2px solid transparent',
+                    borderRadius: '50%',
+                    zIndex: 20,
+                    cursor: 'crosshair',
+                    pointerEvents: 'all',
+                }}
+            />
 
-            <ComboBox 
+            <ComboBox
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
                 isTriggerActive={isTriggerActive}

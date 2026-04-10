@@ -471,6 +471,7 @@ export default function LabelTimelinePanel({
                     >
                         {isConnected && <span className="w-3 h-3 rounded-full bg-white" />}
                     </span>
+
                     {/* Status dot */}
                     <div
                         className={cn(
