@@ -7,7 +7,7 @@ use tokio::time::{self, Duration};
 use log::{info, error, warn};
 use chrono::{Date, DateTime, Utc};
 use dotenvy::dotenv;
-use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState};
+use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState, TimeLabel, NewTimeLabel, EegDataRow};
 use crate::{lsl::EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
@@ -418,6 +418,75 @@ pub async fn get_frontend_state(client: &DbClient, session_id: i32) -> Result<Op
     info!("Retrieved frontend state successfully: {:?}", state);
 
     return Ok(state.map(|s| s.data));
+}
+
+/// Insert a batch of time labels for a given session.
+///
+/// Takes a session_id and a list of labels (each with a timestamp and label string),
+/// and inserts them all into the time_labels table in a single query.
+pub async fn insert_time_labels(client: &DbClient, session_id: i32, labels: Vec<NewTimeLabel>) -> Result<(), sqlx::Error> {
+    if labels.is_empty() {
+        info!("Skipping insert - no labels to insert");
+        return Ok(());
+    }
+
+    let mut query_builder = sqlx::QueryBuilder::new(
+        "INSERT INTO time_labels (session_id, start_timestamp, end_timestamp, label, color) "
+    );
+
+    query_builder.push_values(labels.iter(), |mut b, label| {
+        b.push_bind(session_id)
+            .push_bind(label.start_timestamp)
+            .push_bind(label.end_timestamp)
+            .push_bind(&label.label)
+            .push_bind(&label.color);
+    });
+
+    query_builder.build().execute(&**client).await?;
+    info!("Inserted {} time labels for session {}", labels.len(), session_id);
+    Ok(())
+}
+
+/// Get EEG data rows for a given session within a time range.
+///
+/// Returns all rows from eeg_data where session_id matches and time is between
+/// start and end (inclusive), ordered by time.
+pub async fn get_eeg_data_by_range(client: &DbClient, session_id: i32, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<EegDataRow>, Error> {
+    info!("Retrieving EEG data for session {} from {} to {}", session_id, start, end);
+
+    let data = sqlx::query_as!(
+        EegDataRow,
+        "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data WHERE session_id = $1 AND time >= $2 AND time <= $3 ORDER BY time",
+        session_id,
+        start,
+        end,
+    )
+    .fetch_all(&**client)
+    .await?;
+
+    info!("Retrieved {} EEG data rows.", data.len());
+    Ok(data)
+}
+
+/// Get time labels for a given session within a time range.
+///
+/// Returns all rows from time_labels where session_id matches and timestamp is between
+/// start and end (inclusive), ordered by timestamp.
+pub async fn get_time_labels_by_range(client: &DbClient, session_id: i32, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Vec<TimeLabel>, Error> {
+    info!("Retrieving time labels for session {} from {} to {}", session_id, start, end);
+
+    let labels = sqlx::query_as!(
+        TimeLabel,
+        "SELECT id, session_id, start_timestamp, end_timestamp, label, color FROM time_labels WHERE session_id = $1 AND start_timestamp >= $2 AND start_timestamp <= $3 ORDER BY start_timestamp",
+        session_id,
+        start,
+        end,
+    )
+    .fetch_all(&**client)
+    .await?;
+
+    info!("Retrieved {} time labels.", labels.len());
+    Ok(labels)
 }
 
 /// Export the EEG data for a given session ID and time range as a CSV string.
