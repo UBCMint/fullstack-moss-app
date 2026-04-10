@@ -386,6 +386,7 @@ const ReactFlowInterface = () => {
         }
 
         const payload = buildPipelinePayload(nodes, edges, String(activeSessionId));
+        console.log('[pipeline] payload being stored/sent:', JSON.stringify(payload));
         sendPipelinePayload(payload);
     }, [nodes, edges, activeSessionId, sendPipelinePayload]);
 

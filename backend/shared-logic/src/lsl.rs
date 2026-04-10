@@ -22,6 +22,8 @@ pub async fn receive_eeg(tx: Sender<Arc<EEGDataPacket>>, cancel_token: Cancellat
     // Extract configs from the pipeline, falling back to defaults if a node is missing
     let preprocessing_config = pipeline.preprocessing_config().cloned().unwrap_or_default();
     let window_config = pipeline.window_config().cloned().unwrap_or_default();
+    info!("Received preprocessing config: apply_bandpass={}, l_freq={:?}, h_freq={:?}",
+        preprocessing_config.apply_bandpass, preprocessing_config.l_freq, preprocessing_config.h_freq);
 
     // Create a watch channel from the initial window config.
     // The receiver is passed into the collection loop so it can react to future updates.

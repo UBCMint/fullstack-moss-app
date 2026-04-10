@@ -97,7 +97,7 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
                 };
                 match serde_json::from_str::<WebSocketInitMessage>(text) {
                     Ok(init) => break init,
-                    Err(e) => { error!("Failed to parse init message: {}", e); return; }
+                    Err(e) => { error!("Failed to parse init message JSON: {}", e); continue; }
                 }
             }
             Some(Ok(_)) => continue, // ping, binary, etc — keep waiting
