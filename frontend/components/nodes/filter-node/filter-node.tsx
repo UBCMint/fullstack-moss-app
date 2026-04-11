@@ -1,31 +1,27 @@
 'use client';
 import { useGlobalContext } from '@/context/GlobalContext';
-import { ProcessingConfig } from '@/lib/processing';
 
-const dispatchProcessingConfig = (config: ProcessingConfig) => {
-    window.dispatchEvent(new CustomEvent('processing-config-update', { detail: config }));
-};
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import ComboBox from './combo-box';
 
 interface FilterNodeProps {
     id?: string;
-    // data?: any;
+    data?: { _highCutoff?: number; _lowCutoff?: number; _selectedFilter?: string; config?: Record<string, any> };
 }
 
-export default function FilterNode({ id }: FilterNodeProps) {
-    const [selectedFilter, setSelectedFilter] = React.useState('lowpass');
+export default function FilterNode({ id, data }: FilterNodeProps) {
+    const [selectedFilter, setSelectedFilter] = React.useState(data?._selectedFilter ?? 'lowpass');
     const [isConnected, setIsConnected] = React.useState(false);
-    const [lowCutoff, setLowCutoff] = React.useState(1)
-    const [highCutoff, setHighCutoff] = React.useState(50)
+    const [lowCutoff, setLowCutoff] = React.useState(data?._lowCutoff ?? 1)
+    const [highCutoff, setHighCutoff] = React.useState(data?._highCutoff ?? 50)
     
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
     
     const { dataStreaming } = useGlobalContext();
 
-    const buildConfig = (): ProcessingConfig => {
+    const buildConfig = () => {
         if (!isConnected) {
           return {
             apply_bandpass: false,
@@ -76,6 +72,19 @@ export default function FilterNode({ id }: FilterNodeProps) {
                 throw new Error(`Unhandled filter type: ${selectedFilter}`)
         }
       }       
+
+    // write config to node data for later retrieval when dispatching pipeline payload
+    const pushConfigToNodeData = React.useCallback(() => {
+        if (!id) return;
+        if (!isConnected) return; // Don't push config if not connected
+        const config = buildConfig();
+        reactFlowInstance.setNodes((nds) =>
+            nds.map((n) =>
+                n.id === id ? { ...n, data: { ...n.data, config, _highCutoff: highCutoff, _lowCutoff: lowCutoff, _selectedFilter: selectedFilter } } : n
+            )
+        );
+    }, [id, reactFlowInstance, selectedFilter, lowCutoff, highCutoff, isConnected]);
+
 
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
@@ -137,14 +146,10 @@ export default function FilterNode({ id }: FilterNodeProps) {
         };
     }, [checkConnectionStatus]);
 
+    // Push config to node data and dispatch processing config when relevant state changes
     React.useEffect(() => {
-        if (!dataStreaming) return
-        dispatchProcessingConfig(buildConfig())
-    }, [selectedFilter, lowCutoff, highCutoff, isConnected, dataStreaming])  
-
-    React.useEffect(() => {
-        dispatchProcessingConfig(buildConfig());
-    }, []);
+        pushConfigToNodeData();
+    }, [pushConfigToNodeData]);
     
     return (
         <div className="relative">
