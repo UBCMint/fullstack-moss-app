@@ -3,13 +3,14 @@ import { NextRequest } from 'next/server';
 
 export async function POST(
     req: NextRequest,
-    { params }: { params: { session_id: string } }
+    { params }: { params: Promise<{ session_id: string }> }
 ) {
+    const { session_id } = await params;
     const body = await req.text();
 
     const response = await forwardToBackend({
         method: 'POST',
-        path: `/api/sessions/${params.session_id}/eeg_data/export`,
+        path: `/api/sessions/${session_id}/eeg_data/export`,
         body,
         contentType: 'application/json',
     });

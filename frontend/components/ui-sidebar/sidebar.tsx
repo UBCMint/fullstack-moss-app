@@ -9,8 +9,8 @@ import Cross1 from '@/components/radix/cross1';
 import NodeButton from './node-button';
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
-import { ChevronDown } from 'lucide-react';
-
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ChevronDown, X } from "lucide-react";
 
 export default function Sidebar() {
 
@@ -19,6 +19,12 @@ export default function Sidebar() {
             id: 'source-node',
             label: 'Source Node',
             description: 'No Connection',
+            category: 'Nodes',
+        },
+        {
+            id: 'artifact-node',
+            label: 'Artifact Node',
+            description: 'Preprocessing step for artifact removal',
             category: 'Nodes',
         },
         {
@@ -40,6 +46,12 @@ export default function Sidebar() {
             category: 'Nodes',
         },
         {
+            id: 'resampling-node',
+            label: 'Resampling Node',
+            description: 'Resample EEG data to a target frequency',
+            category: 'Nodes',
+        },
+        {
             id: 'window-node',
             label: 'Window Node',
             description: 'Configure windowing parameters for data streams',
@@ -49,6 +61,7 @@ export default function Sidebar() {
 
     const [searchTerm, setSearchTerm] = useState('');
     const [collapsed, setCollapsed] = useState(false);
+    const [open, setOpen] = useState(true);
 
     const filteredNodes = AvailableNodes.filter((node) =>
         node.label.toLowerCase().includes(searchTerm.toLowerCase())
@@ -90,6 +103,16 @@ export default function Sidebar() {
                                         description={node.description}
                                     />
                                 ))}
+                                {open && (
+                                    <Alert className="bg-[#EFEFF0] text-black flex justify-between items-start font-ibmplex">
+                                        <AlertDescription className="text-[0.7rem]">
+                                            Only <b>pre-processed</b> data is <b>saved</b> by default. To store raw data, only use the <b>Source Node</b> without adding any computations.
+                                        </AlertDescription>
+                                        <button onClick={() => setOpen(false)} className="ml-2">
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </Alert>
+                                )}
                             </CardContent>
                         </>
                     )}

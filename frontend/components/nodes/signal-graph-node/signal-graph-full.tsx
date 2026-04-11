@@ -23,24 +23,27 @@ import {
 interface SignalGraphViewProps {
     data: {
         time: string;
+        rawTime?: string;
         signal1: number;
         signal2: number;
         signal3: number;
         signal4: number;
     }[];
+    onTimeframeChange?: (start: string, end: string) => void;
 }
 
 
 const TABLE_PREVIEW_ROWS = 50;
 
-export default function SignalGraphView({ data }: SignalGraphViewProps) {
+export default function SignalGraphView({ data, onTimeframeChange }: SignalGraphViewProps) {
    const { dataStreaming, setDataStreaming } = useGlobalContext();
    const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
 
    const [brushRange, setBrushRange] = useState<{ start: number; end: number } | null>(null);
 
-   const activeBrushStart = brushRange?.start ?? 0;
-   const activeBrushEnd = brushRange?.end ?? Math.max(0, data.length - 1);
+   const maxIndex = Math.max(0, data.length - 1);
+   const activeBrushStart = Math.min(brushRange?.start ?? 0, maxIndex);
+   const activeBrushEnd = Math.min(brushRange?.end ?? maxIndex, maxIndex);
    const visibleCount = activeBrushEnd - activeBrushStart + 1;
 
    const timeStart = data.length > 0 ? data[0].time : null;
@@ -69,7 +72,6 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                >
                    {dataStreaming ? 'Stop Data Stream' : 'Start Data Stream'}
                </Button>
-               <Button className='bg-[#2E7B75] text-white'> Save </Button>
            </div>
 
            {/* ---- TOP HALF: CHART ---- */}
@@ -115,6 +117,11 @@ export default function SignalGraphView({ data }: SignalGraphViewProps) {
                            onChange={(range) => {
                                if (range.startIndex !== undefined && range.endIndex !== undefined) {
                                    setBrushRange({ start: range.startIndex, end: range.endIndex });
+                                   if (data.length > 0 && onTimeframeChange) {
+                                       const startTs = data[range.startIndex].rawTime ?? data[range.startIndex].time;
+                                       const endTs = data[range.endIndex].rawTime ?? data[range.endIndex].time;
+                                       onTimeframeChange(startTs, endTs);
+                                   }
                                }
                            }}
                        />

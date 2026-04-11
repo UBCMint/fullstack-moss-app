@@ -24,8 +24,10 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import SourceNode from '@/components/nodes/source-node';
+import ArtifactNode from '@/components/nodes/artifact-node/artifact-node';
 import FilterNode from '@/components/nodes/filter-node/filter-node';
 import MachineLearningNode from '@/components/nodes/machine-learning-node/machine-learning-node';
+import ResamplingNode from '@/components/nodes/resampling-node/resampling-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
 import WindowNode from '@/components/nodes/window-node/window-node';
 
@@ -36,11 +38,14 @@ import {
 } from '@/lib/frontend-state';
 
 import { useEffect, useState } from 'react';
-import { X, Ellipsis, RotateCw, RotateCcw } from 'lucide-react';
+import { X, Ellipsis, RotateCw, RotateCcw, LockKeyhole } from 'lucide-react';
+import { Alert, AlertDescription } from '../ui/alert';
 
 const nodeTypes = {
     'source-node': SourceNode,
+    'artifact-node': ArtifactNode,
     'filter-node': FilterNode,
+    'resampling-node': ResamplingNode,
     'machine-learning-node': MachineLearningNode,
     'signal-graph-node': SignalGraphNode,
     'window-node': WindowNode,
@@ -54,6 +59,16 @@ const ReactFlowInterface = () => {
     const [edges, setEdges] = useEdgesState<Edge>([]);
     const { screenToFlowPosition } = useReactFlow();
     const [isControlsOpen, setIsControlsOpen] = useState(false);
+    const [open, setOpen] = useState(true);
+    const [showPipelineWarning, setShowPipelineWarning] = useState(false);
+
+    // Auto-dismiss pipeline warning after 30 seconds
+    useEffect(() => {
+        if (showPipelineWarning) {
+            const timer = setTimeout(() => setShowPipelineWarning(false), 30000);
+            return () => clearTimeout(timer);
+        }
+    }, [showPipelineWarning]);
 
     // Listen for global pipeline reset to clear nodes/edges
     useEffect(() => {
@@ -190,8 +205,14 @@ const ReactFlowInterface = () => {
 
         const nodeType = event.dataTransfer.getData('application/reactflow');
 
-        if (!nodeType) {
-            return;
+        if (!nodeType) return;
+
+        if (nodeType === 'source-node') {
+            const existingSource = nodes.find((n) => n.type === 'source-node');
+            if (existingSource) {
+                setShowPipelineWarning(true);
+                return;
+            }
         }
 
         const position = screenToFlowPosition({
@@ -221,9 +242,19 @@ const ReactFlowInterface = () => {
                 return sourceNode.type === 'filter-node';
             }
 
-            // Allow Source → Filter; block Source → ML handled above
-            if (targetNode.type === 'filter-node') {
+            // Allow Source -> Artifact
+            if (targetNode.type === 'artifact-node') {
                 return sourceNode.type === 'source-node';
+            }
+
+            // Allow Source / Artifact / Resampling → Filter
+            if (targetNode.type === 'filter-node') {
+                return sourceNode.type === 'source-node' || sourceNode.type === 'artifact-node' || sourceNode.type === 'resampling-node';
+            }
+
+            // Allow Source / Artifact → Resampling
+            if (targetNode.type === 'resampling-node') {
+                return sourceNode.type === 'source-node' || sourceNode.type === 'artifact-node';
             }
 
             return true;
@@ -259,6 +290,34 @@ const ReactFlowInterface = () => {
                 attributionPosition="bottom-left"
                 isValidConnection={isValidConnection}
             >
+                {open && (
+                    <div className="flex justify-center items-center absolute top-24 left-1/2 transform -translate-x-1/2 z-10">
+                        <Alert className="w-[288px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
+                            <AlertDescription className="flex-1">
+                                <div className="flex items-center gap-5">
+                                    <LockKeyhole className='h-3.5 w-3.5 flex-shrink-0'/>
+                                    <h3 className="font-bold text-sm">Data Storage & Privacy</h3>
+                                </div>
+                                <p className='text-[0.75rem] mt-1 ml-8'>Your data stays on your device and is never uploaded to the cloud.</p>
+                            </AlertDescription>
+                            <button onClick={() => setOpen(false)} className="ml-2">
+                                <X className="h-3 w-3" />
+                            </button>
+                        </Alert>
+                    </div>
+                )}
+                {showPipelineWarning && (
+                    <div className="flex justify-center items-center absolute top-3 left-1/2 transform -translate-x-1/2 z-10">
+                        <Alert className="w-[300px] bg-[#FFF4E1] text-black flex justify-between items-start p-3 font-ibmplex border-2 border-[#F0E4CA]">
+                            <AlertDescription className="text-[0.75rem] text-center w-full">
+                                Only one pipeline can be active at a time.
+                            </AlertDescription>
+                            <button onClick={() => setShowPipelineWarning(false)} className="ml-2">
+                                <X className="h-3 w-3" />
+                            </button>
+                        </Alert>
+                    </div>
+                )}
                 <Panel position="top-right" style={{
                     display: 'flex',
                     flexDirection: 'column',
