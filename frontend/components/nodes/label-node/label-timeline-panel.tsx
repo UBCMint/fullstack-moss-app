@@ -1,10 +1,12 @@
 import * as React from 'react';
+import { ArrowLeft, BarChart2, LayoutList, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { colorClassMap, LabelColor } from './label-combo-box';
+import { LabelColor, colorClassMap } from './label-combo-box';
 import {
     CartesianGrid,
     Line,
     LineChart,
+    ReferenceArea,
     ResponsiveContainer,
     XAxis,
     YAxis,
@@ -43,6 +45,7 @@ export interface LabelTimelinePanelProps {
     onTimelineViewClick?: () => void;
     viewMode: 'timeline' | 'graph';
     graphData: LabelGraphPoint[];
+    fetchDataForLabel?: (start: string, end: string) => Promise<LabelGraphPoint[]>;
 }
 
 interface PackedTimelineEntry {
@@ -63,6 +66,21 @@ const colorBorderMap: Record<LabelColor, string> = {
     'teal-300': 'border-[#98CDBF]',
     'mint-100': 'border-[#D6E6D4]',
 };
+
+const colorTextMap: Record<LabelColor, string> = {
+    'teal-700': 'text-[#2E7B75]',
+    'teal-500': 'text-[#6CAFA4]',
+    'teal-300': 'text-[#98CDBF]',
+    'mint-100': 'text-[#D6E6D4]',
+};
+
+const colorHexMap: Record<LabelColor, string> = {
+    'teal-700': '#2E7B75',
+    'teal-500': '#6CAFA4',
+    'teal-300': '#98CDBF',
+    'mint-100': '#D6E6D4',
+};
+
 const VISIBLE_WINDOW_MS = 30_000;
 const TICK_INTERVAL_MS = 5_000;
 const LIVE_EDGE_EPSILON_PX = 4;
@@ -140,6 +158,7 @@ export default function LabelTimelinePanel({
     isConnected,
     isDataStreamOn,
     graphData,
+    fetchDataForLabel,
 }: LabelTimelinePanelProps) {
     const latestMs = parseTimestampMs(latestBackendTimestamp);
     const fallbackStartMs = parseTimestampMs(sessionStartTimestamp);
@@ -283,16 +302,17 @@ export default function LabelTimelinePanel({
     >(null);
     const [focusWindowMs, setFocusWindowMs] =
         React.useState<FocusWindowMs | null>(null);
+    const [fetchedFocusData, setFetchedFocusData] = React.useState<LabelGraphPoint[] | null>(null);
 
     const signalConfigs: Array<{
         key: 'signal1' | 'signal2' | 'signal3' | 'signal4';
         label: string;
         color: string;
     }> = [
-        { key: 'signal1', label: 'Signal 1', color: '#2E7B75' },
-        { key: 'signal2', label: 'Signal 2', color: '#6CAFA4' },
-        { key: 'signal3', label: 'Signal 3', color: '#98CDBF' },
-        { key: 'signal4', label: 'Signal 4', color: '#D6E6D4' },
+        { key: 'signal1', label: 'Channel 1', color: '#0000ff' },
+        { key: 'signal2', label: 'Channel 2', color: '#00ff00' },
+        { key: 'signal3', label: 'Channel 3',  color: '#FF00D0' },
+        { key: 'signal4', label: 'Channel 4',  color: '#FF0000' },
     ];
 
     const toggleSignal = (
@@ -321,6 +341,10 @@ export default function LabelTimelinePanel({
     }, [graphData]);
 
     const displayedGraphData = React.useMemo<LabelGraphPoint[]>(() => {
+        if (fetchedFocusData) {
+            return fetchedFocusData;
+        }
+
         if (!focusWindowMs) {
             return graphData;
         }
@@ -336,7 +360,7 @@ export default function LabelTimelinePanel({
         }
 
         return focused.map(({ timeMs: _timeMs, ...point }) => point);
-    }, [focusWindowMs, graphData, normalizedGraphData]);
+    }, [fetchedFocusData, focusWindowMs, graphData, normalizedGraphData]);
 
     const handleGraphEventClick = React.useCallback(
         (row: TimelineLabelRow) => {
@@ -355,14 +379,20 @@ export default function LabelTimelinePanel({
                 startMs: startMs - paddingMs,
                 endMs: endMs + paddingMs,
             });
-            // TODO: get data for focused window from backend.
+
+            if (fetchDataForLabel && row.endTimestamp) {
+                fetchDataForLabel(row.startTimestamp, row.endTimestamp)
+                    .then((data) => setFetchedFocusData(data.length > 0 ? data : null))
+                    .catch(() => setFetchedFocusData(null));
+            }
         },
-        [latestBackendTimestamp]
+        [latestBackendTimestamp, fetchDataForLabel]
     );
 
     const handleReturnToLive = React.useCallback(() => {
         setSelectedGraphEventId(null);
         setFocusWindowMs(null);
+        setFetchedFocusData(null);
     }, []);
     // end of new, not sure if this works
 
@@ -398,10 +428,19 @@ export default function LabelTimelinePanel({
     }
 
     return (
-        <div className="mx-4 mb-4 rounded-[24px] border border-[#D3D3D3] bg-[#F8F9F8] p-4">
-            <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-
+        <div className="rounded-b-[28px] overflow-hidden">
+            {/* Header row — mirrors the collapsed node header */}
+            <div className="w-full h-[70px] px-4 flex items-center justify-between relative">
+                <div className="flex items-center">
+                    {/* Left circle */}
+                    <span
+                        className={cn(
+                            'absolute left-6 w-6 h-6 rounded-full flex items-center justify-center border-[3px]',
+                            isConnected ? 'border-black' : 'border-[#D3D3D3]'
+                        )}
+                    >
+                        {isConnected && <span className="w-3 h-3 rounded-full bg-white" />}
+                    </span>
                     {/* Status dot */}
                     <div
                         className={cn(
@@ -411,42 +450,63 @@ export default function LabelTimelinePanel({
                                 : 'bg-[#D3D3D3]'
                         )}
                     />
-                    <h3 className="absolute left-24 font-geist text-[25px] font-[550] leading-tight text-black">
-                        Timeline
+                    <h3 className="absolute left-24 font-geist text-[25px] font-[550] leading-tight text-black tracking-wider">
+                        {viewMode === 'graph' ? 'Graph View' : 'Timeline'}
                     </h3>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 pr-10">
                     {viewMode === 'graph' && selectedGraphEventId && (
                         <button
                             className="nodrag nopan rounded-md border border-[#D3D3D3] bg-white px-3 py-1 text-sm text-[#7A7A7A] hover:bg-[#F2F2F2] transition-colors"
                             onClick={handleReturnToLive}
                         >
-                            Return to Live
+                            <ArrowLeft size={14} className="inline mr-2" />Live
+                        </button>
+                    )}
+                    {viewMode === 'timeline' && (
+                        <button
+                            className="nodrag nopan rounded-md border border-[#D3D3D3] bg-white px-3 py-1 text-sm text-[#7A7A7A] hover:bg-[#F2F2F2] transition-colors flex items-center gap-2"
+                            onClick={onGraphViewClick}
+                        >
+                            <BarChart2 size={14} />
+                            Graph View
+                        </button>
+                    )}
+                    {viewMode === 'graph' && (
+                        <button
+                            className="nodrag nopan rounded-md border border-[#D3D3D3] bg-white px-3 py-1 text-sm text-[#7A7A7A] hover:bg-[#F2F2F2] transition-colors"
+                            onClick={onTimelineViewClick}
+                        >
+                            <LayoutList size={14} className="inline mr-2" />Timeline View
                         </button>
                     )}
                     <button
-                        className="nodrag nopan rounded-md border border-[#D3D3D3] bg-white px-3 py-1 text-sm text-[#7A7A7A] hover:bg-[#F2F2F2] transition-colors"
-                        onClick={
-                            viewMode === 'graph'
-                                ? onTimelineViewClick
-                                : onGraphViewClick
-                        }
-                    >
-                        {viewMode === 'graph' ? 'Timeline View' : 'Graph View'}
-                    </button>
-                    <button
-                        className="nodrag nopan text-[#BFBFBF] hover:text-[#8F8F8F] text-xl leading-none transition-colors"
+                        className="nodrag nopan text-[#BFBFBF] hover:text-[#8F8F8F] transition-colors"
                         onClick={onClose}
                         aria-label="Close timeline panel"
                     >
-                        ×
+                        <X size={18} />
                     </button>
+                    {/* Right circle */}
+                    <span
+                        className={cn(
+                            'absolute right-6 w-6 h-6 rounded-full flex items-center justify-center border-[3px]',
+                            isConnected ? 'border-black' : 'border-[#D3D3D3]'
+                        )}
+                    >
+                        {isConnected && <span className="w-3 h-3 rounded-full bg-white" />}
+                    </span>
                 </div>
             </div>
 
+            <div
+                className="mx-4 mb-4 flex flex-col gap-3 overflow-y-auto max-h-[520px]"
+                onWheel={(e) => e.stopPropagation()}
+            >
+
             {viewMode === 'graph' ? (
-                <div className="mb-5 rounded-[16px] border border-[#D3D3D3] bg-white p-3">
+                <div className="rounded-[16px] border border-[#D3D3D3] bg-white p-3">
                     <div className="grid grid-cols-[1fr_140px] gap-4">
                         <div className="h-[320px] rounded-[12px] border border-[#E2E2E2] bg-white p-2">
                             <ResponsiveContainer width="100%" height="100%">
@@ -479,13 +539,13 @@ export default function LabelTimelinePanel({
                                             dot={false}
                                             stroke={
                                                 highlightedSignal === signal.key
-                                                    ? '#FF0000'
-                                                    : '#D3D3D3' // red
+                                                    ? signal.color
+                                                    : '#C0C0C0'
                                             }
                                             strokeWidth={
                                                 highlightedSignal === signal.key
                                                     ? 2
-                                                    : 1.2
+                                                    : 1
                                             }
                                         />
                                     ))}
@@ -503,18 +563,21 @@ export default function LabelTimelinePanel({
                                         <button
                                             key={signal.key}
                                             className="nodrag nopan flex items-center gap-2 text-sm text-black"
-                                            onClick={() =>
-                                                toggleSignal(signal.key)
-                                            }
+                                            onClick={() => toggleSignal(signal.key)}
                                         >
                                             <span
-                                                className={cn(
-                                                    'h-3 w-3 rounded-sm border',
-                                                    highlightedSignal === signal.key
-                                                        ? 'border-[#2E7B75] bg-[#2E7B75]'
-                                                        : 'border-[#BFBFBF] bg-white'
+                                                className="h-3.5 w-3.5 rounded-sm flex items-center justify-center flex-shrink-0"
+                                                style={{
+                                                    backgroundColor: highlightedSignal === signal.key ? signal.color : 'transparent',
+                                                    border: highlightedSignal === signal.key ? 'none' : '1.5px solid #BFBFBF',
+                                                }}
+                                            >
+                                                {highlightedSignal === signal.key && (
+                                                    <svg width="8" height="7" viewBox="0 0 8 7" fill="none">
+                                                        <path d="M1 3L3 5.5L7 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                                    </svg>
                                                 )}
-                                            />
+                                            </span>
                                             {signal.label}
                                         </button>
                                     ))}
@@ -523,18 +586,15 @@ export default function LabelTimelinePanel({
 
                             <div>
                                 <h4 className="mb-2 text-sm font-semibold text-black">
-                                    Events
+                                    Event
                                 </h4>
-                                <div className="max-h-[180px] space-y-2 overflow-y-auto pr-1">
+                                <div className="max-h-[180px] space-y-1.5 overflow-y-auto pr-1">
                                     {tableRows.length === 0 ? (
                                         <div className="text-sm text-[#8A8A8A]">
                                             No events yet.
                                         </div>
                                     ) : (
                                         tableRows.map((row) => {
-                                            const startMs = parseTimestampMs(
-                                                row.startTimestamp
-                                            );
                                             const isSelected =
                                                 row.id === selectedGraphEventId;
 
@@ -542,30 +602,17 @@ export default function LabelTimelinePanel({
                                                 <button
                                                     key={row.id}
                                                     className={cn(
-                                                        'nodrag nopan w-full rounded-md border px-2 py-1.5 text-left text-sm transition-colors',
+                                                        'nodrag nopan w-full rounded-md border px-3 py-1.5 text-center text-sm transition-colors',
                                                         isSelected
                                                             ? 'border-[#2E7B75] bg-[#E8F2F1] text-[#163B39]'
-                                                            : 'border-[#BFD9D7] text-[#204C49] hover:bg-[#EEF3F2]'
+                                                            : 'border-[#D3D3D3] text-black hover:bg-[#F5F5F5]'
                                                     )}
                                                     onClick={() => handleGraphEventClick(row)}
                                                 >
-                                                    <div className="flex items-center justify-between gap-2">
-                                                        <span className="truncate font-medium">
-                                                            {row.label}
-                                                        </span>
-                                                        {row.isInProgress && (
-                                                            <span className="text-xs text-[#5E8B87]">
-                                                                Live
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="mt-0.5 text-xs text-[#5A5A5A]">
-                                                        {startMs !== null
-                                                            ? formatAbsoluteTimeWithMs(
-                                                                  startMs
-                                                              )
-                                                            : '--:--'}
-                                                    </div>
+                                                    <span className="truncate">
+                                                        {row.label}
+                                                        {row.isInProgress ? ' •' : ''}
+                                                    </span>
                                                 </button>
                                             );
                                         })
@@ -576,17 +623,49 @@ export default function LabelTimelinePanel({
                     </div>
                 </div>
             ) : (
-                <div className="mb-5 rounded-[16px] border border-[#D3D3D3] bg-white p-3">
+                <div className="rounded-[16px] border border-[#D3D3D3] bg-white p-3">
                     <div
                         ref={timelineScrollRef}
                         onScroll={handleTimelineScroll}
+                        onWheel={(e) => e.stopPropagation()}
                         className="w-full overflow-x-auto rounded-md border border-[#E2E2E2] pb-2"
                     >
                         <div
-                            className="min-w-full"
+                            className="min-w-full relative"
                             style={{ width: `${virtualTrackWidthPercent}%` }}
                         >
-                            <div className="mb-3 relative h-6 border-b border-[#D3D3D3]">
+                            {/* Dotted vertical start/end lines for each label */}
+                            {packedEntries.map((entry) => {
+                                const startOffset = Math.max(entry.startMs - axisStartMs, 0);
+                                const endOffset = Math.max(entry.endMs - axisStartMs, startOffset + 1);
+                                const startPercent = (startOffset / virtualDurationMs) * 100;
+                                const endPercent = (endOffset / virtualDurationMs) * 100;
+                                const color = colorHexMap[entry.row.color];
+                                return (
+                                    <React.Fragment key={`lines-${entry.row.id}`}>
+                                        <div
+                                            className="absolute top-0 bottom-0 pointer-events-none"
+                                            style={{
+                                                left: `${startPercent}%`,
+                                                borderLeft: `1.5px dashed ${color}`,
+                                                zIndex: 1,
+                                            }}
+                                        />
+                                        {!entry.row.isInProgress && (
+                                            <div
+                                                className="absolute top-0 bottom-0 pointer-events-none"
+                                                style={{
+                                                    left: `${endPercent}%`,
+                                                    borderLeft: `1.5px dashed ${color}`,
+                                                    zIndex: 1,
+                                                }}
+                                            />
+                                        )}
+                                    </React.Fragment>
+                                );
+                            })}
+
+                            <div className="mb-3 relative h-6 border-b border-[#D3D3D3] z-10 bg-white">
                                 {ticks.map((tick) => (
                                     <div
                                         key={`${tick.ratio}-${tick.label}`}
@@ -608,7 +687,7 @@ export default function LabelTimelinePanel({
                                 {laneGroups.map((laneEntries, laneIndex) => (
                                     <div
                                         key={`timeline-lane-${laneIndex}`}
-                                        className="relative h-8 w-full rounded-md bg-[#EEF3F2]"
+                                        className="relative h-8 w-full"
                                     >
                                         {laneEntries.map((entry) => {
                                             const startOffset = Math.max(
@@ -632,9 +711,9 @@ export default function LabelTimelinePanel({
                                                 <div
                                                     key={entry.row.id}
                                                     className={cn(
-                                                        'absolute top-0 h-full rounded-md border flex items-center px-3 text-sm text-[#204C49]',
-                                                        colorClassMap[entry.row.color],
+                                                        'absolute top-0 h-full rounded-md border-2 bg-white flex items-center px-3 text-sm font-medium',
                                                         colorBorderMap[entry.row.color],
+                                                        colorTextMap[entry.row.color],
                                                         entry.row.isInProgress ? 'animate-pulse' : ''
                                                     )}
                                                     style={{
@@ -646,9 +725,7 @@ export default function LabelTimelinePanel({
                                                     }}
                                                 >
                                                     {entry.row.label}
-                                                    {entry.row.isInProgress
-                                                        ? ' (recording)'
-                                                        : ''}
+                                                    {entry.row.isInProgress ? ' •' : ''}
                                                 </div>
                                             );
                                         })}
@@ -662,7 +739,7 @@ export default function LabelTimelinePanel({
 
             {viewMode === 'timeline' && (
                 <div className="rounded-[16px] border border-[#D3D3D3] bg-white p-3">
-                <h3 className="mb-3 font-geist text-[25px] font-[550] leading-tight text-black">
+                <h3 className="mb-3 font-geist text-[20px] font-[550] leading-tight text-black">
                     Event Log
                 </h3>
 
@@ -723,6 +800,7 @@ export default function LabelTimelinePanel({
                 </div>
                 </div>
             )}
+            </div>
         </div>
     );
 }

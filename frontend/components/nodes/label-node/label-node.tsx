@@ -6,7 +6,7 @@ import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
 import ComboBox, { LabelColor } from './label-combo-box';
 import { LabelGraphPoint, TimelineLabelRow } from '@/components/nodes/label-node/label-timeline-panel';
-import { saveTimeLabels, getSessions, createSession } from '@/lib/session-api';
+import { saveTimeLabels, createSession, getEegData } from '@/lib/session-api';
 
 interface LabelNodeProps {
     id?: string;
@@ -182,33 +182,33 @@ export default function LabelNode({ id }: LabelNodeProps) {
     }, [dataStreaming, renderData]);
 
     const postLabelsToApi = React.useCallback(async () => {
+        if (sessionIdSentToBackend === null) {
+            console.error('No session id — cannot post labels');
+            return;
+        }
+
         const unsentLabels = labelsRef.current.filter(
             (moment) => !sentLabelIdsRef.current.has(moment.id)
         );
-        // does it make more sense to keep track of index?
 
         if (unsentLabels.length === 0) {
             return;
         }
 
-        // TODO: should these be sent in number format?
         const payload = unsentLabels.map((moment) => ({
-            timestamp: moment.startTimestamp, // will need start and end timestamps, backend update
+            start_timestamp: moment.startTimestamp,
+            end_timestamp: moment.endTimestamp,
             label: moment.label,
+            color: moment.color,
         }));
 
-        // first, get session ids from backend
-        const sessionId = await getSessions();
-        console.log('Session ids:', sessionId);
-
-        if (sessionIdSentToBackend === null) {
-            console.error('Session id not sent to backend');
-            return;
+        try {
+            await saveTimeLabels(sessionIdSentToBackend, payload);
+            unsentLabels.forEach((moment) => sentLabelIdsRef.current.add(moment.id));
+            console.log('POST time labels success:', payload);
+        } catch (e) {
+            console.error('Failed to POST time labels:', e);
         }
-
-        void saveTimeLabels(sessionIdSentToBackend, payload).then(() => {
-            console.log('POST time labels:', payload);
-        });
     }, [sessionIdSentToBackend]);
 
     React.useEffect(() => {
@@ -306,6 +306,23 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const handleTimelineViewClick = () => {
         setViewMode('timeline');
     };
+
+    const handleFetchLabelData = React.useCallback(async (start: string, end: string): Promise<LabelGraphPoint[]> => {
+        if (sessionIdSentToBackend === null) return [];
+        try {
+            const rows = await getEegData(sessionIdSentToBackend, start, end);
+            return rows.map((row, index) => ({
+                id: `fetched-${index}`,
+                time: row.time,
+                signal1: row.channel1,
+                signal2: row.channel2,
+                signal3: row.channel3,
+                signal4: row.channel4,
+            }));
+        } catch {
+            return [];
+        }
+    }, [sessionIdSentToBackend]);
 
     const timelineRows = React.useMemo<TimelineLabelRow[]>(() => {
         const completedRows: TimelineLabelRow[] = labeledMoments.map((moment) => ({
@@ -412,6 +429,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 graphData={graphData}
                 sessionStartTimestamp={sessionStartTimestamp}
                 latestBackendTimestamp={latestBackendTimestamp}
+                fetchDataForLabel={handleFetchLabelData}
             />
         </div>
     );
