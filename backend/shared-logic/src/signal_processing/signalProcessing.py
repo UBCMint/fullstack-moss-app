@@ -44,7 +44,15 @@ class signalProcessing:
         # Default cutoff values are set to remove very low-frequency drifts 
         # and high-frequency noise.
 
-        filtered_data = mne.filter.filter_data(data, sfreq, l_freq, h_freq, method='fir')
+        data = np.asarray(data, dtype=np.float64)
+        filtered_data = mne.filter.filter_data(
+            data,
+            sfreq=float(sfreq),
+            l_freq=l_freq,
+            h_freq=h_freq,
+            method='fir',
+            verbose='ERROR',
+        )
         
         return filtered_data
 
@@ -67,8 +75,15 @@ class signalProcessing:
         # Default values are chosen to remove unwanted low-frequency drifts 
         # and high-frequency noise.
 
-        iir_params = mne.filter.construct_iir_filter(dict(ftype='butter', order=4), sfreq, l_freq, h_freq)
-        filtered_data = scipy.signal.filtfilt(iir_params['b'], iir_params['a'], data, axis=-1)
+        data = np.asarray(data, dtype=np.float64)
+        sos = scipy.signal.butter(
+            N=4,
+            Wn=[l_freq, h_freq],
+            btype='bandpass',
+            fs=float(sfreq),
+            output='sos',
+        )
+        filtered_data = scipy.signal.sosfiltfilt(sos, data, axis=-1)
         
         return filtered_data
 
