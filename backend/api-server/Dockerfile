@@ -27,6 +27,9 @@ COPY .sqlx ./.sqlx
 # Copy shared-logic source (it's a library used by both servers)
 COPY shared-logic/src ./shared-logic/src
 
+# Copy patched lsl crate to override the broken crates.io version
+COPY lsl-patched ./lsl-patched
+
 # Copy migrations directory for the final image
 COPY migrations ./migrations
 

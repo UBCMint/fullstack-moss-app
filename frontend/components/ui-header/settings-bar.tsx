@@ -52,6 +52,8 @@ export default function SettingsBar() {
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
+    const [isLoadWarningOpen, setIsLoadWarningOpen] = useState(false);
+    const [activeSessionName, setActiveSessionName] = useState<string | null>(null);
 
     // Track unsaved canvas changes
     useEffect(() => {
@@ -62,6 +64,16 @@ export default function SettingsBar() {
             window.removeEventListener('canvas-changed', handler);
             window.removeEventListener('reactflow-edges-changed', handler);
         };
+    }, []);
+
+    // Auto-create an unsaved session on app open so streaming is always available.
+    // The "(unsaved)" prefix keeps it out of the load/save lists.
+    useEffect(() => {
+        if (activeSessionId !== null) return;
+        createSession(`(unsaved) ${new Date().toISOString()}`)
+            .then((s) => { setActiveSessionId(s.id); setActiveSessionName(null); })
+            .catch((e) => console.error('Failed to auto-create session:', e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Timer effect - starts/stops based on dataStreaming state
@@ -102,17 +114,10 @@ export default function SettingsBar() {
     };
 
     const handleConfirmReset = () => {
-        // Stop the data stream and reset the timer
         setDataStreaming(false);
         setLeftTimerSeconds(0);
-
-        // Broadcast a reset event so the flow view can clear nodes/edges
-        try {
-            window.dispatchEvent(new Event('pipeline-reset'));
-        } catch (_) {
-            // no-op if window is unavailable
-        }
-
+        window.dispatchEvent(new Event('pipeline-reset'));
+        setIsDirty(true);
         setIsResetDialogOpen(false);
     };
 
@@ -172,7 +177,9 @@ export default function SettingsBar() {
         setFetchingFor('save');
         try {
             const fetchedSessions = await getSessions();
-            setSessions(fetchedSessions);
+            setSessions(fetchedSessions.filter(
+                (s) => !s.name.startsWith('Label Session ') && !s.name.startsWith('(unsaved) ') && !s.name.startsWith('Session ')
+            ));
             setSessionModalMode('save');
             setIsSessionModalOpen(true);
         } catch (error) {
@@ -186,16 +193,15 @@ export default function SettingsBar() {
         }
     };
 
-    const handleLoadClick = async () => {
-        if (isSaving || isLoading || isFetchingSessions) {
-            return;
-        }
-
+    const openLoadModal = async () => {
         setIsFetchingSessions(true);
         setFetchingFor('load');
         try {
             const fetchedSessions = await getSessions();
-            setSessions(fetchedSessions);
+            // Filter out orphaned label-node sessions created by old code.
+            setSessions(fetchedSessions.filter(
+                (s) => !s.name.startsWith('Label Session ') && !s.name.startsWith('(unsaved) ') && !s.name.startsWith('Session ')
+            ));
             setSessionModalMode('load');
             setIsSessionModalOpen(true);
         } catch (error) {
@@ -206,6 +212,15 @@ export default function SettingsBar() {
         } finally {
             setIsFetchingSessions(false);
             setFetchingFor(null);
+        }
+    };
+
+    const handleLoadClick = () => {
+        if (isSaving || isLoading || isFetchingSessions) return;
+        if (isDirty) {
+            setIsLoadWarningOpen(true);
+        } else {
+            void openLoadModal();
         }
     };
 
@@ -227,7 +242,13 @@ export default function SettingsBar() {
         setLeftTimerSeconds(0);
         window.dispatchEvent(new Event('pipeline-reset'));
         setIsNewDialogOpen(false);
-        notifications.success({ title: 'New session started' });
+        createSession(`(unsaved) ${new Date().toISOString()}`)
+            .then((s) => {
+                setActiveSessionId(s.id);
+                setActiveSessionName(null);
+                notifications.success({ title: 'New session started' });
+            })
+            .catch(() => notifications.error({ title: 'Could not create session' }));
     };
 
     const handleCreateAndSaveSession = async (sessionName: string) => {
@@ -385,6 +406,31 @@ export default function SettingsBar() {
                             <Button variant="outline">Cancel</Button>
                         </DialogClose>
                         <Button className="bg-red-500" onClick={handleConfirmNew}>Confirm</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isLoadWarningOpen} onOpenChange={setIsLoadWarningOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Load a different session?</DialogTitle>
+                        <DialogDescription>
+                            Your current session has unsaved changes. Loading a new session will discard them. Save first if you want to keep your work.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-2 mt-4">
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button
+                            className="bg-red-500"
+                            onClick={() => {
+                                setIsLoadWarningOpen(false);
+                                void openLoadModal();
+                            }}
+                        >
+                            Discard & Load
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>
