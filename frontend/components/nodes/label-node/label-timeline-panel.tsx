@@ -88,7 +88,9 @@ const parseTimestampMs = (timestamp: string | null): number | null => {
         }
     }
 
-    const value = Date.parse(timestamp);
+    // Truncate sub-millisecond precision (nanoseconds) so Date.parse succeeds.
+    const truncated = timestamp.replace(/(\.\d{3})\d+/, '$1');
+    const value = Date.parse(truncated);
     if (!Number.isNaN(value)) {
         return value;
     }
@@ -359,11 +361,13 @@ export default function LabelTimelinePanel({
 
     // Chart data with a numeric timeMs field so XAxis can use type="number"
     // and ReferenceArea can use reliable numeric x1/x2.
+    // Points with unparseable timestamps are filtered out to prevent domain corruption.
     const chartData = React.useMemo(() =>
-        displayedGraphData.map((p) => ({
-            ...p,
-            timeMs: parseTimestampMs(p.time) ?? 0,
-        })),
+        displayedGraphData.flatMap((p) => {
+            const timeMs = parseTimestampMs(p.time);
+            if (timeMs === null || timeMs === 0) return [];
+            return [{ ...p, timeMs }];
+        }),
     [displayedGraphData]);
 
     const handleGraphEventClick = React.useCallback(
@@ -543,6 +547,11 @@ export default function LabelTimelinePanel({
                             {!isFetchingData && selectedGraphEventId && fetchedFocusData === null && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10 rounded-[10px]">
                                     <span className="text-sm text-[#8A8A8A]">No recorded data for this event</span>
+                                </div>
+                            )}
+                            {!isFetchingData && !selectedGraphEventId && chartData.length === 0 && (
+                                <div className="absolute inset-0 flex items-center justify-center z-10 rounded-[10px]">
+                                    <span className="text-sm text-[#8A8A8A]">Start streaming to see live data</span>
                                 </div>
                             )}
                             <ResponsiveContainer width="100%" height="100%">

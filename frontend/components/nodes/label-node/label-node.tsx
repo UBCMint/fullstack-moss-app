@@ -6,7 +6,7 @@ import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
 import ComboBox, { LabelColor } from './label-combo-box';
 import { LabelGraphPoint, TimelineLabelRow } from '@/components/nodes/label-node/label-timeline-panel';
-import { saveTimeLabels, createSession } from '@/lib/session-api';
+import { saveTimeLabels, getTimeLabels } from '@/lib/session-api';
 import { exportEEGData } from '@/lib/eeg-api';
 
 interface LabelNodeProps {
@@ -93,21 +93,37 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const { dataStreaming, activeSessionId } = useGlobalContext();
     const { renderData } = useNodeData(300, 15);
 
-    const [sessionIdSentToBackend, setSessionIdSentToBackend] = React.useState<number | null>(null);
-
     const reactFlowInstance = useReactFlow();
 
+    // Load persisted labels whenever the active session changes.
+    const validColors: LabelColor[] = ['teal-700', 'teal-500', 'teal-300', 'mint-100'];
     React.useEffect(() => {
-        // when the thing is connected for the first time, send the session id to the backend
-        if (sessionIdSentToBackend !== null) {
+        if (activeSessionId === null) {
+            setLabeledMoments([]);
+            sentLabelIdsRef.current = new Set();
+            momentCounterRef.current = 0;
             return;
         }
-        if (isConnected) {
-            void createSession(`Label Session ${new Date().toISOString()}`).then((session) => {
-                setSessionIdSentToBackend(session.id);
-            });
-        }
-    }, [isConnected]);
+        getTimeLabels(activeSessionId, '1970-01-01T00:00:00Z', '2100-01-01T00:00:00Z')
+            .then((labels) => {
+                const moments: LabeledMoment[] = labels
+                    .filter((l) => l.end_timestamp !== null)
+                    .map((l) => ({
+                        id: `backend-${l.id}`,
+                        label: l.label,
+                        color: validColors.includes(l.color as LabelColor)
+                            ? (l.color as LabelColor)
+                            : 'teal-700',
+                        startTimestamp: l.start_timestamp,
+                        endTimestamp: l.end_timestamp!,
+                        source: 'Trigger' as const,
+                    }));
+                setLabeledMoments(moments);
+                sentLabelIdsRef.current = new Set(moments.map((m) => m.id));
+                momentCounterRef.current = 0;
+            })
+            .catch((e) => console.error('Failed to load time labels:', e));
+    }, [activeSessionId]);
 
     const checkConnectionStatus = React.useCallback(() => {
         try {
@@ -186,8 +202,8 @@ export default function LabelNode({ id }: LabelNodeProps) {
     }, [dataStreaming, renderData]);
 
     const postLabelsToApi = React.useCallback(async () => {
-        if (sessionIdSentToBackend === null) {
-            console.error('No session id — cannot post labels');
+        if (activeSessionId === null) {
+            console.error('No active session id — cannot post labels');
             return;
         }
 
@@ -207,13 +223,12 @@ export default function LabelNode({ id }: LabelNodeProps) {
         }));
 
         try {
-            await saveTimeLabels(sessionIdSentToBackend, payload);
+            await saveTimeLabels(activeSessionId, payload);
             unsentLabels.forEach((moment) => sentLabelIdsRef.current.add(moment.id));
-            console.log('POST time labels success:', payload);
         } catch (e) {
             console.error('Failed to POST time labels:', e);
         }
-    }, [sessionIdSentToBackend]);
+    }, [activeSessionId]);
 
     React.useEffect(() => {
         const wasStreaming = previousStreamStateRef.current;
@@ -383,7 +398,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
             .map((item, index: number) => {
                 return {
                     id: `graph-point-${index}`,
-                    time: item.time,
+                    time: item.rawTime ?? item.time,
                     signal1: Number(item.signal1 ?? 0),
                     signal2: Number(item.signal2 ?? 0),
                     signal3: Number(item.signal3 ?? 0),
