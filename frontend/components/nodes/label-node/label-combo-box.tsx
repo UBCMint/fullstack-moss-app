@@ -24,6 +24,7 @@ interface ComboBoxProps {
     selectedColor: LabelColor;
     onLabelInputChange: (value: string) => void;
     onColorSelect: (color: LabelColor) => void;
+    labelError?: string | null;
     onConfirmLabel: () => void;
     onCloseLabelPopup: () => void;
     timelineRows: TimelineLabelRow[];
@@ -56,6 +57,7 @@ export default function ComboBox({
     selectedColor,
     onLabelInputChange,
     onColorSelect,
+    labelError,
     onConfirmLabel,
     onCloseLabelPopup,
     timelineRows,
@@ -162,8 +164,14 @@ export default function ComboBox({
                         value={labelInputValue}
                         onChange={(event) => onLabelInputChange(event.target.value)}
                         placeholder="Enter label here"
-                        className="nodrag nopan w-full rounded-md border border-[#E2E2E2] px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-[#6CAFA4]"
+                        className={cn(
+                            'nodrag nopan w-full rounded-md border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-[#6CAFA4]',
+                            labelError ? 'border-red-400' : 'border-[#E2E2E2]'
+                        )}
                     />
+                    {labelError && (
+                        <p className="mt-1 text-xs text-red-500">{labelError}</p>
+                    )}
 
                     <div className="mt-3 flex items-center justify-between">
                         <span className="text-sm text-black">Color</span>

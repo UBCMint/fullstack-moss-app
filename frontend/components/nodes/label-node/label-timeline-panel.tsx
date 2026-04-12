@@ -357,6 +357,15 @@ export default function LabelTimelinePanel({
         return focused.map(({ timeMs: _timeMs, ...point }) => point);
     }, [fetchedFocusData, focusWindowMs, graphData, normalizedGraphData]);
 
+    // Chart data with a numeric timeMs field so XAxis can use type="number"
+    // and ReferenceArea can use reliable numeric x1/x2.
+    const chartData = React.useMemo(() =>
+        displayedGraphData.map((p) => ({
+            ...p,
+            timeMs: parseTimestampMs(p.time) ?? 0,
+        })),
+    [displayedGraphData]);
+
     const handleGraphEventClick = React.useCallback(
         (row: TimelineLabelRow) => {
             const startMs = parseTimestampMs(row.startTimestamp);
@@ -395,36 +404,22 @@ export default function LabelTimelinePanel({
         setIsFetchingData(false);
     }, []);
 
-    const referenceAreaTimes = React.useMemo(() => {
-        if (!selectedGraphEventId) return null;
+    const referenceAreaMs = React.useMemo((): { x1: number; x2: number } | null => {
+        if (!selectedGraphEventId || !selectedEventMs) return null;
 
-        // When fetched data is available, it spans exactly the event range —
-        // use first and last point times directly to avoid timestamp parsing issues.
-        if (fetchedFocusData && fetchedFocusData.length >= 2) {
-            return {
-                x1: fetchedFocusData[0].time,
-                x2: fetchedFocusData[fetchedFocusData.length - 1].time,
-            };
+        // When fetched data is available use its actual time range.
+        if (fetchedFocusData && fetchedFocusData.length >= 1) {
+            const times = fetchedFocusData
+                .map((p) => parseTimestampMs(p.time))
+                .filter((t): t is number => t !== null);
+            if (times.length >= 1) {
+                return { x1: Math.min(...times), x2: Math.max(...times) };
+            }
         }
 
-        // Fall back: find closest times in live displayed data.
-        if (!selectedEventMs || displayedGraphData.length === 0) return null;
-        const findClosestTime = (targetMs: number) => {
-            let closest = displayedGraphData[0];
-            let minDiff = Infinity;
-            for (const point of displayedGraphData) {
-                const pointMs = parseTimestampMs(point.time);
-                if (pointMs === null) continue;
-                const diff = Math.abs(pointMs - targetMs);
-                if (diff < minDiff) { minDiff = diff; closest = point; }
-            }
-            return closest.time;
-        };
-        return {
-            x1: findClosestTime(selectedEventMs.startMs),
-            x2: findClosestTime(selectedEventMs.endMs),
-        };
-    }, [selectedGraphEventId, fetchedFocusData, selectedEventMs, displayedGraphData]);
+        // Fall back to the event's own start/end ms.
+        return { x1: selectedEventMs.startMs, x2: selectedEventMs.endMs };
+    }, [selectedGraphEventId, fetchedFocusData, selectedEventMs]);
     // end of new, not sure if this works
 
     const timelineScrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -551,19 +546,16 @@ export default function LabelTimelinePanel({
                                 </div>
                             )}
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={displayedGraphData} margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
+                                <LineChart data={chartData} margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
                                     <CartesianGrid
                                         strokeDasharray="3 3"
                                         stroke="#E7E7E7"
                                     />
                                     <XAxis
-                                        dataKey="time"
-                                        tickFormatter={(value) =>
-                                            formatAbsoluteTime(
-                                                parseTimestampMs(String(value)) ??
-                                                    Date.now()
-                                            )
-                                        }
+                                        dataKey="timeMs"
+                                        type="number"
+                                        domain={['dataMin', 'dataMax']}
+                                        tickFormatter={(value) => formatAbsoluteTime(value)}
                                         tick={{ fontSize: 11, fill: '#7A7A7A' }}
                                         label={{ value: 'Time (HH:MM:SS)', position: 'insideBottom', offset: -14, fontSize: 10, fill: '#666' }}
                                     />
@@ -573,10 +565,10 @@ export default function LabelTimelinePanel({
                                         width={60}
                                         label={{ value: 'Frequency (Hz)', angle: -90, position: 'insideLeft', dy: 55, dx: 4, fontSize: 10, fill: '#666' }}
                                     />
-                                    {referenceAreaTimes && (
+                                    {referenceAreaMs && (
                                         <ReferenceArea
-                                            x1={referenceAreaTimes.x1}
-                                            x2={referenceAreaTimes.x2}
+                                            x1={referenceAreaMs.x1}
+                                            x2={referenceAreaMs.x2}
                                             fill="#2E7B75"
                                             fillOpacity={0.12}
                                             stroke="#2E7B75"

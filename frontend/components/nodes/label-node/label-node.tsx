@@ -84,6 +84,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     >(null);
     const [pendingEndTimestamp, setPendingEndTimestamp] = React.useState<string | null>(null);
     const [labeledMoments, setLabeledMoments] = React.useState<LabeledMoment[]>([]);
+    const [labelError, setLabelError] = React.useState<string | null>(null);
     const labelsRef = React.useRef<LabeledMoment[]>([]);
     const sentLabelIdsRef = React.useRef<Set<string>>(new Set());
     const previousStreamStateRef = React.useRef(false);
@@ -263,6 +264,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const handleCloseLabelPopup = () => {
         setIsLabelPopupOpen(false);
         setLabelInputValue('');
+        setLabelError(null);
         setActiveStartTimestamp(null);
         setPendingEndTimestamp(null);
         setIsTriggerActive(false);
@@ -274,11 +276,19 @@ export default function LabelNode({ id }: LabelNodeProps) {
             return;
         }
 
+        const normalizedName = labelInputValue.trim() || 'Untitled';
+        const isDuplicate = labeledMoments.some((m) => m.label === normalizedName);
+        if (isDuplicate) {
+            setLabelError(`"${normalizedName}" already exists`);
+            return;
+        }
+        setLabelError(null);
+
         momentCounterRef.current += 1;
 
         const newLabeledMoment: LabeledMoment = {
             id: `moment-${momentCounterRef.current}`,
-            label: labelInputValue.trim() || 'Untitled',
+            label: normalizedName,
             color: selectedColor,
             startTimestamp: activeStartTimestamp,
             endTimestamp: pendingEndTimestamp,
@@ -405,25 +415,6 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 }}
             />
 
-            {/* Output Handle - positioned to align with right circle */}
-            <Handle
-                type="source"
-                position={Position.Right}
-                id="labeling-output"
-                style={{
-                    right: '24px',
-                    top: '30px',
-                    transform: 'translateY(-50%)',
-                    width: '28px',
-                    height: '28px',
-                    backgroundColor: 'transparent',
-                    border: '2px solid transparent',
-                    borderRadius: '50%',
-                    zIndex: 20,
-                    cursor: 'crosshair',
-                    pointerEvents: 'all',
-                }}
-            />
 
             <ComboBox 
                 isConnected={isConnected}
@@ -439,8 +430,9 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 isLabelPopupOpen={isLabelPopupOpen}
                 labelInputValue={labelInputValue}
                 selectedColor={selectedColor}
-                onLabelInputChange={setLabelInputValue}
+                onLabelInputChange={(v) => { setLabelInputValue(v); setLabelError(null); }}
                 onColorSelect={setSelectedColor}
+                labelError={labelError}
                 onConfirmLabel={handleConfirmLabel}
                 onCloseLabelPopup={handleCloseLabelPopup}
                 timelineRows={timelineRows}
