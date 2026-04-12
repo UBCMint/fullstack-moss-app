@@ -6,7 +6,8 @@ import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
 import ComboBox, { LabelColor } from './label-combo-box';
 import { LabelGraphPoint, TimelineLabelRow } from '@/components/nodes/label-node/label-timeline-panel';
-import { saveTimeLabels, createSession, getEegData } from '@/lib/session-api';
+import { saveTimeLabels, createSession } from '@/lib/session-api';
+import { exportEEGData } from '@/lib/eeg-api';
 
 interface LabelNodeProps {
     id?: string;
@@ -40,7 +41,9 @@ function normalizeNodeTimestamp(raw: unknown): string | null {
         return new Date(epochMs).toISOString();
     }
 
-    const parsed = Date.parse(value);
+    // Truncate sub-millisecond precision (e.g. nanoseconds) so Date.parse succeeds.
+    const truncated = value.replace(/(\.\d{3})\d+/, '$1');
+    const parsed = Date.parse(truncated);
     if (!Number.isNaN(parsed)) {
         return new Date(parsed).toISOString();
     }
@@ -86,7 +89,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const previousStreamStateRef = React.useRef(false);
     const momentCounterRef = React.useRef(0);
 
-    const { dataStreaming } = useGlobalContext();
+    const { dataStreaming, activeSessionId } = useGlobalContext();
     const { renderData } = useNodeData(300, 15);
 
     const [sessionIdSentToBackend, setSessionIdSentToBackend] = React.useState<number | null>(null);
@@ -171,7 +174,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
         }
 
         const mostRecentPoint = renderData[renderData.length - 1];
-        const timestamp = normalizeNodeTimestamp(mostRecentPoint.time);
+        const timestamp = normalizeNodeTimestamp(mostRecentPoint.rawTime ?? mostRecentPoint.time);
 
         if (!timestamp) {
             return;
@@ -308,21 +311,36 @@ export default function LabelNode({ id }: LabelNodeProps) {
     };
 
     const handleFetchLabelData = React.useCallback(async (start: string, end: string): Promise<LabelGraphPoint[]> => {
-        if (sessionIdSentToBackend === null) return [];
+        if (activeSessionId === null) return [];
         try {
-            const rows = await getEegData(sessionIdSentToBackend, start, end);
-            return rows.map((row, index) => ({
-                id: `fetched-${index}`,
-                time: row.time,
-                signal1: row.channel1,
-                signal2: row.channel2,
-                signal3: row.channel3,
-                signal4: row.channel4,
-            }));
+            const csv = await exportEEGData(activeSessionId, { start_time: start, end_time: end });
+            const lines = csv.trim().split('\n');
+            if (lines.length < 2) return [];
+            const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
+            const timeIdx = header.findIndex((h) => h.includes('time') || h === 'timestamp');
+            const chIdxs = [0, 1, 2, 3].map((n) => {
+                const pats = [`ch${n + 1}`, `channel${n + 1}`];
+                return header.findIndex((h) => pats.includes(h));
+            });
+            if (timeIdx === -1 || chIdxs.includes(-1)) return [];
+            return lines.slice(1).flatMap((line, i) => {
+                const cols = line.trim().split(',').map((c) => c.trim());
+                if (!cols[timeIdx]) return [];
+                const vals = chIdxs.map((idx) => parseFloat(cols[idx]));
+                if (vals.some((v) => isNaN(v))) return [];
+                return [{
+                    id: `fetched-${i}`,
+                    time: cols[timeIdx],
+                    signal1: vals[0],
+                    signal2: vals[1],
+                    signal3: vals[2],
+                    signal4: vals[3],
+                }];
+            });
         } catch {
             return [];
         }
-    }, [sessionIdSentToBackend]);
+    }, [activeSessionId]);
 
     const timelineRows = React.useMemo<TimelineLabelRow[]>(() => {
         const completedRows: TimelineLabelRow[] = labeledMoments.map((moment) => ({

@@ -121,7 +121,7 @@ export default function ComboBox({
                                 className={cn(
                                     'nodrag nopan text-lg px-4 py-1 rounded-md border transition-colors',
                                     isTriggerActive
-                                        ? 'bg-white text-black border-black'
+                                        ? 'bg-white text-[#2E7B75] border-[#2E7B75]'
                                         : 'bg-[#2E7B75] text-white border-[#2E7B75]'
                                 )}
                                 onClick={onTriggerClick}

@@ -60,18 +60,11 @@ interface FocusWindowMs {
     endMs: number;
 }
 
-const colorBorderMap: Record<LabelColor, string> = {
-    'teal-700': 'border-[#2E7B75]',
-    'teal-500': 'border-[#6CAFA4]',
-    'teal-300': 'border-[#98CDBF]',
-    'mint-100': 'border-[#D6E6D4]',
-};
-
-const colorTextMap: Record<LabelColor, string> = {
-    'teal-700': 'text-[#2E7B75]',
-    'teal-500': 'text-[#6CAFA4]',
-    'teal-300': 'text-[#98CDBF]',
-    'mint-100': 'text-[#D6E6D4]',
+const colorFillTextMap: Record<LabelColor, string> = {
+    'teal-700': 'text-white',
+    'teal-500': 'text-white',
+    'teal-300': 'text-white',
+    'mint-100': 'text-[#2E7B75]',
 };
 
 const colorHexMap: Record<LabelColor, string> = {
@@ -302,7 +295,9 @@ export default function LabelTimelinePanel({
     >(null);
     const [focusWindowMs, setFocusWindowMs] =
         React.useState<FocusWindowMs | null>(null);
+    const [selectedEventMs, setSelectedEventMs] = React.useState<FocusWindowMs | null>(null);
     const [fetchedFocusData, setFetchedFocusData] = React.useState<LabelGraphPoint[] | null>(null);
+    const [isFetchingData, setIsFetchingData] = React.useState(false);
 
     const signalConfigs: Array<{
         key: 'signal1' | 'signal2' | 'signal3' | 'signal4';
@@ -375,15 +370,18 @@ export default function LabelTimelinePanel({
             const paddingMs = Math.max(Math.floor(durationMs * 0.1), 500);
 
             setSelectedGraphEventId(row.id);
+            setSelectedEventMs({ startMs, endMs });
             setFocusWindowMs({
                 startMs: startMs - paddingMs,
                 endMs: endMs + paddingMs,
             });
 
             if (fetchDataForLabel && row.endTimestamp) {
+                setIsFetchingData(true);
                 fetchDataForLabel(row.startTimestamp, row.endTimestamp)
                     .then((data) => setFetchedFocusData(data.length > 0 ? data : null))
-                    .catch(() => setFetchedFocusData(null));
+                    .catch(() => setFetchedFocusData(null))
+                    .finally(() => setIsFetchingData(false));
             }
         },
         [latestBackendTimestamp, fetchDataForLabel]
@@ -392,8 +390,41 @@ export default function LabelTimelinePanel({
     const handleReturnToLive = React.useCallback(() => {
         setSelectedGraphEventId(null);
         setFocusWindowMs(null);
+        setSelectedEventMs(null);
         setFetchedFocusData(null);
+        setIsFetchingData(false);
     }, []);
+
+    const referenceAreaTimes = React.useMemo(() => {
+        if (!selectedGraphEventId) return null;
+
+        // When fetched data is available, it spans exactly the event range —
+        // use first and last point times directly to avoid timestamp parsing issues.
+        if (fetchedFocusData && fetchedFocusData.length >= 2) {
+            return {
+                x1: fetchedFocusData[0].time,
+                x2: fetchedFocusData[fetchedFocusData.length - 1].time,
+            };
+        }
+
+        // Fall back: find closest times in live displayed data.
+        if (!selectedEventMs || displayedGraphData.length === 0) return null;
+        const findClosestTime = (targetMs: number) => {
+            let closest = displayedGraphData[0];
+            let minDiff = Infinity;
+            for (const point of displayedGraphData) {
+                const pointMs = parseTimestampMs(point.time);
+                if (pointMs === null) continue;
+                const diff = Math.abs(pointMs - targetMs);
+                if (diff < minDiff) { minDiff = diff; closest = point; }
+            }
+            return closest.time;
+        };
+        return {
+            x1: findClosestTime(selectedEventMs.startMs),
+            x2: findClosestTime(selectedEventMs.endMs),
+        };
+    }, [selectedGraphEventId, fetchedFocusData, selectedEventMs, displayedGraphData]);
     // end of new, not sure if this works
 
     const timelineScrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -502,15 +533,25 @@ export default function LabelTimelinePanel({
 
             <div
                 className="mx-4 mb-4 flex flex-col gap-3 overflow-y-auto max-h-[520px]"
-                onWheel={(e) => e.stopPropagation()}
+                onWheel={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
             >
 
             {viewMode === 'graph' ? (
                 <div className="rounded-[16px] border border-[#D3D3D3] bg-white p-3">
                     <div className="grid grid-cols-[1fr_140px] gap-4">
-                        <div className="h-[320px] rounded-[12px] border border-[#E2E2E2] bg-white p-2">
+                        <div className="h-[320px] rounded-[12px] border border-[#E2E2E2] bg-white p-2 relative">
+                            {isFetchingData && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10 rounded-[10px]">
+                                    <span className="text-sm text-[#6CAFA4] animate-pulse">Loading event data…</span>
+                                </div>
+                            )}
+                            {!isFetchingData && selectedGraphEventId && fetchedFocusData === null && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-white/80 z-10 rounded-[10px]">
+                                    <span className="text-sm text-[#8A8A8A]">No recorded data for this event</span>
+                                </div>
+                            )}
                             <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={displayedGraphData}>
+                                <LineChart data={displayedGraphData} margin={{ top: 8, right: 16, bottom: 24, left: 16 }}>
                                     <CartesianGrid
                                         strokeDasharray="3 3"
                                         stroke="#E7E7E7"
@@ -524,10 +565,24 @@ export default function LabelTimelinePanel({
                                             )
                                         }
                                         tick={{ fontSize: 11, fill: '#7A7A7A' }}
+                                        label={{ value: 'Time (HH:MM:SS)', position: 'insideBottom', offset: -14, fontSize: 10, fill: '#666' }}
                                     />
                                     <YAxis
                                         tick={{ fontSize: 11, fill: '#7A7A7A' }}
+                                        tickFormatter={(v) => Number(v).toFixed(1)}
+                                        width={60}
+                                        label={{ value: 'Frequency (Hz)', angle: -90, position: 'insideLeft', dy: 55, dx: 4, fontSize: 10, fill: '#666' }}
                                     />
+                                    {referenceAreaTimes && (
+                                        <ReferenceArea
+                                            x1={referenceAreaTimes.x1}
+                                            x2={referenceAreaTimes.x2}
+                                            fill="#2E7B75"
+                                            fillOpacity={0.12}
+                                            stroke="#2E7B75"
+                                            strokeOpacity={0.3}
+                                        />
+                                    )}
                                     {[...signalConfigs.filter((s) => s.key !== highlightedSignal),
                                       ...signalConfigs.filter((s) => s.key === highlightedSignal),
                                     ].map((signal) => (
@@ -627,7 +682,7 @@ export default function LabelTimelinePanel({
                     <div
                         ref={timelineScrollRef}
                         onScroll={handleTimelineScroll}
-                        onWheel={(e) => e.stopPropagation()}
+                        onWheel={(e) => { e.stopPropagation(); e.nativeEvent.stopImmediatePropagation(); }}
                         className="w-full overflow-x-auto rounded-md border border-[#E2E2E2] pb-2"
                     >
                         <div
@@ -711,9 +766,9 @@ export default function LabelTimelinePanel({
                                                 <div
                                                     key={entry.row.id}
                                                     className={cn(
-                                                        'absolute top-0 h-full rounded-md border-2 bg-white flex items-center px-3 text-sm font-medium',
-                                                        colorBorderMap[entry.row.color],
-                                                        colorTextMap[entry.row.color],
+                                                        'absolute top-0 h-full rounded-md flex items-center px-3 text-sm font-medium',
+                                                        colorClassMap[entry.row.color],
+                                                        colorFillTextMap[entry.row.color],
                                                         entry.row.isInProgress ? 'animate-pulse' : ''
                                                     )}
                                                     style={{
