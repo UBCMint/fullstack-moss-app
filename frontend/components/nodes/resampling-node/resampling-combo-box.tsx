@@ -3,12 +3,11 @@ import { ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const PRESET_OPTIONS = [
-    { value: 'input', label: 'Input size' },
     { value: '200', label: '200 Hz' },
     { value: '256', label: '256 Hz' },
 ];
 
-export type ResampleRate = '200' | '256' | 'input' | 'custom';
+export type ResampleRate = '200' | '256' | 'custom';
 
 interface ResamplingComboBoxProps {
     rate: ResampleRate;
@@ -28,10 +27,10 @@ export default function ResamplingComboBox({
     isDataStreamOn = false,
 }: ResamplingComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
+    const [customInput, setCustomInput] = React.useState('');
 
-    const selectedLabel =
-        PRESET_OPTIONS.find((o) => o.value === rate)?.label ??
-        (rate === 'custom' ? `${customRate} Hz` : 'Resampling');
+    const selectedHz =
+        rate === 'custom' ? `${customRate} Hz` : PRESET_OPTIONS.find((o) => o.value === rate)?.label ?? '';
 
     return (
         <div
@@ -41,7 +40,7 @@ export default function ResamplingComboBox({
             {/* Header */}
             <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full h-[55px] px-4 flex items-center justify-between transition-colors"
+                className="w-full h-[70px] px-4 flex items-center justify-between transition-colors"
             >
                 <div className="flex items-center">
                     <div
@@ -75,6 +74,15 @@ export default function ResamplingComboBox({
                 </div>
             </button>
 
+            {/* Collapsed summary */}
+            {!isExpanded && (
+                <div className="pb-4" style={{ paddingLeft: '60px', paddingRight: '60px' }}>
+                    <div className="text-[15px] leading-tight text-gray-600">
+                        Input size: {selectedHz}
+                    </div>
+                </div>
+            )}
+
             {/* Expanded options */}
             <div
                 className="overflow-hidden"
@@ -85,13 +93,17 @@ export default function ResamplingComboBox({
                 }}
             >
                 <div className="flex flex-col pb-4" style={{ paddingLeft: '60px', paddingRight: '60px' }}>
+                    {/* Section label */}
+                    <div className="text-sm text-gray-700 mb-0.5">Input size</div>
+
+                    {/* Preset options */}
                     <div className="flex flex-col space-y-0.5">
                         {PRESET_OPTIONS.map((option) => (
                             <button
                                 key={option.value}
                                 onClick={() => onRateChange(option.value as ResampleRate)}
                                 className={cn(
-                                    'text-left px-3 py-1 text-sm rounded-lg transition-colors',
+                                    'nodrag text-left px-3 py-1 text-sm font-normal rounded-lg transition-colors',
                                     rate === option.value
                                         ? 'bg-gray-100 text-gray-900'
                                         : 'text-gray-600 hover:bg-gray-50'
@@ -100,32 +112,35 @@ export default function ResamplingComboBox({
                                 {option.label}
                             </button>
                         ))}
-                        <button
-                            onClick={() => onRateChange('custom')}
-                            className={cn(
-                                'text-left px-3 py-1 text-sm rounded-lg transition-colors',
-                                rate === 'custom'
-                                    ? 'bg-gray-100 text-gray-900'
-                                    : 'text-gray-600 hover:bg-gray-50'
-                            )}
-                        >
-                            Custom
-                        </button>
                     </div>
 
-                    {/* Custom Hz input */}
-                    {rate === 'custom' && (
-                        <div className="mt-2 px-3 flex items-center gap-2">
-                            <input
-                                type="number"
-                                min={1}
-                                value={customRate}
-                                onChange={(e) => onCustomRateChange(Number(e.target.value))}
-                                className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#509693]"
-                            />
-                            <span className="text-sm text-gray-500">Hz</span>
-                        </div>
-                    )}
+                    {/* Custom Hz input — always visible */}
+                    <div className="flex items-center gap-2 pt-1">
+                        <input
+                            type="number"
+                            min={1}
+                            value={customInput}
+                            placeholder="Enter the optional input:"
+                            onChange={(e) => setCustomInput(e.target.value.replace(/[^\d]/g, ''))}
+                            className="nodrag h-8 w-full rounded-md border border-gray-300 px-2 text-sm"
+                        />
+                        <button
+                            onClick={() => {
+                                if (customInput) {
+                                    const parsed = Number(customInput);
+                                    if (parsed > 0) {
+                                        onCustomRateChange(parsed);
+                                        onRateChange('custom');
+                                        setCustomInput('');
+                                    }
+                                }
+                                setIsExpanded(false);
+                            }}
+                            className="nodrag h-8 px-3 rounded-md border border-gray-300 text-sm hover:bg-gray-50"
+                        >
+                            OK
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

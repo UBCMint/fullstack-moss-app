@@ -59,6 +59,7 @@ const typeMap: Record<string, string> = {
   'filter-node': 'preprocessing',
   'window-node': 'window',
   'machine-learning-node': 'ml',
+  'resampling-node': 'resample',
 };
 
 // allow for defaults of the filtering node to still be applied if user doesn't specify them in the UI
@@ -75,12 +76,16 @@ const DEFAULT_WINDOWING = {
     chunk_size: 64,
     overlap_size: 0,
 };
+const DEFAULT_RESAMPLING = {
+    resample_hz: 256,
+};
 
 // Only these nodes are executed by the backend pipeline
 const PIPELINE_NODE_TYPES = new Set([
     'window-node',
     'filter-node',
     'machine-learning-node',
+    'resampling-node',
 ]);
 
 const topoSort = (nodes: Node[], edges: Edge[]) => {
@@ -241,6 +246,14 @@ const buildPipelinePayload = (
 
         if(type == 'window') {
           return {type, config: {...DEFAULT_WINDOWING, ...config}};
+        }
+
+        if(type == 'resample') {
+          const data = n.data as { rate?: string; customRate?: number };
+          const resample_hz = data.rate === 'custom'
+            ? (data.customRate ?? DEFAULT_RESAMPLING.resample_hz)
+            : Number(data.rate ?? DEFAULT_RESAMPLING.resample_hz);
+          return {type, config: { resample_hz }};
         }
 
           return {type,config};

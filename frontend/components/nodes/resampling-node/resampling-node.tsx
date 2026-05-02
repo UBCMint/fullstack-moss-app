@@ -24,7 +24,7 @@ export default function ResamplingNode({ id, data }: ResamplingNodeProps) {
 
     // Dispatch config update for future websocket integration
     React.useEffect(() => {
-        const hz = rate === 'input' ? null : rate === 'custom' ? customRate : Number(rate);
+        const hz = rate === 'custom' ? customRate : Number(rate);
         window.dispatchEvent(new CustomEvent('resampling-config-update', { detail: { resample_hz: hz } }));
     }, [rate, customRate]);
 
@@ -66,7 +66,7 @@ export default function ResamplingNode({ id, data }: ResamplingNodeProps) {
                 position={Position.Left}
                 id="resampling-input"
                 style={{
-                    left: '24px', top: '45px',
+                    left: '24px', top: '30px',
                     transform: 'translateY(-50%)',
                     width: '28px', height: '28px',
                     backgroundColor: 'transparent',
@@ -80,7 +80,7 @@ export default function ResamplingNode({ id, data }: ResamplingNodeProps) {
                 position={Position.Right}
                 id="resampling-output"
                 style={{
-                    right: '24px', top: '45px',
+                    right: '24px', top: '30px',
                     transform: 'translateY(-50%)',
                     width: '28px', height: '28px',
                     backgroundColor: 'transparent',

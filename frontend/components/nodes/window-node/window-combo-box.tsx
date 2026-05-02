@@ -158,15 +158,15 @@ export default function ComboBox({
             {/* Collapsed summary */}
             {!isExpanded && (
                 <div className="space-y-3 pb-4" style={{ paddingLeft: '60px', paddingRight: '60px' }}>
-                    <div className="text-[20px] leading-tight text-black">
+                    <div className="text-[15px] leading-tight text-black">
                         Size:{' '}
-                        <span className="inline-flex w-12 h-12 rounded-full border border-[#509693] items-center justify-center">
+                        <span className="inline-flex w-8 h-8 rounded-full border border-[#509693] items-center justify-center">
                             {windowSize}
                         </span>
                     </div>
-                    <div className="text-[20px] leading-tight text-black">
+                    <div className="text-[15px] leading-tight text-black">
                         Overlap Size:{' '}
-                        <span className="inline-flex w-12 h-12 rounded-full border border-[#509693] items-center justify-center">
+                        <span className="inline-flex w-8 h-8 rounded-full border border-[#509693] items-center justify-center">
                             {overlapSize}
                         </span>
                     </div>
@@ -187,13 +187,13 @@ export default function ComboBox({
                     {/* Step 1: Input size */}
                     {step === 'window' && (
                         <>
-                            <div className="text-xs text-gray-700">Input size</div>
+                            <div className="text-sm text-gray-700">Input size</div>
                             {presetWindows.map((preset) => (
                                 <button
                                     key={preset.label}
                                     onClick={() => handlePresetSelect(preset.value, preset.size)}
                                     className={cn(
-                                        'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
+                                        'nodrag w-full text-left px-3 py-1 rounded-lg text-sm font-normal',
                                         selectedOption === preset.value ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
                                     )}
                                 >
@@ -228,11 +228,11 @@ export default function ComboBox({
                     {/* Step 2: Overlap size */}
                     {step === 'overlap' && (
                         <>
-                            <div className="text-xs text-gray-700">Overlap size</div>
+                            <div className="text-sm text-gray-700">Overlap size</div>
                             <button
                                 onClick={() => { setOverlapOption('default'); setOverlapSize(0); setOverlapError(''); confirmOverlap(); }}
                                 className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
+                                    'nodrag w-full text-left px-3 py-1 rounded-lg text-sm font-normal',
                                     overlapOption === 'default' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
                                 )}
                             >
@@ -241,7 +241,7 @@ export default function ComboBox({
                             <button
                                 onClick={() => { setOverlapOption('custom'); setCustomOverlapInput(''); setOverlapError(''); }}
                                 className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
+                                    'nodrag w-full text-left px-3 py-1 rounded-lg text-sm font-normal',
                                     overlapOption === 'custom' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
                                 )}
                             >
