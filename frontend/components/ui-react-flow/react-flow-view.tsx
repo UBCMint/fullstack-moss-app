@@ -59,6 +59,7 @@ const typeMap: Record<string, string> = {
   'filter-node': 'preprocessing',
   'window-node': 'window',
   'machine-learning-node': 'ml',
+  'artifact-node': 'artifact',
 };
 
 // allow for defaults of the filtering node to still be applied if user doesn't specify them in the UI
@@ -76,11 +77,18 @@ const DEFAULT_WINDOWING = {
     overlap_size: 0,
 };
 
+const DEFAULT_ARTIFACT = {
+    mode: 'auto',
+    artifacts: ['eye_blink'],
+    intensity: 50,
+};
+
 // Only these nodes are executed by the backend pipeline
 const PIPELINE_NODE_TYPES = new Set([
     'window-node',
     'filter-node',
     'machine-learning-node',
+    'artifact-node',
 ]);
 
 const topoSort = (nodes: Node[], edges: Edge[]) => {
@@ -242,6 +250,15 @@ const buildPipelinePayload = (
         if(type == 'window') {
           return {type, config: {...DEFAULT_WINDOWING, ...config}};
         }
+        
+        if (type == 'artifact') {
+        const data = n.data as { mode?: string; selectedArtifacts?: string[]; intensity?: number };
+        return { type, config: {
+        mode: data.mode ?? DEFAULT_ARTIFACT.mode,
+        artifacts: data.selectedArtifacts ?? DEFAULT_ARTIFACT.artifacts,
+        intensity: data.intensity ?? DEFAULT_ARTIFACT.intensity,
+    } };
+}
 
           return {type,config};
       }),
