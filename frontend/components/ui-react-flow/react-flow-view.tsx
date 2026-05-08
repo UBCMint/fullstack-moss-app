@@ -154,25 +154,22 @@ const validatePipeline = (nodes: Node[], edges: Edge[]) => {
     outgoing.get(e.source)!.push(e.target);
   });
 
-  // Track all upstream connections 
+  // Track all upstream connections
   const hasUpstreamNodeType = (
-  nodeId: string,
-  type: string,
-  visited: Set<string> = new Set()
+    nodeId: string,
+    type: string,
+    visited: Set<string> = new Set()
   ): boolean => {
-  if (visited.has(nodeId)) return false;
-  visited.add(nodeId);
+    if (visited.has(nodeId)) return false;
+    visited.add(nodeId);
 
-  const ins = incoming.get(nodeId) ?? [];
+    const ins = incoming.get(nodeId) ?? [];
 
-  return ins.some((sourceId) => {
-    const sourceNode = byId.get(sourceId);
-    if (!sourceNode) return false;
-
-    return (
-      sourceNode.type === type ||
-      hasUpstreamNodeType(sourceId, type, visited)
-    );});
+    return ins.some((sourceId) => {
+      const sourceNode = byId.get(sourceId);
+      if (!sourceNode) return false;
+      return sourceNode.type === type || hasUpstreamNodeType(sourceId, type, visited);
+    });
   };
 
   // Require 1 source node
@@ -188,7 +185,7 @@ const validatePipeline = (nodes: Node[], edges: Edge[]) => {
   // Require window node must have an upstream connection to source
   windowNodes.forEach((win) => {
     if (!hasUpstreamNodeType(win.id, 'source-node')) {
-    errors.push('A Window node must have an upstream Source node.');
+      errors.push('A Window node must have an upstream Source node.');
     }
   });
 
@@ -243,7 +240,7 @@ const validatePipeline = (nodes: Node[], edges: Edge[]) => {
 
   artifactNodes.forEach((artifact) => {
     if (hasUpstreamNodeType(artifact.id, 'window-node')) {
-    warnings.push('Artifact removal should come before windowing.');
+      warnings.push('Artifact removal should come before windowing.');
     }
   });
 
@@ -281,15 +278,15 @@ const buildPipelinePayload = (
         }
         
         if (type == 'artifact') {
-        const data = n.data as { mode?: string; selectedArtifacts?: string[]; intensity?: number };
-        return { type, config: {
-        mode: data.mode ?? DEFAULT_ARTIFACT.mode,
-        artifacts: data.selectedArtifacts ?? DEFAULT_ARTIFACT.artifacts,
-        intensity: data.intensity ?? DEFAULT_ARTIFACT.intensity,
-    } };
-}
+            const data = n.data as { mode?: string; selectedArtifacts?: string[]; intensity?: number };
+            return { type, config: {
+                mode: data.mode ?? DEFAULT_ARTIFACT.mode,
+                artifacts: data.selectedArtifacts ?? DEFAULT_ARTIFACT.artifacts,
+                intensity: data.intensity ?? DEFAULT_ARTIFACT.intensity,
+            } };
+        }
 
-          return {type,config};
+        return { type, config };
       }),
   };
 };
@@ -429,14 +426,18 @@ const ReactFlowInterface = () => {
         if(activeSessionId== null) return; //no session yet
 
         // Validate pipeline before sending
-        const { errors, warnings} = validatePipeline(nodes, edges);
+        const { errors, warnings } = validatePipeline(nodes, edges);
         if (errors.length > 0) {
-            console.error('Pipeline validation errors:', errors);
+            console.error('[pipeline] validation errors (pipeline not sent):', errors);
             return; // Don't send invalid pipeline
+        }
+        if (warnings.length > 0) {
+            console.warn('[pipeline] validation warnings:', warnings);
+            setShowPipelineWarning(true);
         }
 
         const payload = buildPipelinePayload(nodes, edges, String(activeSessionId));
-        console.log('[pipeline] payload being stored/sent:', JSON.stringify(payload));
+        console.log('[pipeline] payload being sent:', JSON.stringify(payload, null, 2));
         sendPipelinePayload(payload);
     }, [nodes, edges, activeSessionId, sendPipelinePayload]);
 
