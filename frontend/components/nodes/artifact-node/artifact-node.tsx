@@ -27,6 +27,7 @@ export default function ArtifactNode({ id, data }: ArtifactNodeProps) {
             selectedArtifacts,
             intensity,
         });
+        window.dispatchEvent(new Event('node-config-changed'));
     }, [id, mode, selectedArtifacts, intensity, reactFlowInstance]);
 
     const checkConnectionStatus = React.useCallback(() => {

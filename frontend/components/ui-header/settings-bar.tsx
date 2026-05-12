@@ -36,6 +36,8 @@ export default function SettingsBar() {
         setDataStreaming,
         activeSessionId,
         setActiveSessionId,
+        activeSessionName,
+        setActiveSessionName,
     } = useGlobalContext();
     const notifications = useNotifications();
     const [leftTimerSeconds, setLeftTimerSeconds] = useState(0);
@@ -53,16 +55,28 @@ export default function SettingsBar() {
     const [isLoading, setIsLoading] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
     const [isLoadWarningOpen, setIsLoadWarningOpen] = useState(false);
-    const [activeSessionName, setActiveSessionName] = useState<string | null>(null);
 
-    // Track unsaved canvas changes
+    const isUnsavedSession = activeSessionName === null;
+
+    // Suppress dirty-tracking for a short window after Load/New, since
+    // restored nodes re-emit `node-config-changed` as they hydrate (combo
+    // boxes wire their persistence useEffects on mount, and connection
+    // status is rechecked on a 1s interval).
+    const suppressDirtyUntilRef = useRef<number>(0);
+
+    // Track unsaved canvas + node config changes
     useEffect(() => {
-        const handler = () => setIsDirty(true);
+        const handler = () => {
+            if (Date.now() < suppressDirtyUntilRef.current) return;
+            setIsDirty(true);
+        };
         window.addEventListener('canvas-changed', handler);
         window.addEventListener('reactflow-edges-changed', handler);
+        window.addEventListener('node-config-changed', handler);
         return () => {
             window.removeEventListener('canvas-changed', handler);
             window.removeEventListener('reactflow-edges-changed', handler);
+            window.removeEventListener('node-config-changed', handler);
         };
     }, []);
 
@@ -156,7 +170,8 @@ export default function SettingsBar() {
             return;
         }
 
-        if (activeSessionId !== null) {
+        // Save directly only when this is a real, named session
+        if (activeSessionId !== null && !isUnsavedSession) {
             setIsSaving(true);
             try {
                 await handleSaveToExistingSession(activeSessionId);
@@ -173,6 +188,7 @@ export default function SettingsBar() {
             return;
         }
 
+        // Unsaved (auto-created) session — prompt the user for a name
         setIsFetchingSessions(true);
         setFetchingFor('save');
         try {
@@ -217,6 +233,10 @@ export default function SettingsBar() {
 
     const handleLoadClick = () => {
         if (isSaving || isLoading || isFetchingSessions) return;
+        if (dataStreaming) {
+            notifications.error({ title: 'Stop the data stream before doing this.' });
+            return;
+        }
         if (isDirty) {
             setIsLoadWarningOpen(true);
         } else {
@@ -228,6 +248,10 @@ export default function SettingsBar() {
         if (isSaving || isLoading || isFetchingSessions) {
             return;
         }
+        if (dataStreaming) {
+            notifications.error({ title: 'Stop the data stream before doing this.' });
+            return;
+        }
         if (isDirty) {
             setIsNewDialogOpen(true);
         } else {
@@ -236,7 +260,9 @@ export default function SettingsBar() {
     };
 
     const handleConfirmNew = () => {
+        suppressDirtyUntilRef.current = Date.now() + 2000;
         setActiveSessionId(null);
+        setActiveSessionName(null);
         setIsDirty(false);
         setDataStreaming(false);
         setLeftTimerSeconds(0);
@@ -258,6 +284,7 @@ export default function SettingsBar() {
             const createdSession = await createSession(sessionName);
             await saveFrontendState(createdSession.id, state);
             setActiveSessionId(createdSession.id);
+            setActiveSessionName(createdSession.name);
             setIsDirty(false);
             setIsSessionModalOpen(false);
             notifications.success({ title: 'Session saved successfully' });
@@ -279,12 +306,16 @@ export default function SettingsBar() {
                 throw new Error('Loaded session payload has an invalid format.');
             }
 
+            suppressDirtyUntilRef.current = Date.now() + 2000;
             window.dispatchEvent(
                 new CustomEvent('restore-frontend-state', {
                     detail: loadedPayload,
                 })
             );
             setActiveSessionId(sessionId);
+            const loaded = sessions.find((s) => s.id === sessionId);
+            setActiveSessionName(loaded?.name ?? null);
+            setIsDirty(false);
             setIsSessionModalOpen(false);
             notifications.success({ title: 'Session loaded successfully' });
         } catch (error) {
@@ -309,7 +340,7 @@ export default function SettingsBar() {
             {/* Session ID, Tutorials */}
             <Menubar>
                 <span className="px-3 py-1 text-sm">
-                    Session {activeSessionId ?? 'ID'}
+                    {activeSessionName ?? (activeSessionId !== null ? 'Unsaved session' : 'New session')}
                 </span>
                 <button className="px-3 py-1 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground hover:underline">
                     Tutorials

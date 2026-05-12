@@ -83,6 +83,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                 n.id === id ? { ...n, data: { ...n.data, config, _highCutoff: highCutoff, _lowCutoff: lowCutoff, _selectedFilter: selectedFilter } } : n
             )
         );
+        window.dispatchEvent(new Event('node-config-changed'));
     }, [id, reactFlowInstance, selectedFilter, lowCutoff, highCutoff, isConnected]);
 
 
