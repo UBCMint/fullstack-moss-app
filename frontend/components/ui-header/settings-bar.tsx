@@ -23,6 +23,8 @@ import {
     getSessions,
     loadFrontendState,
     saveFrontendState,
+    getTimeLabels,
+    saveTimeLabels,
     SessionSummary,
 } from '@/lib/session-api';
 import {
@@ -282,9 +284,34 @@ export default function SettingsBar() {
     const handleCreateAndSaveSession = async (sessionName: string) => {
         setIsSaving(true);
         try {
-            const state = await requestFrontendState();
+            const oldSessionId = activeSessionId;
+            const [state, oldLabels] = await Promise.all([
+                requestFrontendState(),
+                oldSessionId !== null
+                    ? getTimeLabels(oldSessionId, '1970-01-01T00:00:00Z', '2100-01-01T00:00:00Z')
+                          .catch(() => [])
+                    : Promise.resolve([]),
+            ]);
+
             const createdSession = await createSession(sessionName);
             await saveFrontendState(createdSession.id, state);
+
+            // Migrate labels from the old (unsaved) session to the new named session.
+            // Note: EEG data cannot be migrated without a backend rename endpoint — see backend task.
+            const labelsToMigrate = oldLabels
+                .filter((l) => l.end_timestamp !== null)
+                .map((l) => ({
+                    start_timestamp: l.start_timestamp,
+                    end_timestamp: l.end_timestamp!,
+                    label: l.label,
+                    color: l.color,
+                }));
+            if (labelsToMigrate.length > 0) {
+                await saveTimeLabels(createdSession.id, labelsToMigrate).catch((e) =>
+                    console.warn('[session] label migration failed:', e)
+                );
+            }
+
             setActiveSessionId(createdSession.id);
             setActiveSessionName(createdSession.name);
             setIsDirty(false);
