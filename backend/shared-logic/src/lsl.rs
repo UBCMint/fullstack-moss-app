@@ -6,12 +6,14 @@ use lsl::{resolve_bypred, Pullable, StreamInlet};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::Sender;
 use tokio_util::sync::CancellationToken;
-use crate::signal_processing::signal_processor::SignalProcessor;
+// use crate::signal_processing::signal_processor::SignalProcessor;
+use crate::signal_processing::pipeline_gateway::{PipelineGateway, PipelineOutput};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EEGDataPacket {
     pub timestamps: Vec<DateTime<Utc>>,
     pub signals: Vec<Vec<f64>>,
+    pub ml_result: Option<PipelineOutput>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -57,17 +59,21 @@ impl Default for WindowingConfig {
 // Async entry point for EEG data collection.
 pub async fn receive_eeg(tx:Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, processing_config: ProcessingConfig, windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,) {
     info!("Starting EEG data receiver");
-    let python_script_path = std::env::var("SIGNAL_PROCESSING_SCRIPT")
-    .unwrap_or_else(|_| "../shared-logic/src/signal_processing/signalProcessing.py".to_string());
+    // let python_script_path = std::env::var("SIGNAL_PROCESSING_SCRIPT")
+    //     .unwrap_or_else(|_| "../shared-logic/src/signal_processing/signalProcessing.py".to_string());
+
+    let manager_script_path = std::env::var("PIPELINE_MANAGER_SCRIPT")
+        .unwrap_or_else(|_| "../shared-logic/src/signal_processing/moss/mock_manager.py".to_string());
 
     let result = tokio::task::spawn_blocking(move || {
-        // Setup signal processor
-        let sig_processor = match SignalProcessor::new(&python_script_path) {
-            Ok(p) => p,
+        // Setup pipeline gateway (replaces SignalProcessor)
+        // let sig_processor = match SignalProcessor::new(&python_script_path) { ... };
+        let gateway = match PipelineGateway::new(&manager_script_path) {
+            Ok(g) => g,
             Err(e) => {
                 info!("current path: {:?}", std::env::current_dir());
-                info!("Looking for Python script at: {}", python_script_path);
-                error!("Failed to initialize signal processor: {}", e);
+                info!("Looking for manager script at: {}", manager_script_path);
+                error!("Failed to initialize pipeline gateway: {}", e);
                 return (0, 0);
             }
         };
@@ -80,9 +86,9 @@ pub async fn receive_eeg(tx:Sender<Arc<EEGDataPacket>>, cancel_token: Cancellati
                 return (0, 0);
             }
         };
-        
+
         // Run collection loop
-        run_eeg_collection(inlet, tx, cancel_token, processing_config, sig_processor, windowing_rx)
+        run_eeg_collection(inlet, tx, cancel_token, processing_config, gateway, windowing_rx)
     });
 
     // Handle results
@@ -116,10 +122,10 @@ fn setup_eeg_stream() -> Result<StreamInlet, String> {
 // Main EEG data collection loop.
 // Returns (successful_count, dropped_count) statistics.
 fn run_eeg_collection(inlet: StreamInlet,
-    tx: Sender<Arc<EEGDataPacket>>, 
+    tx: Sender<Arc<EEGDataPacket>>,
     cancel_token: CancellationToken,
     config: ProcessingConfig,
-    processor: SignalProcessor,
+    gateway: PipelineGateway,
     mut windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,
 ) -> (u32, u32) {
     let mut count = 0;
@@ -134,6 +140,7 @@ fn run_eeg_collection(inlet: StreamInlet,
     let mut packet = EEGDataPacket {
         timestamps: Vec::with_capacity(windowing.chunk_size + 1),
         signals: vec![Vec::with_capacity(windowing.chunk_size + 1); 4],
+        ml_result: None,
     };
 
     // Calculate the offset between LSL clock and Unix epoch
@@ -154,7 +161,7 @@ fn run_eeg_collection(inlet: StreamInlet,
             // Send any remaining samples before exiting
              if !packet.timestamps.is_empty() {
                  let num_samples = packet.timestamps.len();
-                match process_and_send(&mut packet, &processor, &config, &tx) {
+                match process_and_send(&mut packet, &gateway, &config, &tx) {
                     Ok(_) => count += 1,
                     Err(e) => {
                         error!("Process/send error: {}", e);
@@ -196,7 +203,7 @@ fn run_eeg_collection(inlet: StreamInlet,
                         
                         // Packet is full, send it
                         info!("Packet is full, sending window: {} samples (overlap: {})", packet.signals[0].len(), keep);
-                         match process_and_send(&mut packet, &processor, &config, &tx) {
+                         match process_and_send(&mut packet, &gateway, &config, &tx) {
                             Ok(_) => count += 1,
                             Err(e) => {
                                 error!("Process/send error: {}", e);
@@ -266,10 +273,10 @@ fn accumulate_sample(
     Ok(packet.signals[0].len() >= chunk_size)
 }
 
-// calls the signalProcessing.py to process the packet and sends it
+// calls the Python pipeline manager to process the packet and sends it
 fn process_and_send(
     packet: &mut EEGDataPacket,
-    processor: &SignalProcessor,
+    gateway: &PipelineGateway,
     config: &ProcessingConfig,
     tx: &Sender<Arc<EEGDataPacket>>,
 ) -> Result<(), String> {
@@ -277,18 +284,32 @@ fn process_and_send(
         return Err("Empty packet".to_string());
     }
 
-    // Apply bandpass filter
-    info!("starting signal processing");
-    info!("Before: {:?}", packet.signals);
-    if config.apply_bandpass {
-        packet.signals = if config.use_iir {
-            processor.apply_iir_bandpass(&packet.signals, config.sfreq, config.l_freq, config.h_freq)?
-        } else {
-            processor.apply_fir_bandpass(&packet.signals, config.sfreq, config.l_freq, config.h_freq)?
-        };
-    }
-    info!("done signal processing");
-    info!("after: {:?}", packet.signals);
+    // Call the Python pipeline manager (replaces direct SignalProcessor PyO3 calls)
+    info!("starting pipeline processing");
+    packet.ml_result = match gateway.call_pipeline(config, &packet.signals) {
+        Ok(Some(output)) => {
+            info!("ML result: task={}, label={}, confidence={:.2}", output.task, output.overall_label, output.confidence);
+            Some(output)
+        }
+        Ok(None) => {
+            info!("Pipeline ran but returned no classifier output");
+            None
+        }
+        Err(e) => {
+            error!("Pipeline gateway error: {}", e);
+            None
+        }
+    };
+    info!("done pipeline processing");
+
+    // // Old PyO3 calls via SignalProcessor — replaced by gateway above
+    // if config.apply_bandpass {
+    //     packet.signals = if config.use_iir {
+    //         processor.apply_iir_bandpass(&packet.signals, config.sfreq, config.l_freq, config.h_freq)?
+    //     } else {
+    //         processor.apply_fir_bandpass(&packet.signals, config.sfreq, config.l_freq, config.h_freq)?
+    //     };
+    // }
 
     //  // Log last 5 samples before filtering
     // for (ch_idx, channel) in packet.signals.iter().enumerate() {
