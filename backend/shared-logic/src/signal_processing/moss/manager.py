@@ -248,6 +248,11 @@ async def run_pipeline(pipeline, data):
     }
 
 
+def run_pipeline_sync(pipeline, data):
+    """Synchronous entry point for PyO3. Wraps run_pipeline so Rust can call it without async handling."""
+    return asyncio.run(run_pipeline(pipeline, data))
+
+
 if __name__ == "__main__":
     # quick async smoke test with generated data (preprocessing only)
     test_pipeline = {
