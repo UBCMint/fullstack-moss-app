@@ -128,10 +128,12 @@ export default function SettingsBar() {
     };
 
     const handleConfirmReset = () => {
+        suppressDirtyUntilRef.current = Date.now() + 2000;
         setDataStreaming(false);
         setLeftTimerSeconds(0);
+        setActiveSessionName(null);
+        setIsDirty(false);
         window.dispatchEvent(new Event('pipeline-reset'));
-        setIsDirty(true);
         setIsResetDialogOpen(false);
     };
 
