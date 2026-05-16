@@ -534,6 +534,7 @@ pub async fn import_eeg_data_from_csv(client: &DbClient, session_id: i32, csv_by
     let eeg_rows = EEGDataPacket {
         timestamps,
         signals: vec![channel1_data, channel2_data, channel3_data, channel4_data],
+        ml_result: None,
     };
 
     insert_batch_eeg(client, session_id, &eeg_rows).await?;
