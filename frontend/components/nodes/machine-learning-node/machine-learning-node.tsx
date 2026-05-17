@@ -28,6 +28,7 @@ export default function MachineLearningNode({ id }: MachineLearningNodeProps) {
                 n.id === id ? { ...n, data: { ...n.data, config } } : n
             )
         );
+        window.dispatchEvent(new Event('node-config-changed'));
     }, [id, reactFlowInstance, selectedPrediction]);
 
     React.useEffect(() => {

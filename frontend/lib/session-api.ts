@@ -85,3 +85,62 @@ export async function loadFrontendState(sessionId: number): Promise<unknown> {
     return parseJsonResponse<unknown>(response);
 }
 
+export type NewTimeLabel = {
+    start_timestamp: string;
+    end_timestamp: string | null;
+    label: string;
+    color: string;
+};
+
+export type TimeLabel = {
+    id: number;
+    session_id: number;
+    start_timestamp: string;
+    end_timestamp: string | null;
+    label: string;
+    color: string;
+};
+
+export type EegDataRow = {
+    time: string;
+    channel1: number;
+    channel2: number;
+    channel3: number;
+    channel4: number;
+};
+
+export async function saveTimeLabels(
+    sessionId: number,
+    payload: NewTimeLabel[]
+): Promise<void> {
+    const response = await fetch(`/api/sessions/${sessionId}/time-label`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        throw new Error(await parseErrorMessage(response));
+    }
+}
+
+export async function getTimeLabels(
+    sessionId: number,
+    start: string,
+    end: string
+): Promise<TimeLabel[]> {
+    const params = new URLSearchParams({ start, end });
+    const response = await fetch(`/api/sessions/${sessionId}/time-label?${params}`, { method: 'GET' });
+    return parseJsonResponse<TimeLabel[]>(response);
+}
+
+export async function getEegData(
+    sessionId: number,
+    start: string,
+    end: string
+): Promise<EegDataRow[]> {
+    const params = new URLSearchParams({ start, end });
+    const response = await fetch(`/api/sessions/${sessionId}/eeg-data?${params}`, { method: 'GET' });
+    return parseJsonResponse<EegDataRow[]>(response);
+}

@@ -1,7 +1,4 @@
 node_modules/
-# Ignore specific queries in backend
-backend/.sqlx/*.json
-backend/.sqlx/query-*
 target/
 backend/shared-logic/src/signal_processing/moss/checkpoints/ 
 backend/shared-logic/src/signal_processing/moss/moss_models/*.npz 
