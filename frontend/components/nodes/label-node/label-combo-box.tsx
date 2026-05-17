@@ -31,6 +31,7 @@ interface ComboBoxProps {
     graphData: LabelGraphPoint[];
     sessionStartTimestamp: string | null;
     latestBackendTimestamp: string | null;
+    isLoadingLabels?: boolean;
     fetchDataForLabel?: (start: string, end: string) => Promise<LabelGraphPoint[]>;
 }
 
@@ -64,6 +65,7 @@ export default function ComboBox({
     graphData,
     sessionStartTimestamp,
     latestBackendTimestamp,
+    isLoadingLabels,
     fetchDataForLabel,
 }: ComboBoxProps) {
     return (
@@ -235,6 +237,7 @@ export default function ComboBox({
                 isConnected={isConnected}
                 isDataStreamOn={isDataStreamOn}
                 graphData={graphData}
+                isLoadingLabels={isLoadingLabels}
                 fetchDataForLabel={fetchDataForLabel}
             />
         </div>
