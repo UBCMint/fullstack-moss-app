@@ -1,5 +1,5 @@
 'use client';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import {
     ResizableHandle,
     ResizablePanel,
@@ -14,71 +14,87 @@ import { ChevronDown, X } from "lucide-react";
 
 export default function Sidebar() {
 
-    const AvailableNodes = [
+    const NodeCategories = [
         {
-            id: 'source-node',
-            label: 'Source Node',
-            description: 'No Connection',
-            category: 'Nodes',
+            category: 'Input',
+            nodes: [
+                {
+                    id: 'source-node',
+                    label: 'Source Node',
+                    description: 'Connect to an EEG data source',
+                },
+            ],
         },
         {
-            id: 'artifact-node',
-            label: 'Artifact Node',
-            description: 'Preprocessing step for artifact removal',
-            category: 'Nodes',
+            category: 'Preprocessing',
+            nodes: [
+                {
+                    id: 'resampling-node',
+                    label: 'Resampling Node',
+                    description: 'Resample EEG data to a target frequency',
+                },
+                {
+                    id: 'filter-node',
+                    label: 'Filter Node',
+                    description: 'Filter and process data streams',
+                },
+                {
+                    id: 'artifact-node',
+                    label: 'Artifact Node',
+                    description: 'Preprocessing step for artifact removal',
+                },
+                {
+                    id: 'window-node',
+                    label: 'Window Node',
+                    description: 'Configure windowing parameters for data streams',
+                },
+            ],
         },
         {
-            id: 'filter-node',
-            label: 'Filter Node',
-            description: 'Filter and process data streams',
-            category: 'Nodes',
+            category: 'Analysis',
+            nodes: [
+                {
+                    id: 'machine-learning-node',
+                    label: 'ML Node',
+                    description: 'Machine learning prediction and analysis',
+                },
+            ],
         },
         {
-            id: 'machine-learning-node',
-            label: 'ML Node',
-            description: 'Machine learning prediction and analysis',
-            category: 'Nodes',
+            category: 'Output',
+            nodes: [
+                {
+                    id: 'signal-graph-node',
+                    label: 'Chart Node',
+                    description: 'Visualize data and create charts',
+                },
+                {
+                    id: 'label-node',
+                    label: 'Labeling Node',
+                    description: 'Label data and create labels',
+                },
+            ],
         },
-        {
-            id: 'signal-graph-node',
-            label: 'Chart Node',
-            description: 'Visualize data and create charts',
-            category: 'Nodes',
-        },
-        {
-            id: 'resampling-node',
-            label: 'Resampling Node',
-            description: 'Resample EEG data to a target frequency',
-            category: 'Nodes',
-        },
-        {
-            id: 'window-node',
-            label: 'Window Node',
-            description: 'Configure windowing parameters for data streams',
-            category: 'Nodes',
-        },
-        {
-            id: 'label-node',
-            label: 'Labeling Node',
-            description: 'Label data and create labels',
-            category: 'Nodes',
-        }
     ];
+
+    const allNodes = NodeCategories.flatMap((c) => c.nodes);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [collapsed, setCollapsed] = useState(false);
     const [open, setOpen] = useState(true);
 
-    const filteredNodes = AvailableNodes.filter((node) =>
+    const filteredNodes = allNodes.filter((node) =>
         node.label.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
-        <ResizablePanelGroup direction="horizontal" className="border-none min-h-[200px] max-w-md rounded-lg border md:min-w-[450px]">
-            <ResizablePanel defaultSize={60} minSize={60} className=" ">
-                <Card className="max-h-[calc(100vh-2rem)] flex flex-col ">
-                    <CardHeader className="flex flex-row items-center justify-between pb-4">
-                        <CardTitle className="font-ibmplex font-semibold text-xl text-black">Menu</CardTitle>
+        <ResizablePanelGroup direction="horizontal" className="border-none min-h-[200px] max-w-md rounded-lg border md:min-w-[480px]">
+            <ResizablePanel defaultSize={60} minSize={60}>
+                <Card className="flex flex-col overflow-hidden" style={{ maxHeight: 'calc(100vh - 2rem)' }}>
+
+                    {/* ── Section 1: Header ── */}
+                    <div className="flex-shrink-0 flex flex-row items-center justify-between px-6 pt-6 pb-3">
+                        <span className="font-ibmplex font-semibold text-xl text-black">Menu</span>
                         <button
                             onClick={() => setCollapsed(!collapsed)}
                             className="p-1 rounded hover:bg-gray-100"
@@ -86,40 +102,66 @@ export default function Sidebar() {
                         >
                             {collapsed ? <ChevronDown size={15} /> : <Cross1 />}
                         </button>
-                    </CardHeader>
+                    </div>
 
                     {!collapsed && (
                         <>
-                            <div className='pb-4'>
+                            {/* Search — part of header area, doesn't scroll */}
+                            <div className="flex-shrink-0 px-6 pb-3">
                                 <Input
                                     type="text"
                                     placeholder="Search"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="items-center px-7 py-2 mx-4 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 placeholder-gray-500"
+                                    className="w-full border border-gray-200 rounded-md pl-7 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700 placeholder-gray-500"
                                 />
                             </div>
 
-                            <CardContent className="overflow-y-auto flex-1 px-4 pb-4 space-y-3">
-                                {(searchTerm ? filteredNodes : AvailableNodes).map((node) => (
-                                    <NodeButton
-                                        key={node.id}
-                                        id={node.id}
-                                        label={node.label}
-                                        description={node.description}
-                                    />
-                                ))}
-                                {open && (
+                            {/* ── Section 2: Scrollable node list ── */}
+                            <div className="overflow-y-auto px-6 py-2 space-y-3" style={{ maxHeight: '40vh' }}>
+                                {searchTerm ? (
+                                    filteredNodes.map((node) => (
+                                        <NodeButton
+                                            key={node.id}
+                                            id={node.id}
+                                            label={node.label}
+                                            description={node.description}
+                                        />
+                                    ))
+                                ) : (
+                                    NodeCategories.map((group) => (
+                                        <div key={group.category}>
+                                            <p className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                                                {group.category}
+                                            </p>
+                                            <div className="space-y-2">
+                                                {group.nodes.map((node) => (
+                                                    <NodeButton
+                                                        key={node.id}
+                                                        id={node.id}
+                                                        label={node.label}
+                                                        description={node.description}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* ── Section 3: Warning footer (shrinks away when closed) ── */}
+                            {open && (
+                                <div className="flex-shrink-0 px-6 pb-6 pt-3">
                                     <Alert className="bg-[#EFEFF0] text-black flex justify-between items-start font-ibmplex">
                                         <AlertDescription className="text-[0.7rem]">
                                             Only <b>pre-processed</b> data is <b>saved</b> by default. To store raw data, only use the <b>Source Node</b> without adding any computations.
                                         </AlertDescription>
-                                        <button onClick={() => setOpen(false)} className="ml-2">
+                                        <button onClick={() => setOpen(false)} className="ml-2 flex-shrink-0">
                                             <X className="h-3 w-3" />
                                         </button>
                                     </Alert>
-                                )}
-                            </CardContent>
+                                </div>
+                            )}
                         </>
                     )}
                 </Card>
