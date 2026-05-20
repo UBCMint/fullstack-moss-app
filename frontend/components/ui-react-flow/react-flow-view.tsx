@@ -61,6 +61,7 @@ const typeMap: Record<string, string> = {
   'filter-node': 'preprocessing',
   'window-node': 'window',
   'machine-learning-node': 'ml',
+  'artifact-node': 'artifact',
 };
 
 // allow for defaults of the filtering node to still be applied if user doesn't specify them in the UI
@@ -78,11 +79,18 @@ const DEFAULT_WINDOWING = {
     overlap_size: 0,
 };
 
+const DEFAULT_ARTIFACT = {
+    mode: 'auto',
+    artifacts: ['eye_blink'],
+    intensity: 50,
+};
+
 // Only these nodes are executed by the backend pipeline
 const PIPELINE_NODE_TYPES = new Set([
     'window-node',
     'filter-node',
     'machine-learning-node',
+    'artifact-node',
 ]);
 
 const topoSort = (nodes: Node[], edges: Edge[]) => {
@@ -148,6 +156,24 @@ const validatePipeline = (nodes: Node[], edges: Edge[]) => {
     outgoing.get(e.source)!.push(e.target);
   });
 
+  // Track all upstream connections
+  const hasUpstreamNodeType = (
+    nodeId: string,
+    type: string,
+    visited: Set<string> = new Set()
+  ): boolean => {
+    if (visited.has(nodeId)) return false;
+    visited.add(nodeId);
+
+    const ins = incoming.get(nodeId) ?? [];
+
+    return ins.some((sourceId) => {
+      const sourceNode = byId.get(sourceId);
+      if (!sourceNode) return false;
+      return sourceNode.type === type || hasUpstreamNodeType(sourceId, type, visited);
+    });
+  };
+
   // Require 1 source node
   const sourceNodes = nodes.filter((n) => n.type === 'source-node');
   if (sourceNodes.length === 0) errors.push('Missing Source node.');
@@ -158,11 +184,10 @@ const validatePipeline = (nodes: Node[], edges: Edge[]) => {
   if (windowNodes.length === 0) errors.push('Missing Window node.');
   if (windowNodes.length > 1) errors.push('Multiple Window nodes are not allowed.');
 
-  // Require window node must connect directly to source
+  // Require window node must have an upstream connection to source
   windowNodes.forEach((win) => {
-    const ins = incoming.get(win.id) ?? [];
-    if (ins.length === 0 || ins.some((id) => byId.get(id)?.type !== 'source-node')) {
-      errors.push('Window node must connect directly from Source.');
+    if (!hasUpstreamNodeType(win.id, 'source-node')) {
+      errors.push('A Window node must have an upstream Source node.');
     }
   });
 
@@ -212,6 +237,15 @@ const validatePipeline = (nodes: Node[], edges: Edge[]) => {
     warnings.push('Outputs should come after preprocessing when preprocessing exists.');
   }
 
+  // Warn if artifact is placed after window.
+  const artifactNodes = nodes.filter((n) => n.type === 'artifact-node');
+
+  artifactNodes.forEach((artifact) => {
+    if (hasUpstreamNodeType(artifact.id, 'window-node')) {
+      warnings.push('Artifact removal should come before windowing.');
+    }
+  });
+
   // Cycle detection: if topoSort doesn't include all nodes
   const ordered = topoSort(nodes, edges);
   if (ordered.length !== nodes.length) {
@@ -244,8 +278,17 @@ const buildPipelinePayload = (
         if(type == 'window') {
           return {type, config: {...DEFAULT_WINDOWING, ...config}};
         }
+        
+        if (type == 'artifact') {
+            const data = n.data as { mode?: string; selectedArtifacts?: string[]; intensity?: number };
+            return { type, config: {
+                mode: data.mode ?? DEFAULT_ARTIFACT.mode,
+                artifacts: data.selectedArtifacts ?? DEFAULT_ARTIFACT.artifacts,
+                intensity: data.intensity ?? DEFAULT_ARTIFACT.intensity,
+            } };
+        }
 
-          return {type,config};
+        return { type, config };
       }),
   };
 };
@@ -385,14 +428,18 @@ const ReactFlowInterface = () => {
         if(activeSessionId== null) return; //no session yet
 
         // Validate pipeline before sending
-        const { errors, warnings} = validatePipeline(nodes, edges);
+        const { errors, warnings } = validatePipeline(nodes, edges);
         if (errors.length > 0) {
-            console.error('Pipeline validation errors:', errors);
+            console.error('[pipeline] validation errors (pipeline not sent):', errors);
             return; // Don't send invalid pipeline
+        }
+        if (warnings.length > 0) {
+            console.warn('[pipeline] validation warnings:', warnings);
+            setShowPipelineWarning(true);
         }
 
         const payload = buildPipelinePayload(nodes, edges, String(activeSessionId));
-        console.log('[pipeline] payload being stored/sent:', JSON.stringify(payload));
+        console.log('[pipeline] payload being sent:', JSON.stringify(payload, null, 2));
         sendPipelinePayload(payload);
     }, [nodes, edges, activeSessionId, sendPipelinePayload]);
 
@@ -468,11 +515,6 @@ const ReactFlowInterface = () => {
             if (sourceNode.type === 'source-node') {
                 const hasOutgoing = edges.some((e) => e.source === sourceNode.id);
                 if (hasOutgoing) return false;
-            }
-
-            // Block window node not directly connecting to source
-            if (targetNode.type === 'window-node') {
-                return sourceNode.type === 'source-node';
             }
 
             // Output nodes are terminal: block any outgoing edge from them
