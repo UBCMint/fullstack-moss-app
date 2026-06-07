@@ -16,36 +16,19 @@ pub struct EEGDataPacket {
     pub ml_result: Option<PipelineOutput>,
 }
 
-#[derive(Clone, Deserialize)]
-pub struct ProcessingConfig {
-    pub apply_bandpass: bool,
-    pub use_iir: bool,  // true for IIR, false for FIR
-    pub l_freq: Option<f32>,
-    pub h_freq: Option<f32>,
-    pub downsample_factor: Option<u32>,
-    pub sfreq: f32,
-    pub n_channels: usize,
-}
+// Async entry point for EEG data collection.
+pub async fn receive_eeg(tx: Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, pipeline: Pipeline) {
+    info!("Starting EEG data receiver");
 
-impl Default for ProcessingConfig {
-    fn default() -> Self {
-        Self {
-            apply_bandpass: false,
-            use_iir: false,
-            l_freq: Some(1.0),
-            h_freq: Some(50.0),
-            downsample_factor: None,
-            sfreq: 256.0,
-            n_channels: 4,
-        }
-    }
-}
+    // Extract configs from the pipeline, falling back to defaults if a node is missing
+    let preprocessing_config = pipeline.preprocessing_config().cloned().unwrap_or_default();
+    let window_config = pipeline.window_config().cloned().unwrap_or_default();
+    info!("Received preprocessing config: apply_bandpass={}, l_freq={:?}, h_freq={:?}",
+        preprocessing_config.apply_bandpass, preprocessing_config.l_freq, preprocessing_config.h_freq);
 
-#[derive(Clone, Deserialize, Debug)]
-pub struct WindowingConfig {
-    pub chunk_size: usize,
-    pub overlap_size: usize,
-}
+    // Create a watch channel from the initial window config.
+    // The receiver is passed into the collection loop so it can react to future updates.
+    let (_windowing_tx, windowing_rx) = tokio::sync::watch::channel(window_config);
 
 impl Default for WindowingConfig {
     fn default() -> Self {

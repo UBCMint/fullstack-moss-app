@@ -1,0 +1,48 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data WHERE session_id = $1 AND time >= $2 AND time <= $3 ORDER BY time",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "time",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "channel1",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "channel2",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "channel3",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "channel4",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7a25ec7a7cf6011706337e95ef95cfb259ba56c8721ab6105ebfc7aa1fd66c6f"
+}

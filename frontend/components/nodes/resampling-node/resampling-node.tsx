@@ -20,6 +20,7 @@ export default function ResamplingNode({ id, data }: ResamplingNodeProps) {
     // Persist state to node data
     React.useEffect(() => {
         reactFlowInstance.updateNodeData(id, { rate, customRate });
+        window.dispatchEvent(new Event('node-config-changed'));
     }, [id, rate, customRate, reactFlowInstance]);
 
     // Dispatch config update for future websocket integration

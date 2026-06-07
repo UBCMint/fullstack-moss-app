@@ -3,20 +3,25 @@ import { useGlobalContext } from '@/context/GlobalContext';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import WindowComboBox, { type WindowOption } from './window-combo-box';
-import { WindowingConfig } from '@/lib/processing';
 
 interface WindowNodeProps {
     id?: string;
-    // data?: any;
+    data?: { config?: { chunk_size?: number; overlap_size?: number }; selectedOption?: WindowOption };
 }
 
-export default function WindowNode({ id }: WindowNodeProps) {
+export default function WindowNode({ id, data }: WindowNodeProps) {
     const DEFAULT_WINDOW_SIZE = 64;
     const DEFAULT_OVERLAP_SIZE = 0;
 
-    const [windowSize, setWindowSize] = React.useState<number>(DEFAULT_WINDOW_SIZE);
-    const [overlapSize, setOverlapSize] = React.useState<number>(DEFAULT_OVERLAP_SIZE);
-    const [selectedOption, setSelectedOption] = React.useState<WindowOption>('default');
+    const [windowSize, setWindowSize] = React.useState<number>(
+        data?.config?.chunk_size ?? DEFAULT_WINDOW_SIZE
+    );
+    const [overlapSize, setOverlapSize] = React.useState<number>(
+        data?.config?.overlap_size ?? DEFAULT_OVERLAP_SIZE
+    );
+    const [selectedOption, setSelectedOption] = React.useState<WindowOption>(
+        data?.selectedOption ?? 'default'
+    );
 
     const [isConnected, setIsConnected] = React.useState(false);
     
@@ -25,14 +30,32 @@ export default function WindowNode({ id }: WindowNodeProps) {
     
     const { dataStreaming } = useGlobalContext();
 
-    const dispatchWindowingConfig = (config: WindowingConfig) => {
-        window.dispatchEvent(new CustomEvent('windowing-config-update', { detail: config }));
-    };
-
-    const buildConfig = (): WindowingConfig => ({
+    const buildConfig = () => ({
         chunk_size: windowSize,
         overlap_size: overlapSize,
     });
+
+    // Validate config values
+    const isValidConfig =
+        Number.isInteger(windowSize) &&
+        windowSize > 0 &&
+        Number.isInteger(overlapSize) &&
+        overlapSize >= 0 &&
+        overlapSize < windowSize;
+
+    // Push config to node data and dispatch processing config when relevant state changes
+    const pushConfigToNodeData = React.useCallback(() => {
+        if (!id) return;
+        if (!isValidConfig) return;
+        const config = buildConfig();
+        reactFlowInstance.setNodes((nds) =>
+            nds.map((n) =>
+                n.id === id ? { ...n, data: { ...n.data, config, selectedOption } } : n
+            )
+        );
+        window.dispatchEvent(new Event('node-config-changed'));
+    }, [id, reactFlowInstance, windowSize, overlapSize, selectedOption, isValidConfig]);
+
 
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
@@ -73,17 +96,6 @@ export default function WindowNode({ id }: WindowNodeProps) {
             setIsConnected(false);
         }
     }, [id, reactFlowInstance]);
-    
-    const isValidConfig =
-        Number.isInteger(windowSize) &&
-        windowSize > 0 &&
-        Number.isInteger(overlapSize) &&
-        overlapSize >= 0 &&
-        overlapSize < windowSize;
-    
-    React.useEffect(() => {
-        dispatchWindowingConfig(buildConfig());
-    }, []);
 
     // Check connection status on mount and when edges might change
     React.useEffect(() => {
@@ -105,10 +117,11 @@ export default function WindowNode({ id }: WindowNodeProps) {
         };
     }, [checkConnectionStatus]);
 
+    // Push config to node data and dispatch processing config when relevant state changes
     React.useEffect(() => {
         if(!isValidConfig) return;
-        dispatchWindowingConfig(buildConfig());
-    }, [windowSize, overlapSize, selectedOption, isConnected, dataStreaming]);
+        pushConfigToNodeData();
+    }, [pushConfigToNodeData, isValidConfig]);
 
     return (
         <div className="relative">

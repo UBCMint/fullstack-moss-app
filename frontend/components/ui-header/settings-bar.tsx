@@ -23,6 +23,8 @@ import {
     getSessions,
     loadFrontendState,
     saveFrontendState,
+    getTimeLabels,
+    saveTimeLabels,
     SessionSummary,
 } from '@/lib/session-api';
 import {
@@ -36,6 +38,8 @@ export default function SettingsBar() {
         setDataStreaming,
         activeSessionId,
         setActiveSessionId,
+        activeSessionName,
+        setActiveSessionName,
     } = useGlobalContext();
     const notifications = useNotifications();
     const [leftTimerSeconds, setLeftTimerSeconds] = useState(0);
@@ -52,16 +56,40 @@ export default function SettingsBar() {
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
+    const [isLoadWarningOpen, setIsLoadWarningOpen] = useState(false);
 
-    // Track unsaved canvas changes
+    const isUnsavedSession = activeSessionName === null;
+
+    // Suppress dirty-tracking for a short window after Load/New, since
+    // restored nodes re-emit `node-config-changed` as they hydrate (combo
+    // boxes wire their persistence useEffects on mount, and connection
+    // status is rechecked on a 1s interval).
+    const suppressDirtyUntilRef = useRef<number>(0);
+
+    // Track unsaved canvas + node config changes
     useEffect(() => {
-        const handler = () => setIsDirty(true);
+        const handler = () => {
+            if (Date.now() < suppressDirtyUntilRef.current) return;
+            setIsDirty(true);
+        };
         window.addEventListener('canvas-changed', handler);
         window.addEventListener('reactflow-edges-changed', handler);
+        window.addEventListener('node-config-changed', handler);
         return () => {
             window.removeEventListener('canvas-changed', handler);
             window.removeEventListener('reactflow-edges-changed', handler);
+            window.removeEventListener('node-config-changed', handler);
         };
+    }, []);
+
+    // Auto-create an unsaved session on app open so streaming is always available.
+    // The "(unsaved)" prefix keeps it out of the load/save lists.
+    useEffect(() => {
+        if (activeSessionId !== null) return;
+        createSession(`(unsaved) ${new Date().toISOString()}`)
+            .then((s) => { setActiveSessionId(s.id); setActiveSessionName(null); })
+            .catch((e) => console.error('Failed to auto-create session:', e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Timer effect - starts/stops based on dataStreaming state
@@ -102,17 +130,12 @@ export default function SettingsBar() {
     };
 
     const handleConfirmReset = () => {
-        // Stop the data stream and reset the timer
+        suppressDirtyUntilRef.current = Date.now() + 2000;
         setDataStreaming(false);
         setLeftTimerSeconds(0);
-
-        // Broadcast a reset event so the flow view can clear nodes/edges
-        try {
-            window.dispatchEvent(new Event('pipeline-reset'));
-        } catch (_) {
-            // no-op if window is unavailable
-        }
-
+        setActiveSessionName(null);
+        setIsDirty(false);
+        window.dispatchEvent(new Event('pipeline-reset'));
         setIsResetDialogOpen(false);
     };
 
@@ -151,7 +174,8 @@ export default function SettingsBar() {
             return;
         }
 
-        if (activeSessionId !== null) {
+        // Save directly only when this is a real, named session
+        if (activeSessionId !== null && !isUnsavedSession) {
             setIsSaving(true);
             try {
                 await handleSaveToExistingSession(activeSessionId);
@@ -168,11 +192,14 @@ export default function SettingsBar() {
             return;
         }
 
+        // Unsaved (auto-created) session — prompt the user for a name
         setIsFetchingSessions(true);
         setFetchingFor('save');
         try {
             const fetchedSessions = await getSessions();
-            setSessions(fetchedSessions);
+            setSessions(fetchedSessions.filter(
+                (s) => !s.name.startsWith('Label Session ') && !s.name.startsWith('(unsaved) ') && !s.name.startsWith('Session ')
+            ));
             setSessionModalMode('save');
             setIsSessionModalOpen(true);
         } catch (error) {
@@ -186,16 +213,15 @@ export default function SettingsBar() {
         }
     };
 
-    const handleLoadClick = async () => {
-        if (isSaving || isLoading || isFetchingSessions) {
-            return;
-        }
-
+    const openLoadModal = async () => {
         setIsFetchingSessions(true);
         setFetchingFor('load');
         try {
             const fetchedSessions = await getSessions();
-            setSessions(fetchedSessions);
+            // Filter out orphaned label-node sessions created by old code.
+            setSessions(fetchedSessions.filter(
+                (s) => !s.name.startsWith('Label Session ') && !s.name.startsWith('(unsaved) ') && !s.name.startsWith('Session ')
+            ));
             setSessionModalMode('load');
             setIsSessionModalOpen(true);
         } catch (error) {
@@ -209,8 +235,25 @@ export default function SettingsBar() {
         }
     };
 
+    const handleLoadClick = () => {
+        if (isSaving || isLoading || isFetchingSessions) return;
+        if (dataStreaming) {
+            notifications.error({ title: 'Stop the data stream before doing this.' });
+            return;
+        }
+        if (isDirty) {
+            setIsLoadWarningOpen(true);
+        } else {
+            void openLoadModal();
+        }
+    };
+
     const handleNewClick = () => {
         if (isSaving || isLoading || isFetchingSessions) {
+            return;
+        }
+        if (dataStreaming) {
+            notifications.error({ title: 'Stop the data stream before doing this.' });
             return;
         }
         if (isDirty) {
@@ -221,22 +264,56 @@ export default function SettingsBar() {
     };
 
     const handleConfirmNew = () => {
+        suppressDirtyUntilRef.current = Date.now() + 2000;
         setActiveSessionId(null);
+        setActiveSessionName(null);
         setIsDirty(false);
         setDataStreaming(false);
         setLeftTimerSeconds(0);
         window.dispatchEvent(new Event('pipeline-reset'));
         setIsNewDialogOpen(false);
-        notifications.success({ title: 'New session started' });
+        createSession(`(unsaved) ${new Date().toISOString()}`)
+            .then((s) => {
+                setActiveSessionId(s.id);
+                setActiveSessionName(null);
+                notifications.success({ title: 'New session started' });
+            })
+            .catch(() => notifications.error({ title: 'Could not create session' }));
     };
 
     const handleCreateAndSaveSession = async (sessionName: string) => {
         setIsSaving(true);
         try {
-            const state = await requestFrontendState();
+            const oldSessionId = activeSessionId;
+            const [state, oldLabels] = await Promise.all([
+                requestFrontendState(),
+                oldSessionId !== null
+                    ? getTimeLabels(oldSessionId, '1970-01-01T00:00:00Z', '2100-01-01T00:00:00Z')
+                          .catch(() => [])
+                    : Promise.resolve([]),
+            ]);
+
             const createdSession = await createSession(sessionName);
             await saveFrontendState(createdSession.id, state);
+
+            // Migrate labels from the old (unsaved) session to the new named session.
+            // Note: EEG data cannot be migrated without a backend rename endpoint — see backend task.
+            const labelsToMigrate = oldLabels
+                .filter((l) => l.end_timestamp !== null)
+                .map((l) => ({
+                    start_timestamp: l.start_timestamp,
+                    end_timestamp: l.end_timestamp!,
+                    label: l.label,
+                    color: l.color,
+                }));
+            if (labelsToMigrate.length > 0) {
+                await saveTimeLabels(createdSession.id, labelsToMigrate).catch((e) =>
+                    console.warn('[session] label migration failed:', e)
+                );
+            }
+
             setActiveSessionId(createdSession.id);
+            setActiveSessionName(createdSession.name);
             setIsDirty(false);
             setIsSessionModalOpen(false);
             notifications.success({ title: 'Session saved successfully' });
@@ -258,12 +335,16 @@ export default function SettingsBar() {
                 throw new Error('Loaded session payload has an invalid format.');
             }
 
+            suppressDirtyUntilRef.current = Date.now() + 2000;
             window.dispatchEvent(
                 new CustomEvent('restore-frontend-state', {
                     detail: loadedPayload,
                 })
             );
             setActiveSessionId(sessionId);
+            const loaded = sessions.find((s) => s.id === sessionId);
+            setActiveSessionName(loaded?.name ?? null);
+            setIsDirty(false);
             setIsSessionModalOpen(false);
             notifications.success({ title: 'Session loaded successfully' });
         } catch (error) {
@@ -288,7 +369,7 @@ export default function SettingsBar() {
             {/* Session ID, Tutorials */}
             <Menubar>
                 <span className="px-3 py-1 text-sm">
-                    Session {activeSessionId ?? 'ID'}
+                    {activeSessionName ?? (activeSessionId !== null ? 'Unsaved session' : 'New session')}
                 </span>
                 <button className="px-3 py-1 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground hover:underline">
                     Tutorials
@@ -385,6 +466,31 @@ export default function SettingsBar() {
                             <Button variant="outline">Cancel</Button>
                         </DialogClose>
                         <Button className="bg-red-500" onClick={handleConfirmNew}>Confirm</Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isLoadWarningOpen} onOpenChange={setIsLoadWarningOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Load a different session?</DialogTitle>
+                        <DialogDescription>
+                            Your current session has unsaved changes. Loading a new session will discard them. Save first if you want to keep your work.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-2 mt-4">
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button
+                            className="bg-red-500"
+                            onClick={() => {
+                                setIsLoadWarningOpen(false);
+                                void openLoadModal();
+                            }}
+                        >
+                            Discard & Load
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>

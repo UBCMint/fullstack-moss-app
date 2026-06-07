@@ -2,7 +2,8 @@ use tokio::sync::broadcast;
 use tokio::sync::broadcast::Receiver;
 
 use crate::mockeeg::{generate_mock_data};
-use crate::lsl::{EEGDataPacket, ProcessingConfig, WindowingConfig, receive_eeg};
+use crate::lsl::{EEGDataPacket, receive_eeg};
+use crate::pipeline::Pipeline;
 use crate::db::{insert_batch_eeg, get_db_client};
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt};
@@ -15,48 +16,44 @@ use tokio::sync::Mutex;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio_util::sync::CancellationToken;
-use tokio::sync::watch;
-
 use log::{info, error};
 
 // starts the broadcast by spawning async sender and receiver tasks.
 pub async fn start_broadcast(
-    write: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,  
+    write: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,
     cancel_token: CancellationToken,
-    processing_config: ProcessingConfig, // takes in signal processing configuration from frontend
-    session_id: i32, // takes in session id to tag incoming data with the correct session
-    windowing_rx: watch::Receiver<WindowingConfig> // takes in windowing configuration from frontend
+    pipeline: Pipeline,
+    session_id: i32,
 ) {
     let (tx, _rx) = broadcast::channel::<Arc<EEGDataPacket>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
     let rx_ws = tx.subscribe();
     let rx_db = tx.subscribe();
-    let generator_token = cancel_token.clone(); 
+    let generator_token = cancel_token.clone();
 
-    ////// spawn the mock data generator, comment out when connecting to the muse headset. 
+    ////// spawn the mock data generator, comment out when connecting to the muse headset.
     tokio::spawn(async move {
        if let Err(e) = generate_mock_data(generator_token).await {
         error!("Mock data generation failed: {}", e);
     }
     });
-    ////// comment out the code above when connecting to the muse headset. 
-    
+    ////// comment out the code above when connecting to the muse headset.
+
     //spawn a sender task
     let tx_clone = tx.clone();
-    let sender_token = cancel_token.clone(); 
+    let sender_token = cancel_token.clone();
     let sender = tokio::spawn(async move {
-        // use the ProcessingConfig provided by the client instead of default
-        receive_eeg(tx_clone, sender_token, processing_config, windowing_rx).await;
+        receive_eeg(tx_clone, sender_token, pipeline).await;
     });
 
-    // Subscribe for websocket Receiver 
+    // Subscribe for websocket Receiver
     let write_clone = write.clone();
     tokio::spawn(async move {
         ws_receiver(&write_clone, rx_ws).await;
     });
 
-    // Subscribe for database Receiver 
-    tokio::spawn(async move { 
-        db_receiver( rx_db, session_id).await;
+    // Subscribe for database Receiver
+    tokio::spawn(async move {
+        db_receiver(rx_db, session_id).await;
     });
 
     //waits for sender to complete. 

@@ -1,20 +1,20 @@
 import * as React from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AlertCircle } from 'lucide-react';
 
 const mlPredictions = [
     {
-        value: 'stress',
-        label: 'Stress Prediction',
+        value: 'Stress',
+        label: 'Stress',
     },
     {
-        value: 'focus',
-        label: 'Focus Prediction',
+        value: 'Focus',
+        label: 'Focus',
     },
     {
-        value: 'mood',
-        label: 'Mood Prediction',
+        value: 'Activity',
+        label: 'Activity',
     },
 ];
 
@@ -26,7 +26,7 @@ interface MLComboBoxProps {
 }
 
 export default function MLComboBox({
-    value = 'stress',
+    value = 'Stress',
     onValueChange,
     isConnected = false,
     isDataStreamOn = false,
@@ -38,8 +38,7 @@ export default function MLComboBox({
     const [predictionReady, setPredictionReady] = React.useState(false);
     const [stressYes, setStressYes] = React.useState(true);
     const [focusPercent, setFocusPercent] = React.useState(75); // 0-100
-    const [moodScore, setMoodScore] = React.useState(0.83); // -1 to +1
-    const [moodLabel, setMoodLabel] = React.useState('Cheerful');
+    const [activityLabel, setActivityLabel] = React.useState('Active');
 
     const toggleExpanded = () => {
         setIsExpanded(!isExpanded);
@@ -74,13 +73,12 @@ export default function MLComboBox({
 
     // Update hardcoded prediction values when the selected prediction changes
     React.useEffect(() => {
-        if (value === 'stress') {
+        if (value === 'Stress') {
             setStressYes(true);
-        } else if (value === 'focus') {
+        } else if (value === 'Focus') {
             setFocusPercent(75);
-        } else if (value === 'mood') {
-            setMoodScore(0.83);
-            setMoodLabel('Cheerful');
+        } else if (value === 'Activity') {
+            setActivityLabel('Active');
         }
     }, [value]);
 
@@ -213,7 +211,7 @@ export default function MLComboBox({
                         <div className="mt-2">
 
                             {/* Stress prediction */}
-                            {value === 'stress' && (
+                            {value === 'Stress' && (
                                 <div className="mt-3 flex flex-col items-center text-center">
                                     <div className="text-[16px] text-gray-800">Stress:</div>
                                     <div className="mt-2 inline-flex items-center">
@@ -225,7 +223,7 @@ export default function MLComboBox({
                             )}
 
                             {/* Focus prediction */}
-                            {value === 'focus' && (
+                            {value === 'Focus' && (
                                 <div className="mt-3 flex flex-col items-center text-center">
                                     <div className="text-[16px] text-gray-800">Focus:</div>
                                     <div className="mt-2">
@@ -243,41 +241,14 @@ export default function MLComboBox({
                                 </div>
                             )}
 
-                            {/* Mood prediction */}
-                            {value === 'mood' && (
+                            {/* Activity prediction */}
+                            {value === 'Activity' && (
                                 <div className="mt-3 flex flex-col items-center text-center">
-                                    <div className="text-[16px] text-gray-800">Mood:</div>
-                                    <div className="mt-7 relative w-44">
-                                        {/* Value chip with pointer */}
-                                        <div
-                                            className="absolute -top-7"
-                                            style={{
-                                                left: `${((moodScore + 1) / 2) * 100}%`,
-                                                transform: 'translateX(-50%)',
-                                            }}
-                                        >
-                                            <div className="px-2 py-0.5 rounded-full bg-white border border-[#6DB9B2] text-[#2B6C66] text-[12px] font-semibold shadow-sm">
-                                                {moodScore > 0 ? '+' : ''}{moodScore.toFixed(2)}
-                                            </div>
-                                            <div
-                                                className="w-0 h-0 mx-auto"
-                                                style={{
-                                                    borderLeft: '6px solid transparent',
-                                                    borderRight: '6px solid transparent',
-                                                    borderTop: '6px solid #2B6C66',
-                                                    marginTop: '4px',
-                                                }}
-                                            />
-                                        </div>
-
-                                        {/* Gradient bar */}
-                                        <div
-                                            className="h-4 rounded-full shadow-inner"
-                                            style={{
-                                                background:
-                                                    'linear-gradient(90deg, #E53935 0%, #FBC02D 50%, #43A047 100%)',
-                                            }}
-                                        />
+                                    <div className="text-[16px] text-gray-800">Activity:</div>
+                                    <div className="mt-2 inline-flex items-center">
+                                        <span className="px-2.5 py-1 rounded-full border border-[#6DB9B2] bg-[#f0fafa] text-[14px]">
+                                            {activityLabel}
+                                        </span>
                                     </div>
                                 </div>
                             )}
