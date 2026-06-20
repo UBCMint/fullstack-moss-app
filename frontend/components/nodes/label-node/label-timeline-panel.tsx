@@ -45,6 +45,7 @@ export interface LabelTimelinePanelProps {
     onTimelineViewClick?: () => void;
     viewMode: 'timeline' | 'graph';
     graphData: LabelGraphPoint[];
+    isLoadingLabels?: boolean;
     fetchDataForLabel?: (start: string, end: string) => Promise<LabelGraphPoint[]>;
 }
 
@@ -153,22 +154,28 @@ export default function LabelTimelinePanel({
     isConnected,
     isDataStreamOn,
     graphData,
+    isLoadingLabels = false,
     fetchDataForLabel,
 }: LabelTimelinePanelProps) {
     const latestMs = parseTimestampMs(latestBackendTimestamp);
     const fallbackStartMs = parseTimestampMs(sessionStartTimestamp);
 
     const axisStartMs = React.useMemo(() => {
+        // When the current stream has started, anchor the timeline to it.
+        // This prevents loaded historical labels (from a previous session) from
+        // corrupting the axis scale by spanning an enormous time range.
+        if (fallbackStartMs !== null) {
+            return fallbackStartMs;
+        }
+
+        // No active stream — use the earliest label timestamp (e.g. viewing a
+        // loaded session's labels without having started a new stream yet).
         const startCandidates = rows
             .map((row) => parseTimestampMs(row.startTimestamp))
             .filter((value): value is number => value !== null);
 
         if (startCandidates.length > 0) {
             return Math.min(...startCandidates);
-        }
-
-        if (fallbackStartMs !== null) {
-            return fallbackStartMs;
         }
 
         if (latestMs !== null) {
@@ -194,7 +201,9 @@ export default function LabelTimelinePanel({
 
     const elapsedDurationMs = Math.max(axisEndMs - axisStartMs, 1);
     const virtualDurationMs = Math.max(elapsedDurationMs, VISIBLE_WINDOW_MS);
-    const virtualTrackWidthPercent = (virtualDurationMs / VISIBLE_WINDOW_MS) * 100;
+    // Cap at 2000% (20× the visible window) so mixed historical/current timestamps
+    // don't produce an impossibly wide track that causes layout glitches.
+    const virtualTrackWidthPercent = Math.min((virtualDurationMs / VISIBLE_WINDOW_MS) * 100, 2000);
 
     const ticks = React.useMemo(() => {
         const tickCount = Math.floor(virtualDurationMs / TICK_INTERVAL_MS) + 1;
@@ -445,13 +454,20 @@ export default function LabelTimelinePanel({
             return;
         }
 
+        // Only auto-scroll to the live edge when a stream is active.
+        // When viewing a loaded session with no active stream, keep the
+        // viewport at the left so all tick labels and labels are visible.
+        if (latestMs === null) {
+            return;
+        }
+
         const node = timelineScrollRef.current;
         if (!node || !isAtLiveEdgeRef.current) {
             return;
         }
 
         node.scrollLeft = Math.max(node.scrollWidth - node.clientWidth, 0);
-    }, [axisEndMs, laneGroups.length, virtualTrackWidthPercent, viewMode]);
+    }, [axisEndMs, laneGroups.length, latestMs, virtualTrackWidthPercent, viewMode]);
 
     if (!isExpanded) {
         return null;
@@ -471,6 +487,7 @@ export default function LabelTimelinePanel({
                     >
                         {isConnected && <span className="w-3 h-3 rounded-full bg-white" />}
                     </span>
+
                     {/* Status dot */}
                     <div
                         className={cn(
@@ -725,7 +742,7 @@ export default function LabelTimelinePanel({
                                 {ticks.map((tick) => (
                                     <div
                                         key={`${tick.ratio}-${tick.label}`}
-                                        className="absolute top-0 -translate-x-1/2 text-xs text-[#7A7A7A]"
+                                        className="absolute top-0 -translate-x-1/2 text-xs text-[#7A7A7A] whitespace-nowrap"
                                         style={{ left: `${tick.ratio * 100}%` }}
                                     >
                                         {tick.label}
@@ -734,13 +751,22 @@ export default function LabelTimelinePanel({
                             </div>
 
                             <div className="space-y-2">
-                                {laneGroups.length === 0 && (
+                                {isLoadingLabels && (
+                                    <div className="flex flex-col items-center justify-center gap-3 py-8">
+                                        <svg className="animate-spin h-6 w-6 text-[#6CAFA4]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                        </svg>
+                                        <span className="text-sm text-[#8A8A8A]">Loading labels…</span>
+                                    </div>
+                                )}
+                                {!isLoadingLabels && laneGroups.length === 0 && (
                                     <div className="py-3 text-sm text-[#8A8A8A]">
                                         No labels yet. Start/stop Trigger to add moments.
                                     </div>
                                 )}
 
-                                {laneGroups.map((laneEntries, laneIndex) => (
+                                {!isLoadingLabels && laneGroups.map((laneEntries, laneIndex) => (
                                     <div
                                         key={`timeline-lane-${laneIndex}`}
                                         className="relative h-8 w-full"
@@ -810,7 +836,20 @@ export default function LabelTimelinePanel({
                             </tr>
                         </thead>
                         <tbody>
-                            {tableRows.length === 0 && (
+                            {isLoadingLabels && (
+                                <tr>
+                                    <td colSpan={4} className="px-3 py-4">
+                                        <div className="flex items-center gap-3 text-[#8A8A8A]">
+                                            <svg className="animate-spin h-4 w-4 text-[#6CAFA4] flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                            </svg>
+                                            <span className="text-sm">Loading saved labels…</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                            {!isLoadingLabels && tableRows.length === 0 && (
                                 <tr>
                                     <td
                                         colSpan={4}
@@ -821,7 +860,7 @@ export default function LabelTimelinePanel({
                                 </tr>
                             )}
 
-                            {tableRows.map((row) => {
+                            {!isLoadingLabels && tableRows.map((row) => {
                                 const startMs = parseTimestampMs(row.startTimestamp);
                                 const endMs = parseTimestampMs(
                                     row.endTimestamp ?? latestBackendTimestamp

@@ -8,6 +8,7 @@ import ComboBox, { LabelColor } from './label-combo-box';
 import { LabelGraphPoint, TimelineLabelRow } from '@/components/nodes/label-node/label-timeline-panel';
 import { saveTimeLabels, getTimeLabels } from '@/lib/session-api';
 import { exportEEGData } from '@/lib/eeg-api';
+import { useNotifications } from '@/components/notifications';
 
 interface LabelNodeProps {
     id?: string;
@@ -21,7 +22,6 @@ interface LabeledMoment {
     endTimestamp: string;
     source: 'Trigger';
 }
-
 
 function normalizeNodeTimestamp(raw: unknown): string | null {
     if (raw == null) return null;
@@ -84,7 +84,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     >(null);
     const [pendingEndTimestamp, setPendingEndTimestamp] = React.useState<string | null>(null);
     const [labeledMoments, setLabeledMoments] = React.useState<LabeledMoment[]>([]);
-    const [labelError, setLabelError] = React.useState<string | null>(null);
+    const [isLoadingLabels, setIsLoadingLabels] = React.useState(false);
     const labelsRef = React.useRef<LabeledMoment[]>([]);
     const sentLabelIdsRef = React.useRef<Set<string>>(new Set());
     const previousStreamStateRef = React.useRef(false);
@@ -92,18 +92,25 @@ export default function LabelNode({ id }: LabelNodeProps) {
 
     const { dataStreaming, activeSessionId } = useGlobalContext();
     const { renderData } = useNodeData(300, 15);
+    const notifications = useNotifications();
 
     const reactFlowInstance = useReactFlow();
 
     // Load persisted labels whenever the active session changes.
     const validColors: LabelColor[] = ['teal-700', 'teal-500', 'teal-300', 'mint-100'];
     React.useEffect(() => {
+        // Reset stream anchors so the timeline doesn't carry over state from a previous session.
+        setSessionStartTimestamp(null);
+        setLatestBackendTimestamp(null);
+
         if (activeSessionId === null) {
             setLabeledMoments([]);
+            setIsLoadingLabels(false);
             sentLabelIdsRef.current = new Set();
             momentCounterRef.current = 0;
             return;
         }
+        setIsLoadingLabels(true);
         getTimeLabels(activeSessionId, '1970-01-01T00:00:00Z', '2100-01-01T00:00:00Z')
             .then((labels) => {
                 const moments: LabeledMoment[] = labels
@@ -122,7 +129,8 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 sentLabelIdsRef.current = new Set(moments.map((m) => m.id));
                 momentCounterRef.current = 0;
             })
-            .catch((e) => console.error('Failed to load time labels:', e));
+            .catch((e) => console.error('Failed to load time labels:', e))
+            .finally(() => setIsLoadingLabels(false));
     }, [activeSessionId]);
 
     const checkConnectionStatus = React.useCallback(() => {
@@ -227,8 +235,12 @@ export default function LabelNode({ id }: LabelNodeProps) {
             unsentLabels.forEach((moment) => sentLabelIdsRef.current.add(moment.id));
         } catch (e) {
             console.error('Failed to POST time labels:', e);
+            notifications.error({
+                title: 'Failed to save labels',
+                description: 'Your labels could not be saved. Please try stopping and restarting the stream.',
+            });
         }
-    }, [activeSessionId]);
+    }, [activeSessionId, notifications]);
 
     React.useEffect(() => {
         const wasStreaming = previousStreamStateRef.current;
@@ -236,17 +248,25 @@ export default function LabelNode({ id }: LabelNodeProps) {
 
         if (streamJustStopped) {
             if (isTriggerActive) {
-                setIsTriggerActive(false);
-                setActiveStartTimestamp(null);
-                setPendingEndTimestamp(null);
-                setIsLabelPopupOpen(false);
-                setLabelInputValue('');
+                if (latestBackendTimestamp) {
+                    // Auto-close the in-progress label and prompt the user to name it.
+                    setPendingEndTimestamp(latestBackendTimestamp);
+                    setIsTriggerActive(false);
+                    setIsLabelPopupOpen(true);
+                } else {
+                    // No timestamp available — silently cancel.
+                    setIsTriggerActive(false);
+                    setActiveStartTimestamp(null);
+                    setPendingEndTimestamp(null);
+                    setIsLabelPopupOpen(false);
+                    setLabelInputValue('');
+                }
             }
             void postLabelsToApi();
         }
 
         previousStreamStateRef.current = dataStreaming;
-    }, [dataStreaming, isTriggerActive, postLabelsToApi]);
+    }, [dataStreaming, isTriggerActive, latestBackendTimestamp, postLabelsToApi]);
 
     const handleTriggerClick = () => {
         if (!dataStreaming) {
@@ -279,7 +299,6 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const handleCloseLabelPopup = () => {
         setIsLabelPopupOpen(false);
         setLabelInputValue('');
-        setLabelError(null);
         setActiveStartTimestamp(null);
         setPendingEndTimestamp(null);
         setIsTriggerActive(false);
@@ -292,12 +311,16 @@ export default function LabelNode({ id }: LabelNodeProps) {
         }
 
         const normalizedName = labelInputValue.trim() || 'Untitled';
-        const isDuplicate = labeledMoments.some((m) => m.label === normalizedName);
+        // Only check for duplicates among labels created this session (id prefix "moment-").
+        // Labels loaded from the backend have id prefix "backend-" and belong to a previous
+        // session or a prior load, so reusing their names in the current session is allowed.
+        const isDuplicate = labelsRef.current.some(
+            (m) => !m.id.startsWith('backend-') && m.label === normalizedName
+        );
         if (isDuplicate) {
-            setLabelError(`"${normalizedName}" already exists`);
+            notifications.error({ title: `Label "${normalizedName}" already exists in this session` });
             return;
         }
-        setLabelError(null);
 
         momentCounterRef.current += 1;
 
@@ -310,11 +333,13 @@ export default function LabelNode({ id }: LabelNodeProps) {
             source: 'Trigger',
         };
 
+        labelsRef.current = [...labelsRef.current, newLabeledMoment];
         setLabeledMoments((prev) => [...prev, newLabeledMoment]);
         setIsLabelPopupOpen(false);
         setLabelInputValue('');
         setActiveStartTimestamp(null);
         setPendingEndTimestamp(null);
+        void postLabelsToApi();
     };
 
     const handlePreviewOpen = () => {
@@ -430,8 +455,27 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 }}
             />
 
+            {/* Output Handle - positioned to align with right circle */}
+            <Handle
+                type="source"
+                position={Position.Right}
+                id="labeling-output"
+                style={{
+                    right: '24px',
+                    top: '30px',
+                    transform: 'translateY(-50%)',
+                    width: '28px',
+                    height: '28px',
+                    backgroundColor: 'transparent',
+                    border: '2px solid transparent',
+                    borderRadius: '50%',
+                    zIndex: 20,
+                    cursor: 'crosshair',
+                    pointerEvents: 'all',
+                }}
+            />
 
-            <ComboBox 
+            <ComboBox
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
                 isTriggerActive={isTriggerActive}
@@ -445,15 +489,15 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 isLabelPopupOpen={isLabelPopupOpen}
                 labelInputValue={labelInputValue}
                 selectedColor={selectedColor}
-                onLabelInputChange={(v) => { setLabelInputValue(v); setLabelError(null); }}
+                onLabelInputChange={setLabelInputValue}
                 onColorSelect={setSelectedColor}
-                labelError={labelError}
                 onConfirmLabel={handleConfirmLabel}
                 onCloseLabelPopup={handleCloseLabelPopup}
                 timelineRows={timelineRows}
                 graphData={graphData}
                 sessionStartTimestamp={sessionStartTimestamp}
                 latestBackendTimestamp={latestBackendTimestamp}
+                isLoadingLabels={isLoadingLabels}
                 fetchDataForLabel={handleFetchLabelData}
             />
         </div>

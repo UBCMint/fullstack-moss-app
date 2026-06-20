@@ -11,7 +11,7 @@ export default function Home() {
         <GlobalProvider>
             <WebSocketProvider>
             <NotificationsProvider>
-                <div className="h-screen flex flex-col">
+                <div className="h-screen flex flex-col overflow-hidden">
                     {/* Top section for header and settings bar */}
                     <div className="flex flex-col">
                         <AppHeader />
