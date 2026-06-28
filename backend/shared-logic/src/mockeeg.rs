@@ -1,19 +1,20 @@
-
+use log::info;
 use lsl::{ChannelFormat, ExPushable, StreamInfo, StreamOutlet};
 use rand::Rng;
 use std::{thread, time::Duration};
 use tokio_util::sync::CancellationToken;
-use log::{info};
 
-pub async fn generate_mock_data(cancel_token: CancellationToken) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn generate_mock_data(
+    cancel_token: CancellationToken,
+) -> Result<(), Box<dyn std::error::Error>> {
     // Create stream info
     let stream_info = StreamInfo::new(
-        "MyStream",           // stream name
-        "EEG",               // content type (EEG, EMG, etc.)
-        4,                   // number of channels
-        256.0,               // sampling rate (Hz)
+        "MyStream",             // stream name
+        "EEG",                  // content type (EEG, EMG, etc.)
+        4,                      // number of channels
+        256.0,                  // sampling rate (Hz)
         ChannelFormat::Float32, // data format
-        "muse-simulator-eeg" // source ID (should be unique)
+        "muse-simulator-eeg",   // source ID (should be unique)
     )?;
 
     // Create outlet
@@ -23,7 +24,7 @@ pub async fn generate_mock_data(cancel_token: CancellationToken) -> Result<(), B
 
     // Send data in a loop
     loop {
-         if cancel_token.is_cancelled() {
+        if cancel_token.is_cancelled() {
             info!("Cancellation requested, stopping data generation...");
             break;
         }
@@ -35,9 +36,8 @@ pub async fn generate_mock_data(cancel_token: CancellationToken) -> Result<(), B
 
         // Send the sample
         outlet.push_sample_ex(&sample_data, lsl::local_clock(), true)?;
-        // Sleep to simulate real-time data 
+        // Sleep to simulate real-time data
         thread::sleep(Duration::from_millis(4));
-
     }
     drop(outlet);
     Ok(())

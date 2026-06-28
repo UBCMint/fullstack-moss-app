@@ -67,19 +67,27 @@ pub struct MLConfig {
 impl Pipeline {
     pub fn window_config(&self) -> Option<&WindowConfig> {
         self.nodes.iter().find_map(|n| {
-            if let Node::Window(c) = n { Some(c) } else { None }
+            if let Node::Window(c) = n {
+                Some(c)
+            } else {
+                None
+            }
         })
     }
 
     pub fn preprocessing_config(&self) -> Option<&PreprocessingConfig> {
         self.nodes.iter().find_map(|n| {
-            if let Node::Preprocessing(c) = n { Some(c) } else { None }
+            if let Node::Preprocessing(c) = n {
+                Some(c)
+            } else {
+                None
+            }
         })
     }
 
     pub fn ml_config(&self) -> Option<&MLConfig> {
-        self.nodes.iter().find_map(|n| {
-            if let Node::ML(c) = n { Some(c) } else { None }
-        })
+        self.nodes
+            .iter()
+            .find_map(|n| if let Node::ML(c) = n { Some(c) } else { None })
     }
 }
