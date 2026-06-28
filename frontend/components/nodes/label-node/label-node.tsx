@@ -5,7 +5,10 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
 import ComboBox, { LabelColor } from './label-combo-box';
-import { LabelGraphPoint, TimelineLabelRow } from '@/components/nodes/label-node/label-timeline-panel';
+import {
+    LabelGraphPoint,
+    TimelineLabelRow,
+} from '@/components/nodes/label-node/label-timeline-panel';
 import { saveTimeLabels, getTimeLabels } from '@/lib/session-api';
 import { exportEEGData } from '@/lib/eeg-api';
 import { useNotifications } from '@/components/notifications';
@@ -74,16 +77,23 @@ export default function LabelNode({ id }: LabelNodeProps) {
     );
     const [isLabelPopupOpen, setIsLabelPopupOpen] = React.useState(false);
     const [labelInputValue, setLabelInputValue] = React.useState('');
-    const [selectedColor, setSelectedColor] = React.useState<LabelColor>('teal-700');
-    const [sessionStartTimestamp, setSessionStartTimestamp] = React.useState<string | null>(null);
+    const [selectedColor, setSelectedColor] =
+        React.useState<LabelColor>('teal-700');
+    const [sessionStartTimestamp, setSessionStartTimestamp] = React.useState<
+        string | null
+    >(null);
     const [latestBackendTimestamp, setLatestBackendTimestamp] = React.useState<
         string | null
     >(null);
     const [activeStartTimestamp, setActiveStartTimestamp] = React.useState<
         string | null
     >(null);
-    const [pendingEndTimestamp, setPendingEndTimestamp] = React.useState<string | null>(null);
-    const [labeledMoments, setLabeledMoments] = React.useState<LabeledMoment[]>([]);
+    const [pendingEndTimestamp, setPendingEndTimestamp] = React.useState<
+        string | null
+    >(null);
+    const [labeledMoments, setLabeledMoments] = React.useState<LabeledMoment[]>(
+        []
+    );
     const [isLoadingLabels, setIsLoadingLabels] = React.useState(false);
     const labelsRef = React.useRef<LabeledMoment[]>([]);
     const sentLabelIdsRef = React.useRef<Set<string>>(new Set());
@@ -97,7 +107,10 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const reactFlowInstance = useReactFlow();
 
     // Load persisted labels whenever the active session changes.
-    const validColors: LabelColor[] = React.useMemo(() => ['teal-700', 'teal-500', 'teal-300', 'mint-100'], []);
+    const validColors: LabelColor[] = React.useMemo(
+        () => ['teal-700', 'teal-500', 'teal-300', 'mint-100'],
+        []
+    );
     React.useEffect(() => {
         // Reset stream anchors so the timeline doesn't carry over state from a previous session.
         setSessionStartTimestamp(null);
@@ -111,7 +124,11 @@ export default function LabelNode({ id }: LabelNodeProps) {
             return;
         }
         setIsLoadingLabels(true);
-        getTimeLabels(activeSessionId, '1970-01-01T00:00:00Z', '2100-01-01T00:00:00Z')
+        getTimeLabels(
+            activeSessionId,
+            '1970-01-01T00:00:00Z',
+            '2100-01-01T00:00:00Z'
+        )
             .then((labels) => {
                 const moments: LabeledMoment[] = labels
                     .filter((l) => l.end_timestamp !== null)
@@ -139,15 +156,20 @@ export default function LabelNode({ id }: LabelNodeProps) {
             const nodes = reactFlowInstance.getNodes();
 
             // Check if this node is connected to source node or any activated node
-            const isConnectedToActivatedNode = (nodeId: string, visited: Set<string> = new Set()): boolean => {
+            const isConnectedToActivatedNode = (
+                nodeId: string,
+                visited: Set<string> = new Set()
+            ): boolean => {
                 if (visited.has(nodeId)) return false; // Prevent infinite loops
                 visited.add(nodeId);
 
                 // Find incoming edges to this node
-                const incomingEdges = edges.filter(edge => edge.target === nodeId);
+                const incomingEdges = edges.filter(
+                    (edge) => edge.target === nodeId
+                );
 
                 for (const edge of incomingEdges) {
-                    const sourceNode = nodes.find(n => n.id === edge.source);
+                    const sourceNode = nodes.find((n) => n.id === edge.source);
                     if (!sourceNode) continue;
 
                     // If source is a source-node, we're activated
@@ -156,7 +178,10 @@ export default function LabelNode({ id }: LabelNodeProps) {
                     }
 
                     // If source is another node, check if it's activated
-                    if (sourceNode.id && isConnectedToActivatedNode(sourceNode.id, visited)) {
+                    if (
+                        sourceNode.id &&
+                        isConnectedToActivatedNode(sourceNode.id, visited)
+                    ) {
                         return true;
                     }
                 }
@@ -184,7 +209,10 @@ export default function LabelNode({ id }: LabelNodeProps) {
         const interval = setInterval(checkConnectionStatus, 1000);
 
         return () => {
-            window.removeEventListener('reactflow-edges-changed', handleEdgeChange);
+            window.removeEventListener(
+                'reactflow-edges-changed',
+                handleEdgeChange
+            );
             clearInterval(interval);
         };
     }, [checkConnectionStatus]);
@@ -199,7 +227,9 @@ export default function LabelNode({ id }: LabelNodeProps) {
         }
 
         const mostRecentPoint = renderData[renderData.length - 1];
-        const timestamp = normalizeNodeTimestamp(mostRecentPoint.rawTime ?? mostRecentPoint.time);
+        const timestamp = normalizeNodeTimestamp(
+            mostRecentPoint.rawTime ?? mostRecentPoint.time
+        );
 
         if (!timestamp) {
             return;
@@ -232,12 +262,15 @@ export default function LabelNode({ id }: LabelNodeProps) {
 
         try {
             await saveTimeLabels(activeSessionId, payload);
-            unsentLabels.forEach((moment) => sentLabelIdsRef.current.add(moment.id));
+            unsentLabels.forEach((moment) =>
+                sentLabelIdsRef.current.add(moment.id)
+            );
         } catch (e) {
             console.error('Failed to POST time labels:', e);
             notifications.error({
                 title: 'Failed to save labels',
-                description: 'Your labels could not be saved. Please try stopping and restarting the stream.',
+                description:
+                    'Your labels could not be saved. Please try stopping and restarting the stream.',
             });
         }
     }, [activeSessionId, notifications]);
@@ -266,7 +299,12 @@ export default function LabelNode({ id }: LabelNodeProps) {
         }
 
         previousStreamStateRef.current = dataStreaming;
-    }, [dataStreaming, isTriggerActive, latestBackendTimestamp, postLabelsToApi]);
+    }, [
+        dataStreaming,
+        isTriggerActive,
+        latestBackendTimestamp,
+        postLabelsToApi,
+    ]);
 
     const handleTriggerClick = () => {
         if (!dataStreaming) {
@@ -276,7 +314,9 @@ export default function LabelNode({ id }: LabelNodeProps) {
 
         if (!isTriggerActive) {
             if (!latestBackendTimestamp) {
-                console.warn('No backend EEG timestamp available yet for label start.');
+                console.warn(
+                    'No backend EEG timestamp available yet for label start.'
+                );
                 return;
             }
 
@@ -287,7 +327,9 @@ export default function LabelNode({ id }: LabelNodeProps) {
         }
 
         if (!latestBackendTimestamp) {
-            console.warn('No backend EEG timestamp available yet for label end.');
+            console.warn(
+                'No backend EEG timestamp available yet for label end.'
+            );
             return;
         }
 
@@ -318,7 +360,9 @@ export default function LabelNode({ id }: LabelNodeProps) {
             (m) => !m.id.startsWith('backend-') && m.label === normalizedName
         );
         if (isDuplicate) {
-            notifications.error({ title: `Label "${normalizedName}" already exists in this session` });
+            notifications.error({
+                title: `Label "${normalizedName}" already exists in this session`,
+            });
             return;
         }
 
@@ -360,48 +404,65 @@ export default function LabelNode({ id }: LabelNodeProps) {
         setViewMode('timeline');
     };
 
-    const handleFetchLabelData = React.useCallback(async (start: string, end: string): Promise<LabelGraphPoint[]> => {
-        if (activeSessionId === null) return [];
-        try {
-            const csv = await exportEEGData(activeSessionId, { start_time: start, end_time: end });
-            const lines = csv.trim().split('\n');
-            if (lines.length < 2) return [];
-            const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
-            const timeIdx = header.findIndex((h) => h.includes('time') || h === 'timestamp');
-            const chIdxs = [0, 1, 2, 3].map((n) => {
-                const pats = [`ch${n + 1}`, `channel${n + 1}`];
-                return header.findIndex((h) => pats.includes(h));
-            });
-            if (timeIdx === -1 || chIdxs.includes(-1)) return [];
-            return lines.slice(1).flatMap((line, i) => {
-                const cols = line.trim().split(',').map((c) => c.trim());
-                if (!cols[timeIdx]) return [];
-                const vals = chIdxs.map((idx) => parseFloat(cols[idx]));
-                if (vals.some((v) => isNaN(v))) return [];
-                return [{
-                    id: `fetched-${i}`,
-                    time: cols[timeIdx],
-                    signal1: vals[0],
-                    signal2: vals[1],
-                    signal3: vals[2],
-                    signal4: vals[3],
-                }];
-            });
-        } catch {
-            return [];
-        }
-    }, [activeSessionId]);
+    const handleFetchLabelData = React.useCallback(
+        async (start: string, end: string): Promise<LabelGraphPoint[]> => {
+            if (activeSessionId === null) return [];
+            try {
+                const csv = await exportEEGData(activeSessionId, {
+                    start_time: start,
+                    end_time: end,
+                });
+                const lines = csv.trim().split('\n');
+                if (lines.length < 2) return [];
+                const header = lines[0]
+                    .split(',')
+                    .map((h) => h.trim().toLowerCase());
+                const timeIdx = header.findIndex(
+                    (h) => h.includes('time') || h === 'timestamp'
+                );
+                const chIdxs = [0, 1, 2, 3].map((n) => {
+                    const pats = [`ch${n + 1}`, `channel${n + 1}`];
+                    return header.findIndex((h) => pats.includes(h));
+                });
+                if (timeIdx === -1 || chIdxs.includes(-1)) return [];
+                return lines.slice(1).flatMap((line, i) => {
+                    const cols = line
+                        .trim()
+                        .split(',')
+                        .map((c) => c.trim());
+                    if (!cols[timeIdx]) return [];
+                    const vals = chIdxs.map((idx) => parseFloat(cols[idx]));
+                    if (vals.some((v) => isNaN(v))) return [];
+                    return [
+                        {
+                            id: `fetched-${i}`,
+                            time: cols[timeIdx],
+                            signal1: vals[0],
+                            signal2: vals[1],
+                            signal3: vals[2],
+                            signal4: vals[3],
+                        },
+                    ];
+                });
+            } catch {
+                return [];
+            }
+        },
+        [activeSessionId]
+    );
 
     const timelineRows = React.useMemo<TimelineLabelRow[]>(() => {
-        const completedRows: TimelineLabelRow[] = labeledMoments.map((moment) => ({
-            id: moment.id,
-            label: moment.label,
-            color: moment.color,
-            startTimestamp: moment.startTimestamp,
-            endTimestamp: moment.endTimestamp,
-            source: moment.source,
-            isInProgress: false,
-        }));
+        const completedRows: TimelineLabelRow[] = labeledMoments.map(
+            (moment) => ({
+                id: moment.id,
+                label: moment.label,
+                color: moment.color,
+                startTimestamp: moment.startTimestamp,
+                endTimestamp: moment.endTimestamp,
+                source: moment.source,
+                isInProgress: false,
+            })
+        );
 
         if (isTriggerActive && activeStartTimestamp) {
             completedRows.push({
@@ -416,7 +477,13 @@ export default function LabelNode({ id }: LabelNodeProps) {
         }
 
         return completedRows;
-    }, [activeStartTimestamp, isTriggerActive, labelInputValue, labeledMoments, selectedColor]);
+    }, [
+        activeStartTimestamp,
+        isTriggerActive,
+        labelInputValue,
+        labeledMoments,
+        selectedColor,
+    ]);
 
     const graphData = React.useMemo<LabelGraphPoint[]>(() => {
         return renderData

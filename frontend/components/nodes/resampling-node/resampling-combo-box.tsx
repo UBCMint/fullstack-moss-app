@@ -33,7 +33,10 @@ export default function ResamplingComboBox({
 
     return (
         <div
-            className={cn('bg-white rounded-[30px] border-2 overflow-hidden', 'border-[#D3D3D3]')}
+            className={cn(
+                'bg-white rounded-[30px] border-2 overflow-hidden',
+                'border-[#D3D3D3]'
+            )}
             style={{ width: 'fit-content', minWidth: '396px' }}
         >
             {/* Header */}
@@ -51,7 +54,9 @@ export default function ResamplingComboBox({
                     <div
                         className={cn(
                             'absolute left-16 w-3 h-3 rounded-full',
-                            isConnected && isDataStreamOn ? 'bg-[#509693]' : 'bg-[#D3D3D3]'
+                            isConnected && isDataStreamOn
+                                ? 'bg-[#509693]'
+                                : 'bg-[#D3D3D3]'
                         )}
                     />
                     <span className="absolute left-24 font-geist text-[25px] font-[550] leading-tight text-black tracking-wider">
@@ -79,15 +84,21 @@ export default function ResamplingComboBox({
                 style={{
                     maxHeight: isExpanded ? '280px' : '0px',
                     opacity: isExpanded ? 1 : 0,
-                    transition: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
+                    transition:
+                        'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
                 }}
             >
-                <div className="flex flex-col pb-4" style={{ paddingLeft: '60px', paddingRight: '60px' }}>
+                <div
+                    className="flex flex-col pb-4"
+                    style={{ paddingLeft: '60px', paddingRight: '60px' }}
+                >
                     <div className="flex flex-col space-y-0.5">
                         {PRESET_OPTIONS.map((option) => (
                             <button
                                 key={option.value}
-                                onClick={() => onRateChange(option.value as ResampleRate)}
+                                onClick={() =>
+                                    onRateChange(option.value as ResampleRate)
+                                }
                                 className={cn(
                                     'text-left px-3 py-1 text-sm rounded-lg transition-colors',
                                     rate === option.value
@@ -118,7 +129,9 @@ export default function ResamplingComboBox({
                                 type="number"
                                 min={1}
                                 value={customRate}
-                                onChange={(e) => onCustomRateChange(Number(e.target.value))}
+                                onChange={(e) =>
+                                    onCustomRateChange(Number(e.target.value))
+                                }
                                 className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#509693]"
                             />
                             <span className="text-sm text-gray-500">Hz</span>

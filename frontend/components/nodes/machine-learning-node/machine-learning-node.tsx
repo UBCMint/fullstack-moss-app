@@ -61,7 +61,9 @@ export default function MachineLearningNode({ id }: MachineLearningNodeProps) {
                     const reachesSource = (nodeId: string): boolean => {
                         if (visited.has(nodeId)) return false;
                         visited.add(nodeId);
-                        const incoming = edges.filter((e) => e.target === nodeId);
+                        const incoming = edges.filter(
+                            (e) => e.target === nodeId
+                        );
                         for (const inEdge of incoming) {
                             const upNode = findNodeById(inEdge.source);
                             if (!upNode) continue;

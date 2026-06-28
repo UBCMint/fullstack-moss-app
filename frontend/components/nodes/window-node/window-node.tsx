@@ -6,7 +6,10 @@ import WindowComboBox, { type WindowOption } from './window-combo-box';
 
 interface WindowNodeProps {
     id?: string;
-    data?: { config?: { chunk_size?: number; overlap_size?: number }; selectedOption?: WindowOption };
+    data?: {
+        config?: { chunk_size?: number; overlap_size?: number };
+        selectedOption?: WindowOption;
+    };
 }
 
 export default function WindowNode({ id, data }: WindowNodeProps) {
@@ -24,16 +27,19 @@ export default function WindowNode({ id, data }: WindowNodeProps) {
     );
 
     const [isConnected, setIsConnected] = React.useState(false);
-    
+
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
-    
+
     const { dataStreaming } = useGlobalContext();
 
-    const buildConfig = React.useCallback(() => ({
-        chunk_size: windowSize,
-        overlap_size: overlapSize,
-    }), [windowSize, overlapSize]);
+    const buildConfig = React.useCallback(
+        () => ({
+            chunk_size: windowSize,
+            overlap_size: overlapSize,
+        }),
+        [windowSize, overlapSize]
+    );
 
     // Validate config values
     const isValidConfig =
@@ -50,45 +56,54 @@ export default function WindowNode({ id, data }: WindowNodeProps) {
         const config = buildConfig();
         reactFlowInstance.setNodes((nds) =>
             nds.map((n) =>
-                n.id === id ? { ...n, data: { ...n.data, config, selectedOption } } : n
+                n.id === id
+                    ? { ...n, data: { ...n.data, config, selectedOption } }
+                    : n
             )
         );
         window.dispatchEvent(new Event('node-config-changed'));
     }, [id, reactFlowInstance, buildConfig, selectedOption, isValidConfig]);
-
 
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
         try {
             const edges = reactFlowInstance.getEdges();
             const nodes = reactFlowInstance.getNodes();
-            
+
             // Check if this node is connected to source node or any activated node
-            const isConnectedToActivatedNode = (nodeId: string, visited: Set<string> = new Set()): boolean => {
+            const isConnectedToActivatedNode = (
+                nodeId: string,
+                visited: Set<string> = new Set()
+            ): boolean => {
                 if (visited.has(nodeId)) return false; // Prevent infinite loops
                 visited.add(nodeId);
-                
+
                 // Find incoming edges to this node
-                const incomingEdges = edges.filter(edge => edge.target === nodeId);
-                
+                const incomingEdges = edges.filter(
+                    (edge) => edge.target === nodeId
+                );
+
                 for (const edge of incomingEdges) {
-                    const sourceNode = nodes.find(n => n.id === edge.source);
+                    const sourceNode = nodes.find((n) => n.id === edge.source);
                     if (!sourceNode) continue;
-                    
+
                     // If source is a source-node, we're activated
                     if (sourceNode.type === 'source-node') {
                         return true;
                     }
-                    
+
                     // If source is another node, check if it's activated
-                    if (sourceNode.id && isConnectedToActivatedNode(sourceNode.id, visited)) {
+                    if (
+                        sourceNode.id &&
+                        isConnectedToActivatedNode(sourceNode.id, visited)
+                    ) {
                         return true;
                     }
                 }
-                
+
                 return false;
             };
-            
+
             const isActivated = id ? isConnectedToActivatedNode(id) : false;
             setIsConnected(isActivated);
         } catch (error) {
@@ -100,37 +115,40 @@ export default function WindowNode({ id, data }: WindowNodeProps) {
     // Check connection status on mount and when edges might change
     React.useEffect(() => {
         checkConnectionStatus();
-        
+
         // Listen for custom edge change events
         const handleEdgeChange = () => {
             checkConnectionStatus();
         };
-        
+
         window.addEventListener('reactflow-edges-changed', handleEdgeChange);
-        
+
         // Also set up periodic check as backup
         const interval = setInterval(checkConnectionStatus, 1000);
-        
+
         return () => {
-            window.removeEventListener('reactflow-edges-changed', handleEdgeChange);
+            window.removeEventListener(
+                'reactflow-edges-changed',
+                handleEdgeChange
+            );
             clearInterval(interval);
         };
     }, [checkConnectionStatus]);
 
     // Push config to node data and dispatch processing config when relevant state changes
     React.useEffect(() => {
-        if(!isValidConfig) return;
+        if (!isValidConfig) return;
         pushConfigToNodeData();
     }, [pushConfigToNodeData, isValidConfig]);
 
     return (
         <div className="relative">
             {/* Input Handle - positioned to align with left circle */}
-            <Handle 
-                type="target" 
+            <Handle
+                type="target"
                 position={Position.Left}
                 id="window-input"
-                style={{ 
+                style={{
                     left: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
@@ -141,16 +159,16 @@ export default function WindowNode({ id, data }: WindowNodeProps) {
                     borderRadius: '50%',
                     zIndex: 20,
                     cursor: 'crosshair',
-                    pointerEvents: 'all'
+                    pointerEvents: 'all',
                 }}
             />
-            
+
             {/* Output Handle - positioned to align with right circle */}
-            <Handle 
-                type="source" 
+            <Handle
+                type="source"
                 position={Position.Right}
                 id="window-output"
-                style={{ 
+                style={{
                     right: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
@@ -161,12 +179,12 @@ export default function WindowNode({ id, data }: WindowNodeProps) {
                     borderRadius: '50%',
                     zIndex: 20,
                     cursor: 'crosshair',
-                    pointerEvents: 'all'
+                    pointerEvents: 'all',
                 }}
             />
 
             {/* Just the ComboBox without Card wrapper */}
-            <WindowComboBox 
+            <WindowComboBox
                 windowSize={windowSize}
                 overlapSize={overlapSize}
                 selectedOption={selectedOption}

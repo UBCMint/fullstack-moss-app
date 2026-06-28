@@ -3,10 +3,10 @@ import { forwardToBackend, passthroughJsonResponse } from '@/lib/backend-proxy';
 export async function GET(
     _req: Request,
     context: {
-        params: { session_id: string } | Promise<{ session_id: string }>;
+        params: Promise<{ session_id: string }>;
     }
 ) {
-    const params = await Promise.resolve(context.params);
+    const params = await context.params;
 
     const response = await forwardToBackend({
         method: 'GET',
@@ -19,10 +19,10 @@ export async function GET(
 export async function POST(
     req: Request,
     context: {
-        params: { session_id: string } | Promise<{ session_id: string }>;
+        params: Promise<{ session_id: string }>;
     }
 ) {
-    const params = await Promise.resolve(context.params);
+    const params = await context.params;
     const body = await req.text();
 
     const response = await forwardToBackend({
@@ -33,4 +33,3 @@ export async function POST(
 
     return passthroughJsonResponse(response);
 }
-

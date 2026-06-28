@@ -3,10 +3,10 @@ import { forwardToBackend, passthroughJsonResponse } from '@/lib/backend-proxy';
 export async function GET(
     req: Request,
     context: {
-        params: { session_id: string } | Promise<{ session_id: string }>;
+        params: Promise<{ session_id: string }>;
     }
 ) {
-    const params = await Promise.resolve(context.params);
+    const params = await context.params;
     const requestUrl = new URL(req.url);
     const search = requestUrl.search;
 

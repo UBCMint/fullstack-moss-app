@@ -52,7 +52,9 @@ export default function SettingsBar() {
     );
     const [sessions, setSessions] = useState<SessionSummary[]>([]);
     const [isFetchingSessions, setIsFetchingSessions] = useState(false);
-    const [fetchingFor, setFetchingFor] = useState<'save' | 'load' | null>(null);
+    const [fetchingFor, setFetchingFor] = useState<'save' | 'load' | null>(
+        null
+    );
     const [isSaving, setIsSaving] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [isDirty, setIsDirty] = useState(false);
@@ -87,9 +89,12 @@ export default function SettingsBar() {
     useEffect(() => {
         if (activeSessionId !== null) return;
         createSession(`(unsaved) ${new Date().toISOString()}`)
-            .then((s) => { setActiveSessionId(s.id); setActiveSessionName(null); })
+            .then((s) => {
+                setActiveSessionId(s.id);
+                setActiveSessionName(null);
+            })
             .catch((e) => console.error('Failed to auto-create session:', e));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Timer effect - starts/stops based on dataStreaming state
@@ -97,7 +102,7 @@ export default function SettingsBar() {
         if (dataStreaming) {
             // Start the timer
             intervalRef.current = setInterval(() => {
-                setLeftTimerSeconds(prev => {
+                setLeftTimerSeconds((prev) => {
                     if (prev >= 300) return 300; // Cap at 300 seconds (5 minutes)
                     return prev + 1;
                 });
@@ -123,7 +128,6 @@ export default function SettingsBar() {
             setDataStreaming(false);
         }
     }, [leftTimerSeconds, dataStreaming, setDataStreaming]);
-
 
     const handleStartStop = () => {
         setDataStreaming(!dataStreaming);
@@ -155,9 +159,13 @@ export default function SettingsBar() {
                 resolve(customEvent.detail);
             };
 
-            window.addEventListener('frontend-state-response', responseListener, {
-                once: true,
-            });
+            window.addEventListener(
+                'frontend-state-response',
+                responseListener,
+                {
+                    once: true,
+                }
+            );
             window.dispatchEvent(new Event('request-frontend-state'));
         });
 
@@ -197,9 +205,14 @@ export default function SettingsBar() {
         setFetchingFor('save');
         try {
             const fetchedSessions = await getSessions();
-            setSessions(fetchedSessions.filter(
-                (s) => !s.name.startsWith('Label Session ') && !s.name.startsWith('(unsaved) ') && !s.name.startsWith('Session ')
-            ));
+            setSessions(
+                fetchedSessions.filter(
+                    (s) =>
+                        !s.name.startsWith('Label Session ') &&
+                        !s.name.startsWith('(unsaved) ') &&
+                        !s.name.startsWith('Session ')
+                )
+            );
             setSessionModalMode('save');
             setIsSessionModalOpen(true);
         } catch (error) {
@@ -219,9 +232,14 @@ export default function SettingsBar() {
         try {
             const fetchedSessions = await getSessions();
             // Filter out orphaned label-node sessions created by old code.
-            setSessions(fetchedSessions.filter(
-                (s) => !s.name.startsWith('Label Session ') && !s.name.startsWith('(unsaved) ') && !s.name.startsWith('Session ')
-            ));
+            setSessions(
+                fetchedSessions.filter(
+                    (s) =>
+                        !s.name.startsWith('Label Session ') &&
+                        !s.name.startsWith('(unsaved) ') &&
+                        !s.name.startsWith('Session ')
+                )
+            );
             setSessionModalMode('load');
             setIsSessionModalOpen(true);
         } catch (error) {
@@ -238,7 +256,9 @@ export default function SettingsBar() {
     const handleLoadClick = () => {
         if (isSaving || isLoading || isFetchingSessions) return;
         if (dataStreaming) {
-            notifications.error({ title: 'Stop the data stream before doing this.' });
+            notifications.error({
+                title: 'Stop the data stream before doing this.',
+            });
             return;
         }
         if (isDirty) {
@@ -253,7 +273,9 @@ export default function SettingsBar() {
             return;
         }
         if (dataStreaming) {
-            notifications.error({ title: 'Stop the data stream before doing this.' });
+            notifications.error({
+                title: 'Stop the data stream before doing this.',
+            });
             return;
         }
         if (isDirty) {
@@ -278,7 +300,9 @@ export default function SettingsBar() {
                 setActiveSessionName(null);
                 notifications.success({ title: 'New session started' });
             })
-            .catch(() => notifications.error({ title: 'Could not create session' }));
+            .catch(() =>
+                notifications.error({ title: 'Could not create session' })
+            );
     };
 
     const handleCreateAndSaveSession = async (sessionName: string) => {
@@ -288,8 +312,11 @@ export default function SettingsBar() {
             const [state, oldLabels] = await Promise.all([
                 requestFrontendState(),
                 oldSessionId !== null
-                    ? getTimeLabels(oldSessionId, '1970-01-01T00:00:00Z', '2100-01-01T00:00:00Z')
-                          .catch(() => [])
+                    ? getTimeLabels(
+                          oldSessionId,
+                          '1970-01-01T00:00:00Z',
+                          '2100-01-01T00:00:00Z'
+                      ).catch(() => [])
                     : Promise.resolve([]),
             ]);
 
@@ -307,8 +334,8 @@ export default function SettingsBar() {
                     color: l.color,
                 }));
             if (labelsToMigrate.length > 0) {
-                await saveTimeLabels(createdSession.id, labelsToMigrate).catch((e) =>
-                    console.warn('[session] label migration failed:', e)
+                await saveTimeLabels(createdSession.id, labelsToMigrate).catch(
+                    (e) => console.warn('[session] label migration failed:', e)
                 );
             }
 
@@ -332,7 +359,9 @@ export default function SettingsBar() {
         try {
             const loadedPayload = await loadFrontendState(sessionId);
             if (!isFrontendWorkspaceState(loadedPayload)) {
-                throw new Error('Loaded session payload has an invalid format.');
+                throw new Error(
+                    'Loaded session payload has an invalid format.'
+                );
             }
 
             suppressDirtyUntilRef.current = Date.now() + 2000;
@@ -369,7 +398,10 @@ export default function SettingsBar() {
             {/* Session ID, Tutorials */}
             <Menubar>
                 <span className="px-3 py-1 text-sm">
-                    {activeSessionName ?? (activeSessionId !== null ? 'Unsaved session' : 'New session')}
+                    {activeSessionName ??
+                        (activeSessionId !== null
+                            ? 'Unsaved session'
+                            : 'New session')}
                 </span>
                 <button className="px-3 py-1 text-sm rounded-sm hover:bg-accent hover:text-accent-foreground hover:underline">
                     Tutorials
@@ -400,7 +432,6 @@ export default function SettingsBar() {
                 />
             </div>
 
-
             {/* start/stop, reset, import, export, save, load */}
             <div className="flex space-x-2">
                 <Button
@@ -409,7 +440,10 @@ export default function SettingsBar() {
                 >
                     {dataStreaming ? 'Stop Data Stream' : 'Start Data Stream'}
                 </Button>
-                <Dialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
+                <Dialog
+                    open={isResetDialogOpen}
+                    onOpenChange={setIsResetDialogOpen}
+                >
                     <DialogTrigger asChild>
                         <Button variant="outline">Reset</Button>
                     </DialogTrigger>
@@ -417,28 +451,33 @@ export default function SettingsBar() {
                         <DialogHeader>
                             <DialogTitle>Clear current pipeline?</DialogTitle>
                             <DialogDescription>
-                                This will stop the running stream and remove all nodes and edges. This action cannot be undone.
+                                This will stop the running stream and remove all
+                                nodes and edges. This action cannot be undone.
                             </DialogDescription>
                         </DialogHeader>
                         <div className="flex justify-end gap-2 mt-4">
                             <DialogClose asChild>
                                 <Button variant="outline">Cancel</Button>
                             </DialogClose>
-                            <Button className="bg-red-500" onClick={handleConfirmReset}>Confirm Reset</Button>
+                            <Button
+                                className="bg-red-500"
+                                onClick={handleConfirmReset}
+                            >
+                                Confirm Reset
+                            </Button>
                         </div>
                     </DialogContent>
                 </Dialog>
                 <Button
                     variant="outline"
-
                     onClick={handleSaveClick}
                     disabled={isSaving || isLoading || isFetchingSessions}
                 >
                     {isSaving
                         ? 'Saving...'
                         : fetchingFor === 'save'
-                            ? 'Preparing...'
-                            : 'Save'}
+                          ? 'Preparing...'
+                          : 'Save'}
                 </Button>
                 <Button
                     variant="outline"
@@ -448,8 +487,8 @@ export default function SettingsBar() {
                     {isLoading
                         ? 'Loading...'
                         : fetchingFor === 'load'
-                            ? 'Preparing...'
-                            : 'Load'}
+                          ? 'Preparing...'
+                          : 'Load'}
                 </Button>
             </div>
 
@@ -458,24 +497,36 @@ export default function SettingsBar() {
                     <DialogHeader>
                         <DialogTitle>Start a new session?</DialogTitle>
                         <DialogDescription>
-                            Your current session is unsaved. Hitting confirm will clear the current pipeline. Any unsaved changes will be lost.
+                            Your current session is unsaved. Hitting confirm
+                            will clear the current pipeline. Any unsaved changes
+                            will be lost.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex justify-end gap-2 mt-4">
                         <DialogClose asChild>
                             <Button variant="outline">Cancel</Button>
                         </DialogClose>
-                        <Button className="bg-red-500" onClick={handleConfirmNew}>Confirm</Button>
+                        <Button
+                            className="bg-red-500"
+                            onClick={handleConfirmNew}
+                        >
+                            Confirm
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>
 
-            <Dialog open={isLoadWarningOpen} onOpenChange={setIsLoadWarningOpen}>
+            <Dialog
+                open={isLoadWarningOpen}
+                onOpenChange={setIsLoadWarningOpen}
+            >
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Load a different session?</DialogTitle>
                         <DialogDescription>
-                            Your current session has unsaved changes. Loading a new session will discard them. Save first if you want to keep your work.
+                            Your current session has unsaved changes. Loading a
+                            new session will discard them. Save first if you
+                            want to keep your work.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex justify-end gap-2 mt-4">

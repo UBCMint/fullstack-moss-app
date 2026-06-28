@@ -59,10 +59,12 @@ export default function SessionModal({
     }, [open, mode]);
 
     const normalizedExistingNames = useMemo(
-        () => new Set(sessions.map((session) => session.name.trim().toLowerCase())),
+        () =>
+            new Set(
+                sessions.map((session) => session.name.trim().toLowerCase())
+            ),
         [sessions]
     );
-
 
     const handleSave = async () => {
         const trimmed = sessionName.trim();
@@ -108,13 +110,17 @@ export default function SessionModal({
                     <div className="space-y-2">
                         <input
                             value={sessionName}
-                            onChange={(event) => setSessionName(event.target.value)}
+                            onChange={(event) =>
+                                setSessionName(event.target.value)
+                            }
                             placeholder="Session name"
                             className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                             disabled={isSubmitting}
                         />
                         {validationError ? (
-                            <p className="text-sm text-red-600">{validationError}</p>
+                            <p className="text-sm text-red-600">
+                                {validationError}
+                            </p>
                         ) : null}
                     </div>
                 ) : (
@@ -128,13 +134,16 @@ export default function SessionModal({
                                         <CommandItem
                                             key={session.id}
                                             value={`${session.name} ${session.id}`}
-                                            onSelect={() => setSelectedSessionId(session.id)}
+                                            onSelect={() =>
+                                                setSelectedSessionId(session.id)
+                                            }
                                             disabled={isSubmitting}
                                         >
                                             <Check
                                                 className={cn(
                                                     'mr-2 h-4 w-4',
-                                                    selectedSessionId === session.id
+                                                    selectedSessionId ===
+                                                        session.id
                                                         ? 'opacity-100'
                                                         : 'opacity-0'
                                                 )}
@@ -149,7 +158,9 @@ export default function SessionModal({
                             </CommandList>
                         </Command>
                         {validationError ? (
-                            <p className="text-sm text-red-600">{validationError}</p>
+                            <p className="text-sm text-red-600">
+                                {validationError}
+                            </p>
                         ) : null}
                     </div>
                 )}
@@ -182,4 +193,3 @@ export default function SessionModal({
         </Dialog>
     );
 }
-

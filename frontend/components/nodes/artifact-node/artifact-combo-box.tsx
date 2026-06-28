@@ -32,7 +32,9 @@ export default function ArtifactComboBox({
 
     const handleArtifactToggle = (artifact: string) => {
         if (selectedArtifacts.includes(artifact)) {
-            onSelectedArtifactsChange(selectedArtifacts.filter(a => a !== artifact));
+            onSelectedArtifactsChange(
+                selectedArtifacts.filter((a) => a !== artifact)
+            );
         } else {
             onSelectedArtifactsChange([...selectedArtifacts, artifact]);
         }
@@ -64,12 +66,12 @@ export default function ArtifactComboBox({
                     <div
                         className={cn(
                             'absolute left-16 w-3 h-3 rounded-full',
-                            isConnected && isDataStreamOn ? 'bg-[#509693]' : 'bg-[#D3D3D3]'
+                            isConnected && isDataStreamOn
+                                ? 'bg-[#509693]'
+                                : 'bg-[#D3D3D3]'
                         )}
                     />
-                    <span
-                        className="absolute left-24 font-geist text-[25px] font-[550] leading-tight text-black tracking-wider"
-                    >
+                    <span className="absolute left-24 font-geist text-[25px] font-[550] leading-tight text-black tracking-wider">
                         Artifact Removal
                     </span>
                 </div>
@@ -77,8 +79,9 @@ export default function ArtifactComboBox({
                 <div className="flex items-center space-x-3">
                     <div className="absolute right-[58px] transition-transform duration-300 ease-in-out">
                         <ChevronUp
-                            className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${isExpanded ? 'rotate-0' : 'rotate-180'
-                                }`}
+                            className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${
+                                isExpanded ? 'rotate-0' : 'rotate-180'
+                            }`}
                         />
                     </div>
                     <div
@@ -90,14 +93,14 @@ export default function ArtifactComboBox({
                 </div>
             </button>
 
-
             {/* Expanded Section */}
             <div
                 className="overflow-hidden"
                 style={{
                     maxHeight: isExpanded ? '360px' : '0px',
                     opacity: isExpanded ? 1 : 0,
-                    transition: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
+                    transition:
+                        'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
                 }}
             >
                 <div
@@ -110,16 +113,23 @@ export default function ArtifactComboBox({
                             onClick={() => onModeChange('auto')}
                             className={cn(
                                 'text-left px-3 py-1 text-sm rounded-lg transition-colors',
-                                mode === 'auto' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+                                mode === 'auto'
+                                    ? 'bg-gray-100 text-gray-900'
+                                    : 'text-gray-600 hover:bg-gray-50'
                             )}
                         >
-                            Auto Calibrate <span className="italic text-gray-400">(Recommended)</span>
+                            Auto Calibrate{' '}
+                            <span className="italic text-gray-400">
+                                (Recommended)
+                            </span>
                         </button>
                         <button
                             onClick={() => onModeChange('manual')}
                             className={cn(
                                 'text-left px-3 py-1 text-sm rounded-lg transition-colors',
-                                mode === 'manual' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+                                mode === 'manual'
+                                    ? 'bg-gray-100 text-gray-900'
+                                    : 'text-gray-600 hover:bg-gray-50'
                             )}
                         >
                             Manually Calibration
@@ -139,19 +149,31 @@ export default function ArtifactComboBox({
                                 <input
                                     type="checkbox"
                                     className="w-4 h-4 rounded accent-[#509693]"
-                                    checked={selectedArtifacts.includes('eye_blink')}
-                                    onChange={() => handleArtifactToggle('eye_blink')}
+                                    checked={selectedArtifacts.includes(
+                                        'eye_blink'
+                                    )}
+                                    onChange={() =>
+                                        handleArtifactToggle('eye_blink')
+                                    }
                                 />
-                                <span className="text-sm text-gray-600">Eye Blinks</span>
+                                <span className="text-sm text-gray-600">
+                                    Eye Blinks
+                                </span>
                             </label>
                             <label className="flex items-center space-x-2 cursor-pointer">
                                 <input
                                     type="checkbox"
                                     className="w-4 h-4 rounded accent-[#509693]"
-                                    checked={selectedArtifacts.includes('muscle_tension')}
-                                    onChange={() => handleArtifactToggle('muscle_tension')}
+                                    checked={selectedArtifacts.includes(
+                                        'muscle_tension'
+                                    )}
+                                    onChange={() =>
+                                        handleArtifactToggle('muscle_tension')
+                                    }
                                 />
-                                <span className="text-sm text-gray-600">Muscle Tension</span>
+                                <span className="text-sm text-gray-600">
+                                    Muscle Tension
+                                </span>
                             </label>
                         </div>
                     </div>
@@ -159,11 +181,15 @@ export default function ArtifactComboBox({
                     {/* Intensity Slider */}
                     <div className="pt-3 w-full">
                         <div className="h-px bg-gray-200 w-full mb-3" />
-                        <span className="text-xs font-bold tracking-widest text-gray-400 uppercase">Filter Intensity</span>
+                        <span className="text-xs font-bold tracking-widest text-gray-400 uppercase">
+                            Filter Intensity
+                        </span>
                         <div className="mt-5 mb-1">
                             <Slider
                                 value={[intensity]}
-                                onValueChange={(val) => onIntensityChange(val[0])}
+                                onValueChange={(val) =>
+                                    onIntensityChange(val[0])
+                                }
                                 max={100}
                                 step={1}
                                 className="w-full"

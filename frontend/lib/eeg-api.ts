@@ -2,7 +2,7 @@ export type ExportOptions = {
     format?: 'csv';
     includeHeader?: boolean;
     start_time?: string; // RFC3339
-    end_time?: string;   // RFC3339
+    end_time?: string; // RFC3339
 };
 
 export type ExportRequest = {
@@ -30,22 +30,18 @@ export async function exportEEGData(
         },
     };
 
-    const response = await fetch(
-        `/api/sessions/${sessionId}/eeg_data/export`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        }
-    );
+    const response = await fetch(`/api/sessions/${sessionId}/eeg_data/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
 
     if (!response.ok) {
         let message = `Export failed (${response.status})`;
         try {
             const text = await response.text();
             if (text) message = text;
-        } catch {
-        }
+        } catch {}
         throw new Error(message);
     }
 
@@ -78,22 +74,18 @@ export async function importEEGData(
     sessionId: number,
     csvText: string
 ): Promise<void> {
-    const response = await fetch(
-        `/api/sessions/${sessionId}/eeg_data/import`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/csv' },
-            body: csvText,
-        }
-    );
+    const response = await fetch(`/api/sessions/${sessionId}/eeg_data/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/csv' },
+        body: csvText,
+    });
 
     if (!response.ok) {
         let message = `Import failed (${response.status})`;
         try {
             const text = await response.text();
             if (text) message = text;
-        } catch {
-        }
+        } catch {}
         throw new Error(message);
     }
 }

@@ -1,14 +1,13 @@
 export type ProcessingConfig = {
-    apply_bandpass: boolean
-    use_iir: boolean
-    l_freq: number | null
-    h_freq: number | null
-    downsample_factor: number | null
-    sfreq: number
-    n_channels: number
-}
+    apply_bandpass: boolean;
+    use_iir: boolean;
+    l_freq: number | null;
+    h_freq: number | null;
+    downsample_factor: number | null;
+    sfreq: number;
+    n_channels: number;
+};
 export type WindowingConfig = {
-    chunk_size: number
-    overlap_size: number
-}
-  
+    chunk_size: number;
+    overlap_size: number;
+};
