@@ -37,7 +37,11 @@ jobs:
 
   clippy:
     name: clippy
-    runs-on: ubuntu-latest
+    # Pinned to 22.04: lsl-sys vendors an old Boost whose pthread code assumes
+    # PTHREAD_STACK_MIN is a compile-time constant. Ubuntu 24.04's glibc made it
+    # a function call, which breaks the preprocessor check (`#if PTHREAD_STACK_MIN > 0`).
+    # Revisit if/when lsl-sys upstream fixes this, or if we vendor a real patched liblsl.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     env:
       SQLX_OFFLINE: "true"
