@@ -37,11 +37,14 @@ jobs:
 
   clippy:
     name: clippy
-    # Pinned to 22.04: lsl-sys vendors an old Boost whose pthread code assumes
-    # PTHREAD_STACK_MIN is a compile-time constant. Ubuntu 24.04's glibc made it
-    # a function call, which breaks the preprocessor check (`#if PTHREAD_STACK_MIN > 0`).
-    # Revisit if/when lsl-sys upstream fixes this, or if we vendor a real patched liblsl.
-    runs-on: ubuntu-22.04
+    # lsl-sys vendors an old Boost whose pthread code assumes PTHREAD_STACK_MIN
+    # is a compile-time constant (`#if PTHREAD_STACK_MIN > 0`). glibc 2.34+ made
+    # it a function call instead, which breaks that preprocessor check on every
+    # current Ubuntu runner image (20.04/22.04/24.04 all ship glibc >= 2.34).
+    # We patch the vendored header in-place after cargo fetches it (see the
+    # "Patch lsl-sys vendored Boost" step below) rather than pinning an OS
+    # version, since no currently-supported Ubuntu image avoids this.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       SQLX_OFFLINE: "true"
@@ -59,6 +62,30 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
+      - name: cargo fetch
+        working-directory: backend
+        run: cargo fetch
+      - name: Patch lsl-sys vendored Boost (PTHREAD_STACK_MIN fix)
+        run: |
+          set -euo pipefail
+          # Locate the lsl-sys crate source that `cargo fetch` just pulled down.
+          HEADER=$(find "$HOME/.cargo/registry/src" -path "*/lsl-sys-*/liblsl/lslboost/boost/thread/pthread/thread_data.hpp" -print -quit)
+          if [ -z "$HEADER" ]; then
+            echo "::error::Could not locate lsl-sys's thread_data.hpp to patch. Did the crate version or vendor path change?"
+            exit 1
+          fi
+          echo "Patching: $HEADER"
+          # glibc >= 2.34 made PTHREAD_STACK_MIN a function call instead of a
+          # compile-time constant, which breaks this preprocessor conditional.
+          # Force the branch this guards (the >0 case is always true in practice)
+          # instead of evaluating the macro at preprocessor time.
+          sed -i 's/#if PTHREAD_STACK_MIN > 0/#if 1/' "$HEADER"
+          # Fail loudly if the line we expected to patch wasn't actually there,
+          # so a future lsl-sys version bump doesn't silently no-op this step.
+          if ! grep -q '^#if 1$' "$HEADER"; then
+            echo "::error::Patch did not apply — thread_data.hpp may have changed upstream."
+            exit 1
+          fi
       - name: cargo clippy
         working-directory: backend
         run: cargo clippy --workspace --all-targets -- -D warnings
