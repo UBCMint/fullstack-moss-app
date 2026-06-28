@@ -5,9 +5,19 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import ComboBox from './combo-box';
 
+interface FilterConfig {
+    apply_bandpass: boolean;
+    use_iir: boolean;
+    l_freq: number | null;
+    h_freq: number | null;
+    downsample_factor: number | null;
+    sfreq: number;
+    n_channels: number;
+}
+
 interface FilterNodeProps {
     id?: string;
-    data?: { _highCutoff?: number; _lowCutoff?: number; _selectedFilter?: string; config?: Record<string, any> };
+    data?: { _highCutoff?: number; _lowCutoff?: number; _selectedFilter?: string; config?: FilterConfig };
 }
 
 export default function FilterNode({ id, data }: FilterNodeProps) {
@@ -21,7 +31,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
     
     const { dataStreaming } = useGlobalContext();
 
-    const buildConfig = () => {
+        const buildConfig = React.useCallback((): FilterConfig => {
         if (!isConnected) {
           return {
             apply_bandpass: false,
@@ -70,8 +80,8 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
 
             default:
                 throw new Error(`Unhandled filter type: ${selectedFilter}`)
-        }
-      }       
+                }
+            }, [isConnected, selectedFilter, lowCutoff, highCutoff]);
 
     // write config to node data for later retrieval when dispatching pipeline payload
     const pushConfigToNodeData = React.useCallback(() => {
@@ -84,7 +94,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
             )
         );
         window.dispatchEvent(new Event('node-config-changed'));
-    }, [id, reactFlowInstance, selectedFilter, lowCutoff, highCutoff, isConnected]);
+    }, [id, reactFlowInstance, buildConfig, isConnected, highCutoff, lowCutoff, selectedFilter]);
 
 
     // Check connection status and update state

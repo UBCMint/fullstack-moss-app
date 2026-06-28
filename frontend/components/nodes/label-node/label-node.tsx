@@ -97,7 +97,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const reactFlowInstance = useReactFlow();
 
     // Load persisted labels whenever the active session changes.
-    const validColors: LabelColor[] = ['teal-700', 'teal-500', 'teal-300', 'mint-100'];
+    const validColors: LabelColor[] = React.useMemo(() => ['teal-700', 'teal-500', 'teal-300', 'mint-100'], []);
     React.useEffect(() => {
         // Reset stream anchors so the timeline doesn't carry over state from a previous session.
         setSessionStartTimestamp(null);
@@ -131,7 +131,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
             })
             .catch((e) => console.error('Failed to load time labels:', e))
             .finally(() => setIsLoadingLabels(false));
-    }, [activeSessionId]);
+    }, [activeSessionId, validColors]);
 
     const checkConnectionStatus = React.useCallback(() => {
         try {

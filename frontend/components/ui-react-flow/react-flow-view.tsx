@@ -235,7 +235,7 @@ const buildPipelinePayload = (
       .filter((n) => PIPELINE_NODE_TYPES.has(n.type ?? ''))
       .map((n) => {
         const type = typeMap[n.type ?? ''] ?? n.type ?? 'unknown'; // Map to backend type
-        const config = (n.data as { config?: Record<string, any> })?.config ?? {}; 
+        const config = (n.data as { config?: Record<string, unknown> })?.config ?? {}; 
 
         if(type == 'preprocessing') {
           return {type, config: {...DEFAULT_PROCESSING, ...config}}; //apply defaults if not specified by user
@@ -281,7 +281,7 @@ const ReactFlowInterface = () => {
             try {
                 setNodes([]);
                 setEdges([]);
-            } catch (_) {
+            } catch {
                 // no-op
             }
         };
@@ -339,7 +339,7 @@ const ReactFlowInterface = () => {
     const dispatchEdgesChanged = () => {
         try {
             window.dispatchEvent(new Event('reactflow-edges-changed'));
-        } catch (_) {
+        } catch {
             // no-op if window is unavailable
         }
     };
@@ -389,6 +389,10 @@ const ReactFlowInterface = () => {
         if (errors.length > 0) {
             console.error('Pipeline validation errors:', errors);
             return; // Don't send invalid pipeline
+        }
+        if (warnings.length > 0) {
+            console.warn('Pipeline validation warnings:', warnings);
+            setShowPipelineWarning(true);
         }
 
         const payload = buildPipelinePayload(nodes, edges, String(activeSessionId));
@@ -483,7 +487,7 @@ const ReactFlowInterface = () => {
 
             return true;
         },
-        [nodes]
+        [nodes, edges]
     );
 
     return (

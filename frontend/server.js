@@ -1,5 +1,4 @@
-const { time } = require('console');
-const WebSocket = require('ws');
+import WebSocket from 'ws';
 
 const wss = new WebSocket.Server({ port: 8080 });
 

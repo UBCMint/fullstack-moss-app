@@ -1,6 +1,6 @@
 export type PipelineNode = {
   type: string;
-  config: Record<string, any>;
+  config: Record<string, unknown>;
 };
 
 export type PipelinePayload = {

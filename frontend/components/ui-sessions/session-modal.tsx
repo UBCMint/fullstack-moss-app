@@ -63,13 +63,6 @@ export default function SessionModal({
         [sessions]
     );
 
-    const selectedSession = useMemo(
-        () =>
-            selectedSessionId === null
-                ? null
-                : sessions.find((session) => session.id === selectedSessionId) || null,
-        [selectedSessionId, sessions]
-    );
 
     const handleSave = async () => {
         const trimmed = sessionName.trim();

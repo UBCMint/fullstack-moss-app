@@ -44,7 +44,8 @@ export async function exportEEGData(
         try {
             const text = await response.text();
             if (text) message = text;
-        } catch (_) { }
+        } catch {
+        }
         throw new Error(message);
     }
 
@@ -91,7 +92,8 @@ export async function importEEGData(
         try {
             const text = await response.text();
             if (text) message = text;
-        } catch (_) { }
+        } catch {
+        }
         throw new Error(message);
     }
 }

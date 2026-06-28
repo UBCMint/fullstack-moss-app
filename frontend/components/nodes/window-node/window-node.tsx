@@ -30,10 +30,10 @@ export default function WindowNode({ id, data }: WindowNodeProps) {
     
     const { dataStreaming } = useGlobalContext();
 
-    const buildConfig = () => ({
+    const buildConfig = React.useCallback(() => ({
         chunk_size: windowSize,
         overlap_size: overlapSize,
-    });
+    }), [windowSize, overlapSize]);
 
     // Validate config values
     const isValidConfig =
@@ -54,7 +54,7 @@ export default function WindowNode({ id, data }: WindowNodeProps) {
             )
         );
         window.dispatchEvent(new Event('node-config-changed'));
-    }, [id, reactFlowInstance, windowSize, overlapSize, selectedOption, isValidConfig]);
+    }, [id, reactFlowInstance, buildConfig, selectedOption, isValidConfig]);
 
 
     // Check connection status and update state

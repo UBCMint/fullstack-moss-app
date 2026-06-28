@@ -29,9 +29,7 @@ export default function ResamplingComboBox({
 }: ResamplingComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
 
-    const selectedLabel =
-        PRESET_OPTIONS.find((o) => o.value === rate)?.label ??
-        (rate === 'custom' ? `${customRate} Hz` : 'Resampling');
+    // selectedLabel intentionally omitted — header shows static "Resampling"
 
     return (
         <div

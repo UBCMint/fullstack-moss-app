@@ -4,9 +4,14 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import ResamplingComboBox, { ResampleRate } from './resampling-combo-box';
 
+interface ResamplingNodeData {
+    rate?: ResampleRate;
+    customRate?: number;
+}
+
 interface ResamplingNodeProps {
     id: string;
-    data?: any;
+    data?: ResamplingNodeData;
 }
 
 export default function ResamplingNode({ id, data }: ResamplingNodeProps) {

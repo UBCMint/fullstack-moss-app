@@ -27,12 +27,12 @@ async function parseErrorMessage(response: Response): Promise<string> {
             ) {
                 return (parsed as { message: string }).message;
             }
-        } catch (_) {
+        } catch {
             return text;
         }
 
         return text;
-    } catch (_) {
+    } catch {
         return fallback;
     }
 }

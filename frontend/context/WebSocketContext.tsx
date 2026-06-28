@@ -22,7 +22,7 @@ type WebSocketContextType = {
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
 
-function formatTimestamp(raw: any): string {
+function formatTimestamp(raw: unknown): string {
     const s = String(raw);
     // ISO 8601 with T: "2026-03-11T03:55:22.715574979Z"
     if (s.includes('T')) return s.slice(11, 23);
@@ -32,14 +32,19 @@ function formatTimestamp(raw: any): string {
     return s;
 }
 
-function normalizeBatch(batch: any): DataPoint[] {
-    return batch.timestamps.map((time: any, i: number) => ({
+interface WebSocketBatch {
+    timestamps: unknown[];
+    signals: unknown[][];
+}
+
+function normalizeBatch(batch: WebSocketBatch): DataPoint[] {
+    return batch.timestamps.map((time: unknown, i: number) => ({
         time: formatTimestamp(time),
         rawTime: String(time),
-        signal1: batch.signals[0][i],
-        signal2: batch.signals[1][i],
-        signal3: batch.signals[2][i],
-        signal4: batch.signals[3][i],
+        signal1: Number(batch.signals[0][i]) ?? 0,
+        signal2: Number(batch.signals[1][i]) ?? 0,
+        signal3: Number(batch.signals[2][i]) ?? 0,
+        signal4: Number(batch.signals[3][i]) ?? 0,
     }));
 }
 

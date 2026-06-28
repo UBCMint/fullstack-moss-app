@@ -69,8 +69,8 @@ function parseEEG(csvContent: string): SignalDataPoint[] {
             }
         }
         return data;
-    } catch (err) {
-        console.error('Failed to parse EEG CSV:', err);
+    } catch (error) {
+        console.error('Failed to parse EEG CSV:', error);
         return [];
     }
 }
@@ -107,7 +107,7 @@ export default function SignalGraphNode({ id }: { id?: string }) {
 
             const activated = id ? reachesSource(id) : false;
             setIsConnected(activated);
-        } catch (err) {
+        } catch {
             setIsConnected(false);
         }
     }, [id, reactFlowInstance]);
@@ -138,8 +138,8 @@ export default function SignalGraphNode({ id }: { id?: string }) {
             try {
                 const csvContent = await exportEEGData(activeSessionId, { start_time: timeframeStart, end_time: timeframeEnd });
                 setSeedData(parseEEG(csvContent));
-            } catch (err) {
-                console.debug('export failed', err);
+            } catch (error) {
+                console.debug('export failed', error);
                 setSeedData([]);
             }
         })();

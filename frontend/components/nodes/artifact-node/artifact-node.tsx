@@ -4,9 +4,15 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import ArtifactComboBox, { ArtifactMode } from './artifact-combo-box';
 
+interface ArtifactNodeData {
+    mode?: ArtifactMode;
+    selectedArtifacts?: string[];
+    intensity?: number;
+}
+
 interface ArtifactNodeProps {
     id: string;
-    data?: any;
+    data?: ArtifactNodeData;
 }
 
 export default function ArtifactNode({ id, data }: ArtifactNodeProps) {

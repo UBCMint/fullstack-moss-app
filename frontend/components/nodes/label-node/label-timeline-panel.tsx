@@ -365,7 +365,11 @@ export default function LabelTimelinePanel({
             return graphData;
         }
 
-        return focused.map(({ timeMs: _timeMs, ...point }) => point);
+        return focused.map((p) => {
+            const { timeMs, ...point } = p;
+            void timeMs;
+            return point;
+        });
     }, [fetchedFocusData, focusWindowMs, graphData, normalizedGraphData]);
 
     // Chart data with a numeric timeMs field so XAxis can use type="number"
