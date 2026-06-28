@@ -17,15 +17,15 @@ import pandas as pd
 from typing import Optional
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-DEFAULT_FS = 256   # fallback sample rate if detection fails
+DEFAULT_FS = 256  # fallback sample rate if detection fails
 
 # Column names per export format
-MIND_MONITOR_COLS = ['RAW_TP9', 'RAW_AF7', 'RAW_AF8', 'RAW_TP10']
-MUSELSL_COLS      = ['TP9', 'AF7', 'AF8', 'TP10']
-EXPORT_COLS       = ['channel1', 'channel2', 'channel3', 'channel4']
+MIND_MONITOR_COLS = ["RAW_TP9", "RAW_AF7", "RAW_AF8", "RAW_TP10"]
+MUSELSL_COLS = ["TP9", "AF7", "AF8", "TP10"]
+EXPORT_COLS = ["channel1", "channel2", "channel3", "channel4"]
 
 # Canonical channel order used throughout MOSS
-CHANNEL_NAMES = ['TP9', 'AF7', 'AF8', 'TP10']
+CHANNEL_NAMES = ["TP9", "AF7", "AF8", "TP10"]
 
 
 def load_csv(filepath: str) -> tuple[np.ndarray, int]:
@@ -42,26 +42,26 @@ def load_csv(filepath: str) -> tuple[np.ndarray, int]:
     Raises:
         ValueError: if the CSV format is not recognized
     """
-    df   = pd.read_csv(filepath)
+    df = pd.read_csv(filepath)
     cols = df.columns.tolist()
 
     # Detect which export format this is
-    if 'RAW_TP9' in cols:
+    if "RAW_TP9" in cols:
         eeg_cols = MIND_MONITOR_COLS
-        ts_col   = 'TimeStamp' if 'TimeStamp' in cols else None
-    elif 'TP9' in cols:
+        ts_col = "TimeStamp" if "TimeStamp" in cols else None
+    elif "TP9" in cols:
         eeg_cols = MUSELSL_COLS
-        ts_col   = 'timestamps' if 'timestamps' in cols else None
-    elif 'channel1' in cols:
+        ts_col = "timestamps" if "timestamps" in cols else None
+    elif "channel1" in cols:
         eeg_cols = EXPORT_COLS
-        ts_col   = 'time' if 'time' in cols else None
+        ts_col = "time" if "time" in cols else None
     else:
         raise ValueError(
             f"Unrecognized CSV format. Expected RAW_TP9/AF7/AF8/TP10, "
             f"TP9/AF7/AF8/TP10, or channel1-4. Got columns: {cols[:10]}"
         )
 
-    df  = df[([ts_col] if ts_col else []) + eeg_cols].dropna(subset=eeg_cols)
+    df = df[([ts_col] if ts_col else []) + eeg_cols].dropna(subset=eeg_cols)
     eeg = df[eeg_cols].values.astype(np.float32)
 
     src_fs = detect_sample_rate(df, ts_col)
@@ -69,9 +69,9 @@ def load_csv(filepath: str) -> tuple[np.ndarray, int]:
     return eeg, src_fs
 
 
-def detect_sample_rate(df: pd.DataFrame,
-                       ts_col: Optional[str],
-                       default: int = DEFAULT_FS) -> int:
+def detect_sample_rate(
+    df: pd.DataFrame, ts_col: Optional[str], default: int = DEFAULT_FS
+) -> int:
     """
     Estimate sample rate from a timestamp column.
     Falls back to default if timestamps are unavailable or unparseable.
@@ -99,7 +99,7 @@ def detect_sample_rate(df: pd.DataFrame,
 
     # Try parsing as unix epoch floats (MuseLSL format)
     try:
-        ts    = df[ts_col].values.astype(float)
+        ts = df[ts_col].values.astype(float)
         diffs = np.diff(ts)
         diffs = diffs[diffs > 0]
         if len(diffs) > 10:
@@ -111,8 +111,9 @@ def detect_sample_rate(df: pd.DataFrame,
     return default
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
+
     if len(sys.argv) < 2:
         print("Usage: python loader.py path/to/recording.csv")
         sys.exit(1)

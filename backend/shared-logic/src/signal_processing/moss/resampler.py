@@ -17,12 +17,10 @@ import numpy as np
 from scipy import signal as scipy_signal
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-TGT_FS = 200   # NeuroLM expected sample rate
+TGT_FS = 200  # NeuroLM expected sample rate
 
 
-def resample(eeg: np.ndarray,
-             src_fs: int,
-             tgt_fs: int = TGT_FS) -> np.ndarray:
+def resample(eeg: np.ndarray, src_fs: int, tgt_fs: int = TGT_FS) -> np.ndarray:
     """
     Resample EEG from src_fs to tgt_fs using the Fourier method.
 
@@ -43,15 +41,14 @@ def resample(eeg: np.ndarray,
 
     n_out = int(eeg.shape[0] * tgt_fs / src_fs)
     resampled = np.stack(
-        [scipy_signal.resample(eeg[:, c], n_out) for c in range(eeg.shape[1])],
-        axis=1
+        [scipy_signal.resample(eeg[:, c], n_out) for c in range(eeg.shape[1])], axis=1
     )
     return resampled.astype(np.float32)
 
 
-def resample_channel(channel: np.ndarray,
-                     src_fs: int,
-                     tgt_fs: int = TGT_FS) -> np.ndarray:
+def resample_channel(
+    channel: np.ndarray, src_fs: int, tgt_fs: int = TGT_FS
+) -> np.ndarray:
     """
     Resample a single EEG channel.
 
@@ -69,10 +66,11 @@ def resample_channel(channel: np.ndarray,
     return scipy_signal.resample(channel, n_out).astype(np.float32)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Quick test
     import sys
-    sys.path.insert(0, '.')
+
+    sys.path.insert(0, ".")
     from loader import load_csv
 
     if len(sys.argv) < 2:
