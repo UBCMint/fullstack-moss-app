@@ -15,7 +15,6 @@ use shared_logic::pipeline::{Pipeline, Node};
 use dotenvy::dotenv;
 use log::{info, error};
 use serde::Deserialize;
-use serde_json;
 
 #[derive(Deserialize)]
 struct WebSocketInitMessage {

@@ -26,7 +26,7 @@ use rand_core::OsRng;
 
 // shared logic library
 use shared_logic::db::{DbClient, initialize_connection, export_eeg_data_as_csv, get_eeg_data_by_range, get_earliest_eeg_timestamp, get_time_labels_by_range};
-use shared_logic::models::{User, NewUser, UpdateUser, Session, FrontendState, TimeLabel, NewTimeLabel, EegDataRow, EegDataQuery};
+use shared_logic::models::{NewUser, Session, FrontendState, TimeLabel, NewTimeLabel, EegDataRow, EegDataQuery};
 
 // Argon2 imports
 use argon2::{
@@ -49,9 +49,9 @@ struct ExportEEGRequest {
 }
 
 #[derive(Deserialize)]
-struct ExportOptions {
+pub struct ExportOptions {
     format: String,
-    includeHeader: bool,
+    include_header: bool,
     start_time: Option<DateTime<Utc>>,
     end_time: Option<DateTime<Utc>>,
 }
@@ -317,7 +317,7 @@ async fn export_eeg_data(
     let (start_time, end_time) =
         get_eeg_time_range(&app_state.db_client, session_id, &request.options).await?;
 
-    let header_included = request.options.includeHeader;
+    let header_included = request.options.include_header;
 
     // finally call the export function in db.rs
     let return_csv = match export_eeg_data_as_csv(&app_state.db_client, session_id, start_time, end_time, header_included).await {

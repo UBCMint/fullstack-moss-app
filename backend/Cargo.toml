@@ -5,6 +5,3 @@ members = [
     "websocket-server",
 ]
 resolver = "2"
-
-[patch.crates-io]
-lsl = { path = "lsl-patched" }

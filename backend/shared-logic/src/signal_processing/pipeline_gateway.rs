@@ -1,4 +1,3 @@
-use log::error;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 use numpy::PyArray2;

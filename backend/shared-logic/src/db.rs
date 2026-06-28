@@ -5,16 +5,15 @@ use sqlx::{
 };
 use tokio::time::{self, Duration};
 use log::{info, error, warn};
-use chrono::{Date, DateTime, Utc};
+use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
 use super::models::{User, NewUser, TimeSeriesData, UpdateUser, Session, FrontendState, TimeLabel, NewTimeLabel, EegDataRow};
 use crate::{lsl::EEGDataPacket};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
-use serde::{Serialize, Deserialize};
 use argon2::password_hash::SaltString;
 use rand_core::OsRng;
-use argon2::{Argon2, password_hash::{PasswordHasher, PasswordHash, PasswordVerifier}};
+use argon2::{Argon2, password_hash::PasswordHasher};
 
 
 
@@ -340,7 +339,7 @@ pub async fn create_session(client: &DbClient, name: String) -> Result<Session, 
     .await?;
     info!("Session created successfully: {:?}", session);
     
-    return Ok(session);
+    Ok(session)
 }
 
 /// Get all sessions
@@ -354,7 +353,7 @@ pub async fn get_sessions(client: &DbClient) -> Result<Vec<Session>, Error>
         .await?;
     info!("Retrieved {} sessions.", sessions.len());
 
-    return Ok(sessions);
+    Ok(sessions)
 }
 
 /// Delete a session by id.
@@ -374,7 +373,7 @@ pub async fn delete_session(client: &DbClient, session_id: i32) -> Result<(), Er
         info!("Session id {} deleted", session_id);
     }
 
-    return Ok(());
+    Ok(())
 }
 
 /// Create a frontend_state entry tied to the given session id, which stores
@@ -398,7 +397,7 @@ pub async fn upsert_frontend_state(client: &DbClient, session_id: i32, data: ser
 
     info!("Frontend state created/updated successfully: {:?}", state);
 
-    return Ok(state);
+    Ok(state)
 }
 
 /// Get the JSON frontend state associated with the given session id.
@@ -417,7 +416,7 @@ pub async fn get_frontend_state(client: &DbClient, session_id: i32) -> Result<Op
 
     info!("Retrieved frontend state successfully: {:?}", state);
 
-    return Ok(state.map(|s| s.data));
+    Ok(state.map(|s| s.data))
 }
 
 /// Insert a batch of time labels for a given session.
@@ -515,7 +514,7 @@ pub async fn export_eeg_data_as_csv(client: &DbClient, session_id: i32, start_ti
 
     // write the header based on include_header flag
     if include_header {
-        writer.write_record(&["time", "channel1", "channel2", "channel3", "channel4"])
+        writer.write_record(["time", "channel1", "channel2", "channel3", "channel4"])
             .map_err(|e| Error::Protocol(e.to_string()))?;
     }
 

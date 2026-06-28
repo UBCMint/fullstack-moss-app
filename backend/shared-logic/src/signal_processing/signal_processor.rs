@@ -128,8 +128,8 @@ impl SignalProcessor {
             return Err("Empty data".to_string());
         }
         
-        let n_channels = data.len();
-        let n_samples = data[0].len();
+        let _n_channels = data.len();
+        let _n_samples = data[0].len();
         
         // // Validate all channels have same length
         // for (i, ch) in data.iter().enumerate() {
@@ -146,7 +146,7 @@ impl SignalProcessor {
     }
 
     // Helper: Convert numpy array back to Vec<Vec<f64>> 
-    fn numpy_to_vec(&self, py: Python, result: &PyAny) -> Result<Vec<Vec<f64>>, String> {
+    fn numpy_to_vec(&self, _py: Python, result: &PyAny) -> Result<Vec<Vec<f64>>, String> {
         let array: &PyArray2<f64> = result
             .extract()
             .map_err(|e| format!("Failed to extract numpy array: {}", e))?;

@@ -7,7 +7,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::Sender;
 use tokio_util::sync::CancellationToken;
 // use crate::signal_processing::signal_processor::SignalProcessor;
+use crate::pipeline::{Pipeline, PreprocessingConfig, WindowConfig};
 use crate::signal_processing::pipeline_gateway::{PipelineGateway, PipelineOutput};
+
+pub type ProcessingConfig = PreprocessingConfig;
+pub type WindowingConfig = WindowConfig;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EEGDataPacket {
@@ -30,17 +34,11 @@ pub async fn receive_eeg(tx: Sender<Arc<EEGDataPacket>>, cancel_token: Cancellat
     // The receiver is passed into the collection loop so it can react to future updates.
     let (_windowing_tx, windowing_rx) = tokio::sync::watch::channel(window_config);
 
-impl Default for WindowingConfig {
-    fn default() -> Self {
-        Self {
-            chunk_size: 64,
-            overlap_size: 0,
-        }
-    }
+    receive_eeg_with_config(tx, cancel_token, preprocessing_config, windowing_rx).await;
 }
 
 // Async entry point for EEG data collection.
-pub async fn receive_eeg(tx:Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, processing_config: ProcessingConfig, windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,) {
+pub async fn receive_eeg_with_config(tx: Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, processing_config: ProcessingConfig, windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>) {
     info!("Starting EEG data receiver");
     // let python_script_path = std::env::var("SIGNAL_PROCESSING_SCRIPT")
     //     .unwrap_or_else(|_| "../shared-logic/src/signal_processing/signalProcessing.py".to_string());
@@ -109,7 +107,7 @@ fn run_eeg_collection(inlet: StreamInlet,
     cancel_token: CancellationToken,
     config: ProcessingConfig,
     gateway: PipelineGateway,
-    mut windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,
+    windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,
 ) -> (u32, u32) {
     let mut count = 0;
     let mut drop = 0;
@@ -122,7 +120,7 @@ fn run_eeg_collection(inlet: StreamInlet,
 
     let mut packet = EEGDataPacket {
         timestamps: Vec::with_capacity(windowing.chunk_size + 1),
-        signals: vec![Vec::with_capacity(windowing.chunk_size + 1); 4],
+        signals: (0..4).map(|_| Vec::with_capacity(windowing.chunk_size + 1)).collect::<Vec<_>>(),
         ml_result: None,
     };
 
@@ -143,7 +141,6 @@ fn run_eeg_collection(inlet: StreamInlet,
             info!("EEG data receiver cancelled.");
             // Send any remaining samples before exiting
              if !packet.timestamps.is_empty() {
-                 let num_samples = packet.timestamps.len();
                 match process_and_send(&mut packet, &gateway, &config, &tx) {
                     Ok(_) => count += 1,
                     Err(e) => {
@@ -241,7 +238,7 @@ fn accumulate_sample(
     let timestamp_dt = DateTime::from_timestamp(
         timestamp as i64,
         (timestamp.fract() * 1_000_000_000.0) as u32
-    ).unwrap_or_else(|| Utc::now());
+    ).unwrap_or_else(Utc::now);
  
     // info!("Raw timestamp: {}, Converted: {:?}", timestamp, timestamp_dt);
     
