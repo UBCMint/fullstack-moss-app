@@ -11,15 +11,17 @@ from dataclasses import dataclass
 
 
 class TemporalConv(nn.Module):
-    """ EEG to Patch Embedding
-    """
+    """EEG to Patch Embedding"""
+
     def __init__(self, in_chans=1, out_chans=8):
-        '''
+        """
         in_chans: in_chans of nn.Conv2d()
         out_chans: out_chans of nn.Conv2d(), determing the output dimension
-        '''
+        """
         super().__init__()
-        self.conv1 = nn.Conv2d(in_chans, out_chans, kernel_size=(1, 15), stride=(1, 8), padding=(0, 7))
+        self.conv1 = nn.Conv2d(
+            in_chans, out_chans, kernel_size=(1, 15), stride=(1, 8), padding=(0, 7)
+        )
         self.gelu1 = nn.GELU()
         self.norm1 = nn.GroupNorm(4, out_chans)
         self.conv2 = nn.Conv2d(out_chans, out_chans, kernel_size=(1, 3), padding=(0, 1))
@@ -28,10 +30,7 @@ class TemporalConv(nn.Module):
         self.conv3 = nn.Conv2d(out_chans, out_chans, kernel_size=(1, 3), padding=(0, 1))
         self.norm3 = nn.GroupNorm(4, out_chans)
         self.gelu3 = nn.GELU()
-        self.l = nn.Sequential(
-            nn.Linear(400, 768),
-            nn.GELU()
-        )
+        self.l = nn.Sequential(nn.Linear(400, 768), nn.GELU())
 
     def forward(self, x, **kwargs):
         B, NA, T = x.shape
@@ -39,7 +38,7 @@ class TemporalConv(nn.Module):
         x = self.gelu1(self.norm1(self.conv1(x)))
         x = self.gelu2(self.norm2(self.conv2(x)))
         x = self.gelu3(self.norm3(self.conv3(x)))
-        x = rearrange(x, 'B C NA T -> B NA (T C)')
+        x = rearrange(x, "B C NA T -> B NA (T C)")
         x = self.l(x)
         return x
 
@@ -57,7 +56,7 @@ class NTConfig:
     n_head: int = 10
     n_embd: int = 400
     dropout: float = 0.0
-    bias: bool = False # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
+    bias: bool = False  # True: bias in Linears and LayerNorms, like GPT-2. False: a bit better and faster
 
 
 class NeuralTransformer(nn.Module):
@@ -65,10 +64,14 @@ class NeuralTransformer(nn.Module):
         super().__init__()
         self.num_classes = config.num_classes
 
-        # To identify whether it is neural tokenizer or neural decoder. 
+        # To identify whether it is neural tokenizer or neural decoder.
         # For the neural decoder, use linear projection (PatchEmbed) to project codebook dimension to hidden dimension.
         # Otherwise, use TemporalConv to extract temporal features from EEG signals.
-        self.patch_embed = TemporalConv(out_chans=config.out_chans) if config.in_chans == 1 else nn.Linear(config.in_chans, config.n_embd)
+        self.patch_embed = (
+            TemporalConv(out_chans=config.out_chans)
+            if config.in_chans == 1
+            else nn.Linear(config.in_chans, config.n_embd)
+        )
         self.patch_size = config.patch_size
 
         self.pos_embed = nn.Embedding(256, config.n_embd)
@@ -77,14 +80,24 @@ class NeuralTransformer(nn.Module):
         self.rel_pos_bias = None
 
         self.blocks = nn.ModuleList([Block(config) for _ in range(config.n_layer)])
-        self.norm = nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.n_embd, eps=1e-6)
-        self.fc_norm = nn.LayerNorm(config.n_embd, eps=1e-6) if config.use_mean_pooling else None
-        self.head = nn.Linear(config.n_embd, self.num_classes) if self.num_classes > 0 else nn.Identity()
+        self.norm = (
+            nn.Identity()
+            if config.use_mean_pooling
+            else nn.LayerNorm(config.n_embd, eps=1e-6)
+        )
+        self.fc_norm = (
+            nn.LayerNorm(config.n_embd, eps=1e-6) if config.use_mean_pooling else None
+        )
+        self.head = (
+            nn.Linear(config.n_embd, self.num_classes)
+            if self.num_classes > 0
+            else nn.Identity()
+        )
 
         self.pos_drop = nn.Dropout(p=config.dropout)
 
         if isinstance(self.head, nn.Linear):
-            nn.init.trunc_normal_(self.head.weight, std=.02)
+            nn.init.trunc_normal_(self.head.weight, std=0.02)
         self.apply(self._init_weights)
         self.fix_init_weight()
 
@@ -102,14 +115,22 @@ class NeuralTransformer(nn.Module):
 
     def _init_weights(self, m):
         if isinstance(m, nn.Linear):
-            nn.init.trunc_normal_(m.weight, std=.02)
+            nn.init.trunc_normal_(m.weight, std=0.02)
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
         elif isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def forward_features(self, x, input_chans=None, input_times=None, mask=None, return_all_tokens=False, **kwargs):
+    def forward_features(
+        self,
+        x,
+        input_chans=None,
+        input_times=None,
+        mask=None,
+        return_all_tokens=False,
+        **kwargs,
+    ):
         batch_size, n, t = x.shape
         x = self.patch_embed(x)
 
@@ -120,10 +141,10 @@ class NeuralTransformer(nn.Module):
         x = x + time_embed
 
         x = self.pos_drop(x)
-        
+
         for blk in self.blocks:
             x = blk(x, mask)
-        
+
         x = self.norm(x)
         if self.fc_norm is not None:
             if return_all_tokens:
@@ -133,10 +154,25 @@ class NeuralTransformer(nn.Module):
         else:
             return x
 
-    def forward(self, x, input_chans=None, input_times=None, mask=None, return_all_tokens=False, **kwargs):
-        '''
+    def forward(
+        self,
+        x,
+        input_chans=None,
+        input_times=None,
+        mask=None,
+        return_all_tokens=False,
+        **kwargs,
+    ):
+        """
         x: [batch size, sequence length, patch size]
-        '''
-        x = self.forward_features(x, input_chans, input_times, mask, return_all_tokens=return_all_tokens, **kwargs)
+        """
+        x = self.forward_features(
+            x,
+            input_chans,
+            input_times,
+            mask,
+            return_all_tokens=return_all_tokens,
+            **kwargs,
+        )
         x = self.head(x)
         return x

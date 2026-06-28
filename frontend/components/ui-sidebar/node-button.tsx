@@ -35,9 +35,13 @@ const NodeButton = ({ id, label, description }: ButtonProps) => {
                     )}
 
                     <div className="flex flex-col items-start text-left">
-                        <span className="font-ibmplex font-semibold text-[16px] leading-6 text-black">{label}</span>
+                        <span className="font-ibmplex font-semibold text-[16px] leading-6 text-black">
+                            {label}
+                        </span>
                         {isSourceNode && (
-                            <span className="font-ibmplex text-black text-[10px] leading-3">{description}</span>
+                            <span className="font-ibmplex text-black text-[10px] leading-3">
+                                {description}
+                            </span>
                         )}
                     </div>
                 </div>

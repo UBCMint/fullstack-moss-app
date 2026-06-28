@@ -7,7 +7,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::Sender;
 use tokio_util::sync::CancellationToken;
 // use crate::signal_processing::signal_processor::SignalProcessor;
+use crate::pipeline::{Pipeline, PreprocessingConfig, WindowConfig};
 use crate::signal_processing::pipeline_gateway::{PipelineGateway, PipelineOutput};
+
+pub type ProcessingConfig = PreprocessingConfig;
+pub type WindowingConfig = WindowConfig;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EEGDataPacket {
@@ -17,36 +21,44 @@ pub struct EEGDataPacket {
 }
 
 // Async entry point for EEG data collection.
-pub async fn receive_eeg(tx: Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, pipeline: Pipeline) {
+pub async fn receive_eeg(
+    tx: Sender<Arc<EEGDataPacket>>,
+    cancel_token: CancellationToken,
+    pipeline: Pipeline,
+) {
     info!("Starting EEG data receiver");
 
     // Extract configs from the pipeline, falling back to defaults if a node is missing
     let preprocessing_config = pipeline.preprocessing_config().cloned().unwrap_or_default();
     let window_config = pipeline.window_config().cloned().unwrap_or_default();
-    info!("Received preprocessing config: apply_bandpass={}, l_freq={:?}, h_freq={:?}",
-        preprocessing_config.apply_bandpass, preprocessing_config.l_freq, preprocessing_config.h_freq);
+    info!(
+        "Received preprocessing config: apply_bandpass={}, l_freq={:?}, h_freq={:?}",
+        preprocessing_config.apply_bandpass,
+        preprocessing_config.l_freq,
+        preprocessing_config.h_freq
+    );
 
     // Create a watch channel from the initial window config.
     // The receiver is passed into the collection loop so it can react to future updates.
     let (_windowing_tx, windowing_rx) = tokio::sync::watch::channel(window_config);
 
-impl Default for WindowingConfig {
-    fn default() -> Self {
-        Self {
-            chunk_size: 64,
-            overlap_size: 0,
-        }
-    }
+    receive_eeg_with_config(tx, cancel_token, preprocessing_config, windowing_rx).await;
 }
 
 // Async entry point for EEG data collection.
-pub async fn receive_eeg(tx:Sender<Arc<EEGDataPacket>>, cancel_token: CancellationToken, processing_config: ProcessingConfig, windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,) {
+pub async fn receive_eeg_with_config(
+    tx: Sender<Arc<EEGDataPacket>>,
+    cancel_token: CancellationToken,
+    processing_config: ProcessingConfig,
+    windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,
+) {
     info!("Starting EEG data receiver");
     // let python_script_path = std::env::var("SIGNAL_PROCESSING_SCRIPT")
     //     .unwrap_or_else(|_| "../shared-logic/src/signal_processing/signalProcessing.py".to_string());
 
-    let manager_script_path = std::env::var("PIPELINE_MANAGER_SCRIPT")
-        .unwrap_or_else(|_| "../shared-logic/src/signal_processing/moss/mock_manager.py".to_string());
+    let manager_script_path = std::env::var("PIPELINE_MANAGER_SCRIPT").unwrap_or_else(|_| {
+        "../shared-logic/src/signal_processing/moss/mock_manager.py".to_string()
+    });
 
     let result = tokio::task::spawn_blocking(move || {
         // Setup pipeline gateway (replaces SignalProcessor)
@@ -71,20 +83,29 @@ pub async fn receive_eeg(tx:Sender<Arc<EEGDataPacket>>, cancel_token: Cancellati
         };
 
         // Run collection loop
-        run_eeg_collection(inlet, tx, cancel_token, processing_config, gateway, windowing_rx)
+        run_eeg_collection(
+            inlet,
+            tx,
+            cancel_token,
+            processing_config,
+            gateway,
+            windowing_rx,
+        )
     });
 
     // Handle results
     match result.await {
         Ok((count, drop)) => {
-            info!("EEG session completed - received: {}, dropped: {}", count, drop);
+            info!(
+                "EEG session completed - received: {}, dropped: {}",
+                count, drop
+            );
         }
         Err(e) => {
             error!("EEG receiver task panicked: {}", e);
         }
     }
 }
-
 
 // Resolves EEG stream and creates inlet for data reception.
 // Returns error if no streams found or inlet creation fails.
@@ -95,26 +116,25 @@ fn setup_eeg_stream() -> Result<StreamInlet, String> {
     if streams.is_empty() {
         return Err("No EEG streams found".to_string());
     }
-    
+
     info!("EEG stream found, creating inlet");
     StreamInlet::new(&streams[0], 1000, 0, true)
         .map_err(|e| format!("Could not create StreamInlet: {}", e))
 }
 
-
 // Main EEG data collection loop.
 // Returns (successful_count, dropped_count) statistics.
-fn run_eeg_collection(inlet: StreamInlet,
+fn run_eeg_collection(
+    inlet: StreamInlet,
     tx: Sender<Arc<EEGDataPacket>>,
     cancel_token: CancellationToken,
     config: ProcessingConfig,
     gateway: PipelineGateway,
-    mut windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,
+    windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,
 ) -> (u32, u32) {
     let mut count = 0;
     let mut drop = 0;
 
-    
     let mut windowing = windowing_rx.borrow().clone();
 
     // Creates a buffer that stores overlapping eeg samples
@@ -122,34 +142,43 @@ fn run_eeg_collection(inlet: StreamInlet,
 
     let mut packet = EEGDataPacket {
         timestamps: Vec::with_capacity(windowing.chunk_size + 1),
-        signals: vec![Vec::with_capacity(windowing.chunk_size + 1); 4],
+        signals: (0..4)
+            .map(|_| Vec::with_capacity(windowing.chunk_size + 1))
+            .collect::<Vec<_>>(),
         ml_result: None,
     };
 
     // Calculate the offset between LSL clock and Unix epoch
-    let lsl_to_unix_offset = Utc::now().timestamp_nanos_opt().unwrap() as f64 / 1_000_000_000.0 - lsl::local_clock();
+    let lsl_to_unix_offset =
+        Utc::now().timestamp_nanos_opt().unwrap() as f64 / 1_000_000_000.0 - lsl::local_clock();
     loop {
         if windowing_rx.has_changed().unwrap_or(false) {
             windowing = windowing_rx.borrow().clone();
-            info!("Windowing config updated: chunk={}, overlap={}", windowing.chunk_size, windowing.overlap_size);
+            info!(
+                "Windowing config updated: chunk={}, overlap={}",
+                windowing.chunk_size, windowing.overlap_size
+            );
             // Discard old buffer and start fresh with new config
             packet.timestamps.clear();
-            for ch in &mut packet.signals { ch.clear(); }
-            for ch in &mut overlap_buffer { ch.clear(); }
+            for ch in &mut packet.signals {
+                ch.clear();
+            }
+            for ch in &mut overlap_buffer {
+                ch.clear();
+            }
         }
 
         // Check for cancellation
         if cancel_token.is_cancelled() {
             info!("EEG data receiver cancelled.");
             // Send any remaining samples before exiting
-             if !packet.timestamps.is_empty() {
-                 let num_samples = packet.timestamps.len();
+            if !packet.timestamps.is_empty() {
                 match process_and_send(&mut packet, &gateway, &config, &tx) {
                     Ok(_) => count += 1,
                     Err(e) => {
                         error!("Process/send error: {}", e);
-                            drop += 1;
-                        }
+                        drop += 1;
+                    }
                 }
             }
             break;
@@ -157,8 +186,13 @@ fn run_eeg_collection(inlet: StreamInlet,
 
         // Pull sample with timeout of 1 sec. If it does not see data for 1s, it returns.
         match inlet.pull_sample(1.0) {
-           Ok((sample, timestamp)) => {
-                match accumulate_sample(&sample, timestamp + lsl_to_unix_offset, &mut packet, windowing.chunk_size) {
+            Ok((sample, timestamp)) => {
+                match accumulate_sample(
+                    &sample,
+                    timestamp + lsl_to_unix_offset,
+                    &mut packet,
+                    windowing.chunk_size,
+                ) {
                     Ok(true) => {
                         // Window is full. Prepend overlap from previous window if there are any
                         if windowing.overlap_size > 0 && !overlap_buffer[0].is_empty() {
@@ -183,10 +217,14 @@ fn run_eeg_collection(inlet: StreamInlet,
                         for (ch_idx, ch) in packet.signals.iter().enumerate() {
                             overlap_buffer[ch_idx] = ch[n - keep..].to_vec();
                         }
-                        
+
                         // Packet is full, send it
-                        info!("Packet is full, sending window: {} samples (overlap: {})", packet.signals[0].len(), keep);
-                         match process_and_send(&mut packet, &gateway, &config, &tx) {
+                        info!(
+                            "Packet is full, sending window: {} samples (overlap: {})",
+                            packet.signals[0].len(),
+                            keep
+                        );
+                        match process_and_send(&mut packet, &gateway, &config, &tx) {
                             Ok(_) => count += 1,
                             Err(e) => {
                                 error!("Process/send error: {}", e);
@@ -195,12 +233,12 @@ fn run_eeg_collection(inlet: StreamInlet,
                         }
                         packet.timestamps.clear();
                         for channel in &mut packet.signals {
-                            channel.clear();  
+                            channel.clear();
                         }
                     }
                     Ok(false) => {} // Sample added, but packet not full yet
                     Err(e) => {
-                         let error_msg = e.to_string();
+                        let error_msg = e.to_string();
                         if error_msg.contains("Invalid sample length: got 0 channels") {
                             info!("Received empty sample from LSL stream (likely during shutdown) - ignoring");
                         } else {
@@ -227,29 +265,33 @@ fn run_eeg_collection(inlet: StreamInlet,
 // Returns Ok(true) when packet reaches 65 samples, Ok(false) otherwise.
 // Requires at least 4 channels in sample.
 fn accumulate_sample(
-    sample: &[f32], 
-    timestamp: f64, 
+    sample: &[f32],
+    timestamp: f64,
     packet: &mut EEGDataPacket,
     chunk_size: usize,
 ) -> Result<bool, String> {
     // Validate sample length
     if sample.len() < 4 {
-        return Err(format!("Invalid sample length: got {} channels, expected at least 4", sample.len()));
+        return Err(format!(
+            "Invalid sample length: got {} channels, expected at least 4",
+            sample.len()
+        ));
     }
 
     // Convert timestamp
     let timestamp_dt = DateTime::from_timestamp(
         timestamp as i64,
-        (timestamp.fract() * 1_000_000_000.0) as u32
-    ).unwrap_or_else(|| Utc::now());
- 
+        (timestamp.fract() * 1_000_000_000.0) as u32,
+    )
+    .unwrap_or_else(Utc::now);
+
     // info!("Raw timestamp: {}, Converted: {:?}", timestamp, timestamp_dt);
-    
+
     // Add sample to packet
     packet.timestamps.push(timestamp_dt);
     // Add sample to each channel
     for (ch_idx, ch_data) in packet.signals.iter_mut().enumerate() {
-        ch_data.push(sample[ch_idx] as f64);  // Convert here
+        ch_data.push(sample[ch_idx] as f64); // Convert here
     }
 
     // Check if packet is full
@@ -271,7 +313,10 @@ fn process_and_send(
     info!("starting pipeline processing");
     packet.ml_result = match gateway.call_pipeline(config, &packet.signals) {
         Ok(Some(output)) => {
-            info!("ML result: task={}, label={}, confidence={:.2}", output.task, output.overall_label, output.confidence);
+            info!(
+                "ML result: task={}, label={}, confidence={:.2}",
+                output.task, output.overall_label, output.confidence
+            );
             Some(output)
         }
         Ok(None) => {
@@ -308,7 +353,7 @@ fn process_and_send(
     // // Apply downsampling
     // if let Some(factor) = config.downsample_factor {
     //     packet.signals = processor.downsample(&packet.signals, factor)?;
-        
+
     //     // Adjust timestamps to match downsampled data
     //     let new_n_samples = packet.signals[0].len();
     //     let step = packet.timestamps.len() / new_n_samples;

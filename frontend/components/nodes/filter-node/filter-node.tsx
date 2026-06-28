@@ -5,73 +5,90 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import ComboBox from './combo-box';
 
+interface FilterConfig {
+    apply_bandpass: boolean;
+    use_iir: boolean;
+    l_freq: number | null;
+    h_freq: number | null;
+    downsample_factor: number | null;
+    sfreq: number;
+    n_channels: number;
+}
+
 interface FilterNodeProps {
     id?: string;
-    data?: { _highCutoff?: number; _lowCutoff?: number; _selectedFilter?: string; config?: Record<string, any> };
+    data?: {
+        _highCutoff?: number;
+        _lowCutoff?: number;
+        _selectedFilter?: string;
+        config?: FilterConfig;
+    };
 }
 
 export default function FilterNode({ id, data }: FilterNodeProps) {
-    const [selectedFilter, setSelectedFilter] = React.useState(data?._selectedFilter ?? 'lowpass');
+    const [selectedFilter, setSelectedFilter] = React.useState(
+        data?._selectedFilter ?? 'lowpass'
+    );
     const [isConnected, setIsConnected] = React.useState(false);
-    const [lowCutoff, setLowCutoff] = React.useState(data?._lowCutoff ?? 1)
-    const [highCutoff, setHighCutoff] = React.useState(data?._highCutoff ?? 50)
-    
+    const [lowCutoff, setLowCutoff] = React.useState(data?._lowCutoff ?? 1);
+    const [highCutoff, setHighCutoff] = React.useState(data?._highCutoff ?? 50);
+
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
-    
+
     const { dataStreaming } = useGlobalContext();
 
-    const buildConfig = () => {
+    const buildConfig = React.useCallback((): FilterConfig => {
         if (!isConnected) {
-          return {
-            apply_bandpass: false,
-            use_iir: false,
-            l_freq: null,
-            h_freq: null,
-            downsample_factor: null,
-            sfreq: 256,
-            n_channels: 4,
-          }
+            return {
+                apply_bandpass: false,
+                use_iir: false,
+                l_freq: null,
+                h_freq: null,
+                downsample_factor: null,
+                sfreq: 256,
+                n_channels: 4,
+            };
         }
-      
+
         switch (selectedFilter) {
-          case 'lowpass':
-            return {
-              apply_bandpass: true,
-              use_iir: false,
-              l_freq: null,
-              h_freq: highCutoff,
-              downsample_factor: null,
-              sfreq: 256,
-              n_channels: 4,
-            }
-      
-          case 'highpass':
-            return {
-              apply_bandpass: true,
-              use_iir: false,
-              l_freq: lowCutoff,
-              h_freq: null,
-              downsample_factor: null,
-              sfreq: 256,
-              n_channels: 4,
-            }
-      
-          case 'bandpass':
-            return {
-              apply_bandpass: true,
-              use_iir: false,
-              l_freq: lowCutoff,
-              h_freq: highCutoff,
-              downsample_factor: null,
-              sfreq: 256,
-              n_channels: 4,
-            }
+            case 'lowpass':
+                return {
+                    apply_bandpass: true,
+                    use_iir: false,
+                    l_freq: null,
+                    h_freq: highCutoff,
+                    downsample_factor: null,
+                    sfreq: 256,
+                    n_channels: 4,
+                };
+
+            case 'highpass':
+                return {
+                    apply_bandpass: true,
+                    use_iir: false,
+                    l_freq: lowCutoff,
+                    h_freq: null,
+                    downsample_factor: null,
+                    sfreq: 256,
+                    n_channels: 4,
+                };
+
+            case 'bandpass':
+                return {
+                    apply_bandpass: true,
+                    use_iir: false,
+                    l_freq: lowCutoff,
+                    h_freq: highCutoff,
+                    downsample_factor: null,
+                    sfreq: 256,
+                    n_channels: 4,
+                };
 
             default:
-                throw new Error(`Unhandled filter type: ${selectedFilter}`)
+                throw new Error(`Unhandled filter type: ${selectedFilter}`);
         }
-      }       
+    }, [isConnected, selectedFilter, lowCutoff, highCutoff]);
 
     // write config to node data for later retrieval when dispatching pipeline payload
     const pushConfigToNodeData = React.useCallback(() => {
@@ -80,45 +97,71 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
         const config = buildConfig();
         reactFlowInstance.setNodes((nds) =>
             nds.map((n) =>
-                n.id === id ? { ...n, data: { ...n.data, config, _highCutoff: highCutoff, _lowCutoff: lowCutoff, _selectedFilter: selectedFilter } } : n
+                n.id === id
+                    ? {
+                          ...n,
+                          data: {
+                              ...n.data,
+                              config,
+                              _highCutoff: highCutoff,
+                              _lowCutoff: lowCutoff,
+                              _selectedFilter: selectedFilter,
+                          },
+                      }
+                    : n
             )
         );
         window.dispatchEvent(new Event('node-config-changed'));
-    }, [id, reactFlowInstance, selectedFilter, lowCutoff, highCutoff, isConnected]);
-
+    }, [
+        id,
+        reactFlowInstance,
+        buildConfig,
+        isConnected,
+        highCutoff,
+        lowCutoff,
+        selectedFilter,
+    ]);
 
     // Check connection status and update state
     const checkConnectionStatus = React.useCallback(() => {
         try {
             const edges = reactFlowInstance.getEdges();
             const nodes = reactFlowInstance.getNodes();
-            
+
             // Check if this node is connected to source node or any activated node
-            const isConnectedToActivatedNode = (nodeId: string, visited: Set<string> = new Set()): boolean => {
+            const isConnectedToActivatedNode = (
+                nodeId: string,
+                visited: Set<string> = new Set()
+            ): boolean => {
                 if (visited.has(nodeId)) return false; // Prevent infinite loops
                 visited.add(nodeId);
-                
+
                 // Find incoming edges to this node
-                const incomingEdges = edges.filter(edge => edge.target === nodeId);
-                
+                const incomingEdges = edges.filter(
+                    (edge) => edge.target === nodeId
+                );
+
                 for (const edge of incomingEdges) {
-                    const sourceNode = nodes.find(n => n.id === edge.source);
+                    const sourceNode = nodes.find((n) => n.id === edge.source);
                     if (!sourceNode) continue;
-                    
+
                     // If source is a source-node, we're activated
                     if (sourceNode.type === 'source-node') {
                         return true;
                     }
-                    
+
                     // If source is another node, check if it's activated
-                    if (sourceNode.id && isConnectedToActivatedNode(sourceNode.id, visited)) {
+                    if (
+                        sourceNode.id &&
+                        isConnectedToActivatedNode(sourceNode.id, visited)
+                    ) {
                         return true;
                     }
                 }
-                
+
                 return false;
             };
-            
+
             const isActivated = id ? isConnectedToActivatedNode(id) : false;
             setIsConnected(isActivated);
         } catch (error) {
@@ -126,23 +169,26 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
             setIsConnected(false);
         }
     }, [id, reactFlowInstance]);
-    
+
     // Check connection status on mount and when edges might change
     React.useEffect(() => {
         checkConnectionStatus();
-        
+
         // Listen for custom edge change events
         const handleEdgeChange = () => {
             checkConnectionStatus();
         };
-        
+
         window.addEventListener('reactflow-edges-changed', handleEdgeChange);
-        
+
         // Also set up periodic check as backup
         const interval = setInterval(checkConnectionStatus, 1000);
-        
+
         return () => {
-            window.removeEventListener('reactflow-edges-changed', handleEdgeChange);
+            window.removeEventListener(
+                'reactflow-edges-changed',
+                handleEdgeChange
+            );
             clearInterval(interval);
         };
     }, [checkConnectionStatus]);
@@ -151,15 +197,15 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
     React.useEffect(() => {
         pushConfigToNodeData();
     }, [pushConfigToNodeData]);
-    
+
     return (
         <div className="relative">
             {/* Input Handle - positioned to align with left circle */}
-            <Handle 
-                type="target" 
+            <Handle
+                type="target"
                 position={Position.Left}
                 id="filter-input"
-                style={{ 
+                style={{
                     left: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
@@ -170,16 +216,16 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                     borderRadius: '50%',
                     zIndex: 20,
                     cursor: 'crosshair',
-                    pointerEvents: 'all'
+                    pointerEvents: 'all',
                 }}
             />
-            
+
             {/* Output Handle - positioned to align with right circle */}
-            <Handle 
-                type="source" 
+            <Handle
+                type="source"
                 position={Position.Right}
                 id="filter-output"
-                style={{ 
+                style={{
                     right: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
@@ -190,12 +236,12 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                     borderRadius: '50%',
                     zIndex: 20,
                     cursor: 'crosshair',
-                    pointerEvents: 'all'
+                    pointerEvents: 'all',
                 }}
             />
 
             {/* Just the ComboBox without Card wrapper */}
-            <ComboBox 
+            <ComboBox
                 value={selectedFilter}
                 onValueChange={setSelectedFilter}
                 lowCutoff={lowCutoff}
@@ -205,7 +251,6 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
             />
-
         </div>
     );
 }

@@ -27,12 +27,12 @@ async function parseErrorMessage(response: Response): Promise<string> {
             ) {
                 return (parsed as { message: string }).message;
             }
-        } catch (_) {
+        } catch {
             return text;
         }
 
         return text;
-    } catch (_) {
+    } catch {
         return fallback;
     }
 }
@@ -131,7 +131,10 @@ export async function getTimeLabels(
     end: string
 ): Promise<TimeLabel[]> {
     const params = new URLSearchParams({ start, end });
-    const response = await fetch(`/api/sessions/${sessionId}/time-label?${params}`, { method: 'GET' });
+    const response = await fetch(
+        `/api/sessions/${sessionId}/time-label?${params}`,
+        { method: 'GET' }
+    );
     return parseJsonResponse<TimeLabel[]>(response);
 }
 
@@ -141,6 +144,9 @@ export async function getEegData(
     end: string
 ): Promise<EegDataRow[]> {
     const params = new URLSearchParams({ start, end });
-    const response = await fetch(`/api/sessions/${sessionId}/eeg-data?${params}`, { method: 'GET' });
+    const response = await fetch(
+        `/api/sessions/${sessionId}/eeg-data?${params}`,
+        { method: 'GET' }
+    );
     return parseJsonResponse<EegDataRow[]>(response);
 }

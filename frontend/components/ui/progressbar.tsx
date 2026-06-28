@@ -1,20 +1,20 @@
- "use client"
+'use client';
 
-import { cn } from "@/lib/utils"
-import * as ProgressPrimitive from "@radix-ui/react-progress"
+import { cn } from '@/lib/utils';
+import * as ProgressPrimitive from '@radix-ui/react-progress';
 
 export const ProgressBar = ({
     value,
     className,
 }: {
-    value: number
-    className?: string
+    value: number;
+    className?: string;
 }) => {
     return (
         <ProgressPrimitive.Root
             value={value}
             className={cn(
-                "relative h-[12px] w-full overflow-hidden rounded-full bg-[#E9E9E9]",
+                'relative h-[12px] w-full overflow-hidden rounded-full bg-[#E9E9E9]',
                 className
             )}
         >
@@ -23,6 +23,5 @@ export const ProgressBar = ({
                 style={{ transform: `translateX(-${100 - value}%)` }}
             />
         </ProgressPrimitive.Root>
-    )
-}
-
+    );
+};

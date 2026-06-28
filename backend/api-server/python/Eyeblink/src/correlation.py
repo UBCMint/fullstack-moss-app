@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def compute_correlation(eeg_data, tmin_indices, tstart, tend):
     """
     Computes correlation and amplitude similarity between pairs of troughs.
@@ -18,14 +19,15 @@ def compute_correlation(eeg_data, tmin_indices, tstart, tend):
 
     for i in range(num_troughs):
         for j in range(i + 1, num_troughs):
-            siga = eeg_data[tstart[i]:tend[i]]
-            sigb = eeg_data[tstart[j]:tend[j]]
+            siga = eeg_data[tstart[i] : tend[i]]
+            sigb = eeg_data[tstart[j] : tend[j]]
             corrmat[i, j] = np.corrcoef(siga, sigb)[0, 1]
             std_siga = np.std(siga)
             std_sigb = np.std(sigb)
             powermat[i, j] = max(std_siga / std_sigb, std_sigb / std_siga)
 
     return corrmat, powermat
+
 
 def high_corr_comp(corrmat, powermat, corr_thresh=0.8, power_thresh=1.5):
     """
@@ -49,7 +51,10 @@ def high_corr_comp(corrmat, powermat, corr_thresh=0.8, power_thresh=1.5):
 
     return list(set(index_blinks))
 
-def blink_typify_and_adjust(tstart, tmin, tend, index_blinks, initial_delta, corrmat, powermat):
+
+def blink_typify_and_adjust(
+    tstart, tmin, tend, index_blinks, initial_delta, corrmat, powermat
+):
     """
     Adjusts the delta value for peak detection based on identified blink correlations.
     Args:
@@ -65,7 +70,7 @@ def blink_typify_and_adjust(tstart, tmin, tend, index_blinks, initial_delta, cor
     """
     avg_corr = np.mean(corrmat)
     avg_power = np.mean(powermat)
-    
+
     if avg_corr > 0.9 and avg_power < 1.2:
         adjusted_delta = initial_delta * 0.9  # Increase sensitivity
     elif avg_corr < 0.7 or avg_power > 1.8:

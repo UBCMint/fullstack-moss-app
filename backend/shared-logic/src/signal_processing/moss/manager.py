@@ -1,6 +1,6 @@
+import asyncio
 import os
 import sys
-import asyncio
 import numpy as np
 
 # manager runs a configurable pipeline using function pointers.
@@ -11,11 +11,10 @@ SCRIPT_DIRECTORY = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIRECTORY)
 sys.path.insert(0, os.path.dirname(SCRIPT_DIRECTORY))
 
-# import real entry points used by this pipeline manager
-from preprocessing import from_array
-from encoder import NeuroLMEncoder
-from classifier import load_classifier, TASK_CLASSIFIER_MAP
-from signalProcessing import signalProcessing
+from preprocessing import from_array  # noqa: E402
+from encoder import NeuroLMEncoder  # noqa: E402
+from classifier import load_classifier, TASK_CLASSIFIER_MAP  # noqa: E402
+from signalProcessing import signalProcessing  # noqa: E402
 
 # shared constants for this manager
 CHECKPOINT = os.path.join(SCRIPT_DIRECTORY, "checkpoints", "NeuroLM-B.pt")
@@ -27,7 +26,6 @@ DEFAULT_TASK = "activity"
 _encoder = None
 
 
-
 def get_encoder():
     global _encoder
     if _encoder is None:
@@ -37,6 +35,7 @@ def get_encoder():
         )
     return _encoder
 
+
 def normalize_node_type(node_type):
     # support both "bandpass filter" and "bandpass_filter" config spellings
     normalized = node_type.strip().lower()
@@ -44,17 +43,26 @@ def normalize_node_type(node_type):
         return "bandpass filter"
     return normalized
 
+
 def resolve_task(config):
     # task controls which classifier file to load (activity/focus/emotion/stress)
     task = config.get("task")
     model_name = config.get("model")
 
     # if config sends model as a task name, support that directly
-    if task is None and isinstance(model_name, str) and model_name in TASK_CLASSIFIER_MAP:
+    if (
+        task is None
+        and isinstance(model_name, str)
+        and model_name in TASK_CLASSIFIER_MAP
+    ):
         task = model_name
 
     # if model is present but not wired to a task yet, keep behavior explicit
-    if task is None and isinstance(model_name, str) and model_name not in TASK_CLASSIFIER_MAP:
+    if (
+        task is None
+        and isinstance(model_name, str)
+        and model_name not in TASK_CLASSIFIER_MAP
+    ):
         print(
             f"ML model '{model_name}' is not mapped to a task yet; "
             f"defaulting to '{DEFAULT_TASK}'."
@@ -68,7 +76,9 @@ def resolve_task(config):
 
     if task not in TASK_CLASSIFIER_MAP:
         supported_tasks = ", ".join(sorted(TASK_CLASSIFIER_MAP.keys()))
-        raise ValueError(f"Unknown ML task '{task}'. Supported tasks: {supported_tasks}")
+        raise ValueError(
+            f"Unknown ML task '{task}'. Supported tasks: {supported_tasks}"
+        )
 
     return task
 
@@ -109,7 +119,9 @@ async def bandpass_filter(data, config):
     if high_cutoff <= low_cutoff:
         raise ValueError("Bandpass high cutoff must be greater than low cutoff.")
     if high_cutoff >= nyquist:
-        raise ValueError(f"Bandpass high cutoff must be less than Nyquist ({nyquist:.2f} Hz).")
+        raise ValueError(
+            f"Bandpass high cutoff must be less than Nyquist ({nyquist:.2f} Hz)."
+        )
 
     # signalProcessing bandpass functions expect (n_channels, n_samples), so transpose first
     channels_first = np.asarray(data.T, dtype=np.float64)
@@ -136,14 +148,19 @@ async def bandpass_filter(data, config):
     filtered_data = np.asarray(filtered_channels_first, dtype=np.float32).T
 
     # from_array() handles resampling + segmentation after configurable bandpass
-    segments, _duration = await asyncio.to_thread(from_array, filtered_data, int(src_fs))
+    segments, _duration = await asyncio.to_thread(
+        from_array, filtered_data, int(src_fs)
+    )
     return segments
+
 
 async def run_ml(data, config):
     print(f"Running ML with config: {config}")
     # ml expects preprocessed segments from the previous node
     if not isinstance(data, list) or len(data) == 0:
-        raise ValueError("ML node expects a non-empty list of preprocessed EEG segments.")
+        raise ValueError(
+            "ML node expects a non-empty list of preprocessed EEG segments."
+        )
     if not all(isinstance(segment, np.ndarray) for segment in data):
         raise TypeError("ML node expects each segment to be a numpy array.")
 
@@ -153,7 +170,9 @@ async def run_ml(data, config):
     # all core ml steps here are blocking python calls, so run each in a thread
     embeddings = await asyncio.to_thread(encoder.encode, data)
     classifier = await asyncio.to_thread(load_classifier, task, MODELS_DIR)
-    segment_labels, segment_probabilities = await asyncio.to_thread(classifier.predict, embeddings)
+    segment_labels, segment_probabilities = await asyncio.to_thread(
+        classifier.predict, embeddings
+    )
     overall_label, confidence, mean_probabilities = await asyncio.to_thread(
         classifier.predict_majority,
         embeddings,
@@ -195,6 +214,7 @@ FUNCTION_MAP = {
     "ml": run_ml,
 }
 
+
 # run our pipeline by iterating through each node and applying each mapped function in sequence
 async def run_pipeline(pipeline, data):
     if not isinstance(pipeline, dict):
@@ -233,7 +253,9 @@ async def run_pipeline(pipeline, data):
         try:
             result = await func(processed_eeg, config)
         except Exception as error:
-            raise RuntimeError(f"Pipeline node '{node['type']}' failed: {error}") from error
+            raise RuntimeError(
+                f"Pipeline node '{node['type']}' failed: {error}"
+            ) from error
 
         # preprocessing nodes update the eeg data passed to later nodes
         if node_type == "bandpass filter":
@@ -266,4 +288,3 @@ if __name__ == "__main__":
     output = asyncio.run(run_pipeline(test_pipeline, sample_eeg))
     print(f"Pipeline output keys: {list(output.keys())}")
     print(f"Preprocessed segment count: {len(output['processed_eeg'])}")
-

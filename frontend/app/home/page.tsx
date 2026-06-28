@@ -10,20 +10,20 @@ export default function Home() {
     return (
         <GlobalProvider>
             <WebSocketProvider>
-            <NotificationsProvider>
-                <div className="h-screen flex flex-col overflow-hidden">
-                    {/* Top section for header and settings bar */}
-                    <div className="flex flex-col">
-                        <AppHeader />
-                        <SettingsBar />
-                    </div>
+                <NotificationsProvider>
+                    <div className="h-screen flex flex-col overflow-hidden">
+                        {/* Top section for header and settings bar */}
+                        <div className="flex flex-col">
+                            <AppHeader />
+                            <SettingsBar />
+                        </div>
 
-                    {/* Bottom section for workspace and sidebar */}
-                    <div className="flex-1 flex relative">
-                        <ReactFlowView />
+                        {/* Bottom section for workspace and sidebar */}
+                        <div className="flex-1 flex relative">
+                            <ReactFlowView />
+                        </div>
                     </div>
-                </div>
-            </NotificationsProvider>
+                </NotificationsProvider>
             </WebSocketProvider>
         </GlobalProvider>
     );

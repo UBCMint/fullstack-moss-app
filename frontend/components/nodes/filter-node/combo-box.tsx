@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Slider } from '@/components/ui/slider';
 
@@ -21,10 +21,10 @@ const filters = [
 interface ComboBoxProps {
     value?: string;
     onValueChange?: (value: string) => void;
-    lowCutoff: number
-    highCutoff: number
-    setLowCutoff: (v: number) => void
-    setHighCutoff: (v: number) => void
+    lowCutoff: number;
+    highCutoff: number;
+    setLowCutoff: (v: number) => void;
+    setHighCutoff: (v: number) => void;
     isConnected?: boolean;
     isDataStreamOn?: boolean;
 }
@@ -79,8 +79,8 @@ export default function ComboBox({
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
-                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                    : 'border-gray-300' // Disconnected: gray border
+                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                  : 'border-gray-300' // Disconnected: gray border
                         )}
                     >
                         {/* No filled circle - always stay empty */}
@@ -110,8 +110,9 @@ export default function ComboBox({
                     {/* Toggle arrow */}
                     <div className="absolute right-[58px] transition-transform duration-300 ease-in-out">
                         <ChevronUp
-                            className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${isExpanded ? 'rotate-0' : 'rotate-180'
-                                }`}
+                            className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${
+                                isExpanded ? 'rotate-0' : 'rotate-180'
+                            }`}
                         />
                     </div>
 
@@ -122,8 +123,8 @@ export default function ComboBox({
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
-                                    ? 'border-gray-300' // Connected to source: gray border (non-activated)
-                                    : 'border-gray-300' // Disconnected: gray border
+                                  ? 'border-gray-300' // Connected to source: gray border (non-activated)
+                                  : 'border-gray-300' // Disconnected: gray border
                         )}
                     >
                         {/* No solid circle inside */}
@@ -142,7 +143,9 @@ export default function ComboBox({
                 {value !== 'bandpass' && (
                     <div>
                         <Slider
-                            value={value === 'lowpass' ? [highCutoff] : [lowCutoff]}
+                            value={
+                                value === 'lowpass' ? [highCutoff] : [lowCutoff]
+                            }
                             onValueChange={(val) => {
                                 if (value === 'lowpass') {
                                     setHighCutoff(val[0]);
@@ -177,7 +180,9 @@ export default function ComboBox({
                         />
                         <div className="flex justify-between items-center mb-5">
                             <span className="text-xs text-gray-500">0</span>
-                            <span className="text-xs text-gray-500">Low Cutoff</span>
+                            <span className="text-xs text-gray-500">
+                                Low Cutoff
+                            </span>
                             <span className="text-xs text-gray-500">100</span>
                         </div>
 
@@ -194,12 +199,13 @@ export default function ComboBox({
                         />
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-xs text-gray-500">0</span>
-                            <span className="text-xs text-gray-500">High Cutoff</span>
+                            <span className="text-xs text-gray-500">
+                                High Cutoff
+                            </span>
                             <span className="text-xs text-gray-500">100</span>
                         </div>
                     </div>
                 )}
-
             </div>
 
             {/* Expandable options section */}

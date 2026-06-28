@@ -1,9 +1,9 @@
 export type PipelineNode = {
-  type: string;
-  config: Record<string, any>;
+    type: string;
+    config: Record<string, unknown>;
 };
 
 export type PipelinePayload = {
-  session_id: string;
-  nodes: PipelineNode[];
+    session_id: string;
+    nodes: PipelineNode[];
 };

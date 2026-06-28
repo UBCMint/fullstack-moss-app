@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use serde_json::Value;
 
@@ -12,7 +12,6 @@ pub struct User {
     pub password_hash: String, // store hashed password
 }
 
-
 // Struct for creating a user (used for data coming INTO the API)
 // Because User derived Deserialize, the serde library (which Axum used to process incoming JSON request body)
 // expected all fields in User struct to be present in JSON you sent (id was not part of payload)
@@ -22,7 +21,6 @@ pub struct NewUser {
     pub email: String,
     pub password: String, // raw password comes from API request
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct TimeSeriesData {
@@ -50,7 +48,7 @@ pub struct Session {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct FrontendState {
     pub session_id: i32,
-    pub data: Value, 
+    pub data: Value,
     pub updated_at: chrono::DateTime<Utc>,
 }
 

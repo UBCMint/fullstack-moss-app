@@ -88,8 +88,8 @@ export default function MLComboBox({
             style={{
                 height:
                     isExpanded ||
-                        (!isConnected && !dismissedError) ||
-                        (isConnected && isDataStreamOn)
+                    (!isConnected && !dismissedError) ||
+                    (isConnected && isDataStreamOn)
                         ? 'auto'
                         : '90px',
                 transition: 'height 0.3s ease-in-out',
@@ -109,17 +109,18 @@ export default function MLComboBox({
                         className={cn(
                             'absolute left-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
-                                ? 'border-[#000000]' : 'border-[#D3D3D3]'
+                                ? 'border-[#000000]'
+                                : 'border-[#D3D3D3]'
                         )}
-                    >
-                    </div>
+                    ></div>
 
                     {/* Status dot */}
                     <div
                         className={cn(
                             'absolute left-16 w-3 h-3 rounded-full',
                             isConnected && isDataStreamOn
-                                ? "bg-[#509693]" : "bg-[#D3D3D3]"
+                                ? 'bg-[#509693]'
+                                : 'bg-[#D3D3D3]'
                         )}
                     />
 
@@ -137,8 +138,11 @@ export default function MLComboBox({
                 <div className="flex items-center ">
                     {/* Toggle arrow */}
                     <div className="absolute right-[58px] transition-transform duration-300 ease-in-out">
-                        <ChevronUp className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${isExpanded ? 'rotate-0' : 'rotate-180'
-                            }`} />
+                        <ChevronUp
+                            className={`h-5 w-5 text-gray-600 transform transition-all duration-300 ease-in-out ${
+                                isExpanded ? 'rotate-0' : 'rotate-180'
+                            }`}
+                        />
                     </div>
 
                     {/* Right connection circle - changes based on connection and data stream */}
@@ -146,7 +150,8 @@ export default function MLComboBox({
                         className={cn(
                             'absolute right-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
-                                ? 'border-[#000000]' : 'border-[#D3D3D3]'
+                                ? 'border-[#000000]'
+                                : 'border-[#D3D3D3]'
                         )}
                     ></div>
                 </div>
@@ -163,8 +168,14 @@ export default function MLComboBox({
                                 </div>
                             </div>
                             <div className="flex-1 text-left">
-                                <div className="text-[18px] font-semibold text-gray-900 leading-6">Error: Expected filtered input but received raw input.</div>
-                                <div className="text-[16px] text-gray-800 mt-2">Please attach the prediction node to a filter node.</div>
+                                <div className="text-[18px] font-semibold text-gray-900 leading-6">
+                                    Error: Expected filtered input but received
+                                    raw input.
+                                </div>
+                                <div className="text-[16px] text-gray-800 mt-2">
+                                    Please attach the prediction node to a
+                                    filter node.
+                                </div>
                                 <div className="-ml-6 mt-4 flex justify-center">
                                     <button
                                         onClick={() => setDismissedError(true)}
@@ -188,32 +199,39 @@ export default function MLComboBox({
                                 className={cn(
                                     'w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
                                     isConnected
-                                        ? 'border-[#000000]' : 'border-[#D3D3D3]'
+                                        ? 'border-[#000000]'
+                                        : 'border-[#D3D3D3]'
                                 )}
                             />
                             <div className="flex-1 flex items-center space-x-3">
                                 <div
                                     className={cn(
                                         'w-3 h-3 rounded-full',
-                                        isDataStreamOn ? 'bg-[#509693]' : 'bg-[#D3D3D3]'
+                                        isDataStreamOn
+                                            ? 'bg-[#509693]'
+                                            : 'bg-[#D3D3D3]'
                                     )}
                                 />
-                                <div className="font-geist text-[23px] font-[550] leading-tight text-black tracking-wider">Predicted</div>
+                                <div className="font-geist text-[23px] font-[550] leading-tight text-black tracking-wider">
+                                    Predicted
+                                </div>
                             </div>
                             <div
                                 className={cn(
                                     'w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
                                     isConnected
-                                        ? 'border-[#000000]' : 'border-[#D3D3D3]'
+                                        ? 'border-[#000000]'
+                                        : 'border-[#D3D3D3]'
                                 )}
                             />
                         </div>
                         <div className="mt-2">
-
                             {/* Stress prediction */}
                             {value === 'Stress' && (
                                 <div className="mt-3 flex flex-col items-center text-center">
-                                    <div className="text-[16px] text-gray-800">Stress:</div>
+                                    <div className="text-[16px] text-gray-800">
+                                        Stress:
+                                    </div>
                                     <div className="mt-2 inline-flex items-center">
                                         <span className="px-2.5 py-1 rounded-full border border-red-400 bg-red-50 text-[14px]">
                                             {stressYes ? 'YES' : 'NO'}
@@ -225,7 +243,9 @@ export default function MLComboBox({
                             {/* Focus prediction */}
                             {value === 'Focus' && (
                                 <div className="mt-3 flex flex-col items-center text-center">
-                                    <div className="text-[16px] text-gray-800">Focus:</div>
+                                    <div className="text-[16px] text-gray-800">
+                                        Focus:
+                                    </div>
                                     <div className="mt-2">
                                         <div
                                             className="relative w-14 h-14 rounded-full"
@@ -244,7 +264,9 @@ export default function MLComboBox({
                             {/* Activity prediction */}
                             {value === 'Activity' && (
                                 <div className="mt-3 flex flex-col items-center text-center">
-                                    <div className="text-[16px] text-gray-800">Activity:</div>
+                                    <div className="text-[16px] text-gray-800">
+                                        Activity:
+                                    </div>
                                     <div className="mt-2 inline-flex items-center">
                                         <span className="px-2.5 py-1 rounded-full border border-[#6DB9B2] bg-[#f0fafa] text-[14px]">
                                             {activityLabel}

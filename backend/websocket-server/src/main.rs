@@ -1,21 +1,16 @@
-use std::{sync::Arc};
+use dotenvy::dotenv;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
+use log::{error, info};
+use serde::Deserialize;
+use shared_logic::bc::start_broadcast;
+use shared_logic::db::initialize_connection;
+use shared_logic::pipeline::{Node, Pipeline};
+use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
-use tokio_tungstenite::{
-    accept_async,
-    tungstenite::{Message},
-    WebSocketStream,
-};
+use tokio_tungstenite::{accept_async, tungstenite::Message, WebSocketStream};
 use tokio_util::sync::CancellationToken;
-use shared_logic::bc::{start_broadcast};
-use shared_logic::db::{initialize_connection};
-use shared_logic::pipeline::{Pipeline, Node};
-use dotenvy::dotenv;
-use log::{info, error};
-use serde::Deserialize;
-use serde_json;
 
 #[derive(Deserialize)]
 struct WebSocketInitMessage {
@@ -30,14 +25,18 @@ async fn main() {
 
     dotenv().ok();
     info!("Environment variables loaded.");
-    initialize_connection().await.expect("Failed to initialize db");
+    initialize_connection()
+        .await
+        .expect("Failed to initialize db");
     run_server().await;
 }
 
 pub async fn run_server() {
     // Get host and port from environment variables, with fallbacks
     let host = std::env::var("WS_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let port = std::env::var("WS_PORT").unwrap_or_else(|_| "8080".to_string()).parse::<u16>()
+    let port = std::env::var("WS_PORT")
+        .unwrap_or_else(|_| "8080".to_string())
+        .parse::<u16>()
         .expect("Invalid WS_PORT environment variable. Must be a valid port number.");
 
     let addr = format!("{}:{}", host, port);
@@ -49,7 +48,10 @@ pub async fn run_server() {
     info!("WebSocket server running at ws://{}", addr);
 
     while let Ok((stream, _)) = listener.accept().await {
-        info!("Incoming TCP connection from: {}", stream.peer_addr().unwrap());
+        info!(
+            "Incoming TCP connection from: {}",
+            stream.peer_addr().unwrap()
+        );
         tokio::spawn(handle_ws(stream));
     }
 }
@@ -97,24 +99,34 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
                 };
                 match serde_json::from_str::<WebSocketInitMessage>(text) {
                     Ok(init) => break init,
-                    Err(e) => { error!("Failed to parse init message JSON: {}", e); continue; }
+                    Err(e) => {
+                        error!("Failed to parse init message JSON: {}", e);
+                        continue;
+                    }
                 }
             }
             Some(Ok(_)) => continue, // ping, binary, etc — keep waiting
-            Some(Err(e)) => { error!("Error on init: {}", e); return; }
-            None => { error!("Stream closed before init message"); return; }
+            Some(Err(e)) => {
+                error!("Error on init: {}", e);
+                return;
+            }
+            None => {
+                error!("Stream closed before init message");
+                return;
+            }
         }
     };
 
     let session_id = init_message.session_id.parse::<i32>().unwrap_or(0);
-    let pipeline = Pipeline { nodes: init_message.nodes };
+    let pipeline = Pipeline {
+        nodes: init_message.nodes,
+    };
     info!("Received pipeline with {} nodes", pipeline.nodes.len());
 
     // spawns the broadcast task
     let mut broadcast = Some(tokio::spawn(async move {
         start_broadcast(write_clone, cancel_clone, pipeline, session_id).await;
     }));
-
 
     while let Some(msg) = read.next().await {
         match msg {
@@ -131,7 +143,10 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
                 break;
             }
             Ok(_) => continue,
-            Err(e) => { error!("Read error: {}", e); break; }
+            Err(e) => {
+                error!("Read error: {}", e);
+                break;
+            }
         }
     }
     info!("Client disconnected.");
@@ -141,7 +156,7 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
 async fn handle_prep_close(
     broadcast_task: &mut Option<tokio::task::JoinHandle<()>>,
     cancel_token: &CancellationToken,
-    write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>
+    write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,
 ) {
     cancel_token.cancel();
 
@@ -154,9 +169,12 @@ async fn handle_prep_close(
     }
 
     let mut write_guard = write.lock().await;
-    if let Err(e) = write_guard.send(Message::Text("confirmed closing".into())).await {
+    if let Err(e) = write_guard
+        .send(Message::Text("confirmed closing".into()))
+        .await
+    {
         log::error!("Failed to send message: {}", e);
-    }else {
+    } else {
         info!("Notified client prep close is complete.");
     }
 }
