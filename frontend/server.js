@@ -1,5 +1,4 @@
-const { time } = require('console');
-const WebSocket = require('ws');
+import WebSocket from 'ws';
 
 const wss = new WebSocket.Server({ port: 8080 });
 
@@ -7,9 +6,9 @@ wss.on('connection', (ws) => {
     console.log('New client connected');
 
     const interval = setInterval(() => {
-
-        const timestamps = Array.from({ length: 20 }, (_, i) => 
-            Date.now() + i * 3
+        const timestamps = Array.from(
+            { length: 20 },
+            (_, i) => Date.now() + i * 3
         );
         const signals = Array.from({ length: 4 }, () =>
             Array.from({ length: 65 }, () => Math.floor(Math.random() * 100))

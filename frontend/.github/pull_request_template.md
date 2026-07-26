@@ -28,7 +28,7 @@ hovering over"
 
 ### Notes:
 
--   This template is intended to **guide** your PR submission, but feel free to
-    modify sections as needed.
--   For the PR title, just reference the appropriate Github Issue/Notion Task
-    -   eg. `yood2/[Bug Fix] Changed color of background`
+- This template is intended to **guide** your PR submission, but feel free to
+  modify sections as needed.
+- For the PR title, just reference the appropriate Github Issue/Notion Task
+    - eg. `yood2/[Bug Fix] Changed color of background`

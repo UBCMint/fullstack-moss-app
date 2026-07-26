@@ -30,6 +30,7 @@ import MachineLearningNode from '@/components/nodes/machine-learning-node/machin
 import ResamplingNode from '@/components/nodes/resampling-node/resampling-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
 import WindowNode from '@/components/nodes/window-node/window-node';
+import LabelNode from '@/components/nodes/label-node/label-node';
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
 import {
@@ -52,6 +53,7 @@ const nodeTypes = {
     'machine-learning-node': MachineLearningNode,
     'signal-graph-node': SignalGraphNode,
     'window-node': WindowNode,
+    'label-node': LabelNode,
 };
 
 // defines backend types for React Flow types
@@ -92,45 +94,45 @@ const PIPELINE_NODE_TYPES = new Set([
 ]);
 
 const topoSort = (nodes: Node[], edges: Edge[]) => {
-  const incoming = new Map<string, number>(); // count of incoming edges for each node
-  const outgoing = new Map<string, string[]>(); // list of target nodes for each node
+    const incoming = new Map<string, number>(); // count of incoming edges for each node
+    const outgoing = new Map<string, string[]>(); // list of target nodes for each node
 
-  // Initialize maps to 0 incoming and empty outgoing 
-  nodes.forEach((n) => {
-    incoming.set(n.id, 0);
-    outgoing.set(n.id, []);
-  });
+    // Initialize maps to 0 incoming and empty outgoing
+    nodes.forEach((n) => {
+        incoming.set(n.id, 0);
+        outgoing.set(n.id, []);
+    });
 
-  edges.forEach((e) => {
-    if (!outgoing.has(e.source)) return; 
-    outgoing.get(e.source)!.push(e.target); // Add target to outgoing list of source
-    incoming.set(e.target, (incoming.get(e.target) ?? 0) + 1); // Increment incoming count for target
-  });
+    edges.forEach((e) => {
+        if (!outgoing.has(e.source)) return;
+        outgoing.get(e.source)!.push(e.target); // Add target to outgoing list of source
+        incoming.set(e.target, (incoming.get(e.target) ?? 0) + 1); // Increment incoming count for target
+    });
 
-  const queue = nodes
-    .filter((n) => (incoming.get(n.id) ?? 0) === 0)
-    .map((n) => n.id);
+    const queue = nodes
+        .filter((n) => (incoming.get(n.id) ?? 0) === 0)
+        .map((n) => n.id);
 
-  const ordered: string[] = [];
+    const ordered: string[] = [];
 
-  // Kahn's algorithm for topological sorting 
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    ordered.push(id);
+    // Kahn's algorithm for topological sorting
+    while (queue.length > 0) {
+        const id = queue.shift()!;
+        ordered.push(id);
 
-    for (const target of outgoing.get(id) ?? []) {
-      const next = (incoming.get(target) ?? 0) - 1;
-      incoming.set(target, next);
-      if (next === 0) queue.push(target);
+        for (const target of outgoing.get(id) ?? []) {
+            const next = (incoming.get(target) ?? 0) - 1;
+            incoming.set(target, next);
+            if (next === 0) queue.push(target);
+        }
     }
-  }
 
-  // In case of cycles or disconnected nodes
-  nodes.forEach((n) => {
-    if (!ordered.includes(n.id)) ordered.push(n.id);
-  });
+    // In case of cycles or disconnected nodes
+    nodes.forEach((n) => {
+        if (!ordered.includes(n.id)) ordered.push(n.id);
+    });
 
-  return ordered.map((id) => nodes.find((n) => n.id === id)!).filter(Boolean);
+    return ordered.map((id) => nodes.find((n) => n.id === id)!).filter(Boolean);
 };
 
 const validatePipeline = (nodes: Node[], edges: Edge[]) => {
@@ -187,32 +189,56 @@ const validatePipeline = (nodes: Node[], edges: Edge[]) => {
     if (!hasUpstreamNodeType(win.id, 'source-node')) {
       errors.push('A Window node must have an upstream Source node.');
     }
-  });
 
-  // If ML node exists, window is required for the ML pipeline
-  const mlNodes = nodes.filter((n) => n.type === 'machine-learning-node');
-  if (mlNodes.length > 0 && windowNodes.length === 0) {
-    errors.push('A Window node is required for ML pipelines.');
-  }
-
-  // Require that output nodes are terminal
-  const outputTypes = new Set(['signal-graph-node', 'machine-learning-node']);
-  nodes.forEach((n) => {
-    if (outputTypes.has(n.type ?? '')) {
-      const outs = outgoing.get(n.id) ?? [];
-      if (outs.length > 0) errors.push('Output nodes must be terminal.');
-    }
-  });
-
-  // Require that ML node doesnt connect directly to source
-  nodes
-    .filter((n) => n.type === 'machine-learning-node')
-    .forEach((ml) => {
-      const ins = incoming.get(ml.id) ?? [];
-      if (ins.some((id) => byId.get(id)?.type === 'source-node')) {
-        errors.push('ML nodes cannot connect directly to Source.');
-      }
+    // Require that output nodes are terminal
+    const outputTypes = new Set(['signal-graph-node', 'machine-learning-node']);
+    nodes.forEach((n) => {
+        if (outputTypes.has(n.type ?? '')) {
+            const outs = outgoing.get(n.id) ?? [];
+            if (outs.length > 0) errors.push('Output nodes must be terminal.');
+        }
     });
+
+    // Require that ML node doesnt connect directly to source
+    nodes
+        .filter((n) => n.type === 'machine-learning-node')
+        .forEach((ml) => {
+            const ins = incoming.get(ml.id) ?? [];
+            if (ins.some((id) => byId.get(id)?.type === 'source-node')) {
+                errors.push('ML nodes cannot connect directly to Source.');
+            }
+        });
+
+    // Warn if filter node appears before window when window exists
+    const filterNodes = nodes.filter((n) => n.type === 'filter-node');
+    const filterDirectFromSource = filterNodes.some((fn) => {
+        const ins = incoming.get(fn.id) ?? [];
+        return ins.some((id) => byId.get(id)?.type === 'source-node');
+    });
+    if (windowNodes.length > 0 && filterDirectFromSource) {
+        warnings.push(
+            'Filter nodes should come after Window nodes when Window nodes are present.'
+        );
+    }
+
+    // Warn if output nodes are connected directly to Source while preprocessing exists
+    const hasPreprocessing = filterNodes.length > 0 || windowNodes.length > 0;
+    const outputDirectFromSource = nodes.some((n) => {
+        if (!outputTypes.has(n.type ?? '')) return false;
+        const ins = incoming.get(n.id) ?? [];
+        return ins.some((id) => byId.get(id)?.type === 'source-node');
+    });
+    if (hasPreprocessing && outputDirectFromSource) {
+        warnings.push(
+            'Outputs should come after preprocessing when preprocessing exists.'
+        );
+    }
+
+    // Cycle detection: if topoSort doesn't include all nodes
+    const ordered = topoSort(nodes, edges);
+    if (ordered.length !== nodes.length) {
+        errors.push('Pipeline contains a cycle.');
+    }
 
   // Warn if filter node appears before window when window exists
   const filterNodes = nodes.filter((n) => n.type === 'filter-node');
@@ -255,23 +281,28 @@ const validatePipeline = (nodes: Node[], edges: Edge[]) => {
 
 // Converts React Flow state to backend pipeline format
 const buildPipelinePayload = (
-  nodes: Node[],
-  edges: Edge[],
-  sessionId: string
+    nodes: Node[],
+    edges: Edge[],
+    sessionId: string
 ): PipelinePayload => {
-  const orderedNodes = topoSort(nodes, edges); // Ensure nodes are in execution order
+    const orderedNodes = topoSort(nodes, edges); // Ensure nodes are in execution order
 
-  return {
-    session_id: sessionId,
-    nodes: orderedNodes
-      .filter((n) => PIPELINE_NODE_TYPES.has(n.type ?? ''))
-      .map((n) => {
-        const type = typeMap[n.type ?? ''] ?? n.type ?? 'unknown'; // Map to backend type
-        const config = (n.data as { config?: Record<string, any> })?.config ?? {}; 
+    return {
+        session_id: sessionId,
+        nodes: orderedNodes
+            .filter((n) => PIPELINE_NODE_TYPES.has(n.type ?? ''))
+            .map((n) => {
+                const type = typeMap[n.type ?? ''] ?? n.type ?? 'unknown'; // Map to backend type
+                const config =
+                    (n.data as { config?: Record<string, unknown> })?.config ??
+                    {};
 
-        if(type == 'preprocessing') {
-          return {type, config: {...DEFAULT_PROCESSING, ...config}}; //apply defaults if not specified by user
-        }
+                if (type == 'preprocessing') {
+                    return {
+                        type,
+                        config: { ...DEFAULT_PROCESSING, ...config },
+                    }; //apply defaults if not specified by user
+                }
 
         if(type == 'window') {
           return {type, config: {...DEFAULT_WINDOWING, ...config}};
@@ -291,8 +322,6 @@ const buildPipelinePayload = (
   };
 };
 
-
-
 let id = 0;
 const getId = () => `node_${id++}`;
 
@@ -308,13 +337,16 @@ const ReactFlowInterface = () => {
     // Auto-dismiss pipeline warning after 30 seconds
     useEffect(() => {
         if (showPipelineWarning) {
-            const timer = setTimeout(() => setShowPipelineWarning(false), 30000);
+            const timer = setTimeout(
+                () => setShowPipelineWarning(false),
+                30000
+            );
             return () => clearTimeout(timer);
         }
     }, [showPipelineWarning]);
 
-    const { sendPipelinePayload } = useWebSocketContext(); 
-    const {activeSessionId} = useGlobalContext(); 
+    const { sendPipelinePayload } = useWebSocketContext();
+    const { activeSessionId } = useGlobalContext();
 
     // Listen for global pipeline reset to clear nodes/edges
     useEffect(() => {
@@ -322,7 +354,7 @@ const ReactFlowInterface = () => {
             try {
                 setNodes([]);
                 setEdges([]);
-            } catch (_) {
+            } catch {
                 // no-op
             }
         };
@@ -346,7 +378,10 @@ const ReactFlowInterface = () => {
 
         window.addEventListener('request-frontend-state', exportListener);
         return () =>
-            window.removeEventListener('request-frontend-state', exportListener);
+            window.removeEventListener(
+                'request-frontend-state',
+                exportListener
+            );
     }, [nodes, edges]);
 
     useEffect(() => {
@@ -373,14 +408,17 @@ const ReactFlowInterface = () => {
 
         window.addEventListener('restore-frontend-state', importListener);
         return () =>
-            window.removeEventListener('restore-frontend-state', importListener);
+            window.removeEventListener(
+                'restore-frontend-state',
+                importListener
+            );
     }, [setNodes, setEdges]);
 
     // Helper to notify components that edges have changed
     const dispatchEdgesChanged = () => {
         try {
             window.dispatchEvent(new Event('reactflow-edges-changed'));
-        } catch (_) {
+        } catch {
             // no-op if window is unavailable
         }
     };
@@ -423,7 +461,7 @@ const ReactFlowInterface = () => {
     // Send updated pipeline to backend on any changes to nodes, edges, or active session
     useEffect(() => {
         if (nodes.length === 0) return;
-        if(activeSessionId== null) return; //no session yet
+        if (activeSessionId == null) return; //no session yet
 
         // Validate pipeline before sending
         const { errors, warnings } = validatePipeline(nodes, edges);
@@ -497,7 +535,7 @@ const ReactFlowInterface = () => {
         setNodes((nds) => [...nds, newNode]);
     };
 
-        const isValidConnection = useCallback(
+    const isValidConnection = useCallback(
         (connection: Connection | Edge) => {
             if (connection.source === connection.target) return false;
             const sourceNode = nodes.find((n) => n.id === connection.source);
@@ -511,19 +549,23 @@ const ReactFlowInterface = () => {
 
             // Block if source node already has an outgoing edge (Source can have only one)
             if (sourceNode.type === 'source-node') {
-                const hasOutgoing = edges.some((e) => e.source === sourceNode.id);
+                const hasOutgoing = edges.some(
+                    (e) => e.source === sourceNode.id
+                );
                 if (hasOutgoing) return false;
             }
 
             // Output nodes are terminal: block any outgoing edge from them
-            if (sourceNode.type === 'machine-learning-node' || sourceNode.type === 'signal-graph-node') {
+            if (
+                sourceNode.type === 'machine-learning-node' ||
+                sourceNode.type === 'signal-graph-node'
+            ) {
                 return false;
-            }  
-
+            }
 
             return true;
         },
-        [nodes]
+        [nodes, edges]
     );
 
     return (
@@ -559,12 +601,20 @@ const ReactFlowInterface = () => {
                         <Alert className="w-[288px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
                             <AlertDescription className="flex-1">
                                 <div className="flex items-center gap-5">
-                                    <LockKeyhole className='h-3.5 w-3.5 flex-shrink-0'/>
-                                    <h3 className="font-bold text-sm">Data Storage & Privacy</h3>
+                                    <LockKeyhole className="h-3.5 w-3.5 flex-shrink-0" />
+                                    <h3 className="font-bold text-sm">
+                                        Data Storage & Privacy
+                                    </h3>
                                 </div>
-                                <p className='text-[0.75rem] mt-1 ml-8'>Your data stays on your device and is never uploaded to the cloud.</p>
+                                <p className="text-[0.75rem] mt-1 ml-8">
+                                    Your data stays on your device and is never
+                                    uploaded to the cloud.
+                                </p>
                             </AlertDescription>
-                            <button onClick={() => setOpen(false)} className="ml-2">
+                            <button
+                                onClick={() => setOpen(false)}
+                                className="ml-2"
+                            >
                                 <X className="h-3 w-3" />
                             </button>
                         </Alert>
@@ -576,47 +626,68 @@ const ReactFlowInterface = () => {
                             <AlertDescription className="text-[0.75rem] text-center w-full">
                                 Only one pipeline can be active at a time.
                             </AlertDescription>
-                            <button onClick={() => setShowPipelineWarning(false)} className="ml-2">
+                            <button
+                                onClick={() => setShowPipelineWarning(false)}
+                                className="ml-2"
+                            >
                                 <X className="h-3 w-3" />
                             </button>
                         </Alert>
                     </div>
                 )}
-                <Panel position="top-right" style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                }}>
+                <Panel
+                    position="top-right"
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                    }}
+                >
                     <button
                         onClick={toggleControls}
                         className="p-1 rounded-full bg-white border"
-                        style={{ 
-                            width: 30, 
+                        style={{
+                            width: 30,
                             height: 30,
                             border: '1px solid #ebebeb',
-                    }}>
+                        }}
+                    >
                         {isControlsOpen ? (
                             <X size={20} />
                         ) : (
-                            <Ellipsis size={20}/>
+                            <Ellipsis size={20} />
                         )}
                     </button>
-                    <div style={{
-                        transition: 'opacity 0.2s, transform 0.2s',
-                        opacity: isControlsOpen ? 1 : 0,
-                        transform: isControlsOpen ? 'translateY(5px)' : 'translateY(-5px)',
-                        pointerEvents: isControlsOpen ? 'auto' : 'none',
-                    }}>
-                        <Controls showFitView={false} showInteractive={false} style={{
-                            position: 'static',
-                            boxShadow: '0 1px 1px rgba(255, 255, 255, 0)',
-                            border: '1px solid #ebebeb',
-                        }}>
-                            <ControlButton>                                
-                                <RotateCw strokeWidth={2.5} style={{fill: 'none'}}/>
+                    <div
+                        style={{
+                            transition: 'opacity 0.2s, transform 0.2s',
+                            opacity: isControlsOpen ? 1 : 0,
+                            transform: isControlsOpen
+                                ? 'translateY(5px)'
+                                : 'translateY(-5px)',
+                            pointerEvents: isControlsOpen ? 'auto' : 'none',
+                        }}
+                    >
+                        <Controls
+                            showFitView={false}
+                            showInteractive={false}
+                            style={{
+                                position: 'static',
+                                boxShadow: '0 1px 1px rgba(255, 255, 255, 0)',
+                                border: '1px solid #ebebeb',
+                            }}
+                        >
+                            <ControlButton>
+                                <RotateCw
+                                    strokeWidth={2.5}
+                                    style={{ fill: 'none' }}
+                                />
                             </ControlButton>
-                            <ControlButton>           
-                                <RotateCcw strokeWidth={2.5} style={{fill: 'none'}}/>
+                            <ControlButton>
+                                <RotateCcw
+                                    strokeWidth={2.5}
+                                    style={{ fill: 'none' }}
+                                />
                             </ControlButton>
                         </Controls>
                     </div>

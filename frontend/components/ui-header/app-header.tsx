@@ -36,7 +36,6 @@ export default function AppHeader() {
 
             {/* import, export, help */}
             <div className="flex h-full items-center space-x-4">
-
                 {/* Export Data */}
                 <Button
                     variant="link"
@@ -44,7 +43,10 @@ export default function AppHeader() {
                     onClick={() => setIsExportOpen(true)}
                 >
                     <span>Export Data</span>
-                    <ArrowUpRight size={14} className="transition-transform duration-200 hover:scale-110" />
+                    <ArrowUpRight
+                        size={14}
+                        className="transition-transform duration-200 hover:scale-110"
+                    />
                 </Button>
 
                 {/* Import Data */}
@@ -54,7 +56,10 @@ export default function AppHeader() {
                     onClick={() => setIsImportOpen(true)}
                 >
                     <span>Import Data</span>
-                    <ArrowUpRight size={14} className="transition-transform duration-200 hover:scale-110" />
+                    <ArrowUpRight
+                        size={14}
+                        className="transition-transform duration-200 hover:scale-110"
+                    />
                 </Button>
 
                 {/* help */}
@@ -65,8 +70,9 @@ export default function AppHeader() {
                                 Help
                             </span>
                             <ChevronUpIcon
-                                className={`h-4 w-4 transform transition-transform duration-300 ${isOpen ? 'rotate-180' : 'rotate-0'
-                                    }`}
+                                className={`h-4 w-4 transform transition-transform duration-300 ${
+                                    isOpen ? 'rotate-180' : 'rotate-0'
+                                }`}
                             />
                         </div>
                     </DropdownMenuTrigger>

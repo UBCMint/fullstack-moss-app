@@ -62,13 +62,14 @@ export default function ExportDialog({
             if (durationUnit === 'Days') multiplier = 24 * 60 * 60 * 1000;
 
             const now = new Date();
-            options.start_time = new Date(now.getTime() - value * multiplier).toISOString();
+            options.start_time = new Date(
+                now.getTime() - value * multiplier
+            ).toISOString();
             options.end_time = now.toISOString();
         }
 
         setIsExporting(true);
         try {
-
             const csvContent = await exportEEGData(sessionId, options);
             downloadCSV(csvContent, sessionId);
             notifications.success({ title: 'EEG data exported successfully' });
@@ -126,25 +127,43 @@ export default function ExportDialog({
                                         type="number"
                                         min="1"
                                         value={durationValue}
-                                        onChange={(e) => setDurationValue(e.target.value)}
+                                        onChange={(e) =>
+                                            setDurationValue(e.target.value)
+                                        }
                                         disabled={isExporting}
                                         className="flex h-10 w-24 rounded-lg border border-gray-300 bg-transparent px-3 py-2 text-sm shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
                                     />
                                     <div className="relative flex-1">
                                         <select
                                             value={durationUnit}
-                                            onChange={(e) => setDurationUnit(e.target.value)}
+                                            onChange={(e) =>
+                                                setDurationUnit(e.target.value)
+                                            }
                                             disabled={isExporting}
                                             className="appearance-none flex h-10 w-full rounded-lg border border-gray-300 bg-transparent px-3 py-2 pr-8 text-sm shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                                         >
-                                            <option value="Seconds">Seconds</option>
-                                            <option value="Minutes">Minutes</option>
+                                            <option value="Seconds">
+                                                Seconds
+                                            </option>
+                                            <option value="Minutes">
+                                                Minutes
+                                            </option>
                                             <option value="Hours">Hours</option>
                                             <option value="Days">Days</option>
                                         </select>
                                         <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-                                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                                            <svg
+                                                className="h-4 w-4"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth="2"
+                                                    d="M19 9l-7 7-7-7"
+                                                />
                                             </svg>
                                         </div>
                                     </div>
@@ -154,7 +173,8 @@ export default function ExportDialog({
 
                         {exportMode === 'all' && (
                             <p className="text-sm text-gray-500">
-                                Exports all recorded data for this session, from the earliest timestamp to now.
+                                Exports all recorded data for this session, from
+                                the earliest timestamp to now.
                             </p>
                         )}
                     </div>
@@ -163,7 +183,8 @@ export default function ExportDialog({
 
                     {sessionId === null && (
                         <p className="text-sm text-red-600 font-medium mb-3">
-                            No active session - please start or load a session before exporting.
+                            No active session - please start or load a session
+                            before exporting.
                         </p>
                     )}
 

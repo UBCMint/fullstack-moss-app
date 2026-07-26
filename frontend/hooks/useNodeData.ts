@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useWebSocketContext, DataPoint } from '@/context/WebSocketContext';
 import { useGlobalContext } from '@/context/GlobalContext';
 
-export default function useNodeData(chartSize: number, batchesPerSecond: number) {
+export default function useNodeData(
+    chartSize: number,
+    batchesPerSecond: number
+) {
     const { subscribe } = useWebSocketContext();
     const { dataStreaming } = useGlobalContext();
     const [renderData, setRenderData] = useState<DataPoint[]>([]);

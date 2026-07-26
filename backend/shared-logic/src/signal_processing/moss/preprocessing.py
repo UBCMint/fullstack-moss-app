@@ -19,9 +19,9 @@ Used by: coordinator.py
 import numpy as np
 from typing import Optional
 
-from loader    import load_csv, CHANNEL_NAMES
+from loader import load_csv, CHANNEL_NAMES
 from resampler import resample, TGT_FS
-from segmenter import segment, WIN_SEC, WIN_SAMPLES, STEP_SAMPLES
+from segmenter import segment, WIN_SEC
 
 
 def preprocess(filepath: str) -> tuple[list[np.ndarray], int, float]:
@@ -58,10 +58,9 @@ def preprocess(filepath: str) -> tuple[list[np.ndarray], int, float]:
     return segments, src_fs, duration
 
 
-def from_array(raw: np.ndarray,
-               src_fs: int,
-               channel_order: Optional[list[str]] = None
-               ) -> tuple[list[np.ndarray], float]:
+def from_array(
+    raw: np.ndarray, src_fs: int, channel_order: Optional[list[str]] = None
+) -> tuple[list[np.ndarray], float]:
     """
     Full preprocessing pipeline from a raw numpy array.
     Use this for real-time streaming from the Muse 2 headset via LSL.
@@ -85,24 +84,21 @@ def from_array(raw: np.ndarray,
         segments, duration = from_array(raw, src_fs=256)
     """
     if raw.ndim != 2 or raw.shape[1] != 4:
-        raise ValueError(
-            f"Expected (n_samples, 4) array, got shape {raw.shape}"
-        )
+        raise ValueError(f"Expected (n_samples, 4) array, got shape {raw.shape}")
 
     eeg = resample(raw.astype(np.float32), src_fs)
 
     duration = eeg.shape[0] / TGT_FS
     if duration < WIN_SEC:
-        raise ValueError(
-            f"Array too short: {duration:.1f}s. Need at least {WIN_SEC}s."
-        )
+        raise ValueError(f"Array too short: {duration:.1f}s. Need at least {WIN_SEC}s.")
 
     segments = segment(eeg)
     return segments, duration
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
+
     if len(sys.argv) < 2:
         print("Usage: python preprocessing.py path/to/recording.csv")
         sys.exit(1)

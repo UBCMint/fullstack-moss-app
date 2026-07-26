@@ -63,7 +63,9 @@ const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
                         <TableRow
                             key={index}
                             className={
-                                index % 2 === 0 ? 'bg-white border-[#2C7778]' : 'bg-[#ABD4C7] border-[#2C7778]'
+                                index % 2 === 0
+                                    ? 'bg-white border-[#2C7778]'
+                                    : 'bg-[#ABD4C7] border-[#2C7778]'
                             }
                         >
                             <TableCell className="text-center text-[#0D585F]">

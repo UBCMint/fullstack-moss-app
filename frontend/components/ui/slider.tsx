@@ -1,8 +1,8 @@
-"use client"
+'use client';
 
-import * as React from "react"
-import * as SliderPrimitive from "@radix-ui/react-slider"
-import { cn } from "@/lib/utils"
+import * as React from 'react';
+import * as SliderPrimitive from '@radix-ui/react-slider';
+import { cn } from '@/lib/utils';
 
 const Slider = React.forwardRef<
     React.ElementRef<typeof SliderPrimitive.Root>,
@@ -15,7 +15,7 @@ const Slider = React.forwardRef<
         // figure out the current numeric value (we only have one thumb)
         const current =
             (Array.isArray(value) ? value[0] : value) ??
-            (Array.isArray(defaultValue) ? defaultValue[0] : defaultValue)
+            (Array.isArray(defaultValue) ? defaultValue[0] : defaultValue);
 
         return (
             <SliderPrimitive.Root
@@ -23,7 +23,7 @@ const Slider = React.forwardRef<
                 value={value}
                 defaultValue={defaultValue}
                 className={cn(
-                    "relative flex w-full touch-none select-none items-center",
+                    'relative flex w-full touch-none select-none items-center',
                     className
                 )}
                 {...props}
@@ -35,18 +35,15 @@ const Slider = React.forwardRef<
 
                 {/* thumb + label */}
                 <SliderPrimitive.Thumb className="relative block h-4 w-4 rounded-full bg-[#7AB5AD]">
-                    <span
-                        className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-gray-500 px-1 py-[1px] rounded"
-                    >
+                    <span className="absolute -top-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-bold text-gray-500 px-1 py-[1px] rounded">
                         {current} Hz
                     </span>
                 </SliderPrimitive.Thumb>
-
             </SliderPrimitive.Root>
-        )
+        );
     }
-)
+);
 
-Slider.displayName = SliderPrimitive.Root.displayName
+Slider.displayName = SliderPrimitive.Root.displayName;
 
-export { Slider }
+export { Slider };

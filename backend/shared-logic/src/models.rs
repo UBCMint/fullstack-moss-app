@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 
 use serde_json::Value;
 
@@ -12,7 +12,6 @@ pub struct User {
     pub password_hash: String, // store hashed password
 }
 
-
 // Struct for creating a user (used for data coming INTO the API)
 // Because User derived Deserialize, the serde library (which Axum used to process incoming JSON request body)
 // expected all fields in User struct to be present in JSON you sent (id was not part of payload)
@@ -22,7 +21,6 @@ pub struct NewUser {
     pub email: String,
     pub password: String, // raw password comes from API request
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct TimeSeriesData {
@@ -50,6 +48,44 @@ pub struct Session {
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct FrontendState {
     pub session_id: i32,
-    pub data: Value, 
+    pub data: Value,
     pub updated_at: chrono::DateTime<Utc>,
+}
+
+// Struct for a time label row coming OUT of the DB (includes all columns)
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct TimeLabel {
+    pub id: i32,
+    pub session_id: i32,
+    pub start_timestamp: DateTime<Utc>,
+    pub end_timestamp: Option<DateTime<Utc>>,
+    pub label: String,
+    pub color: String,
+}
+
+// Struct for a time label coming INTO the API from the frontend
+// No id (auto-generated) or session_id (comes from URL path)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewTimeLabel {
+    pub start_timestamp: DateTime<Utc>,
+    pub end_timestamp: Option<DateTime<Utc>>,
+    pub label: String,
+    pub color: String,
+}
+
+// Struct for a row of EEG data coming OUT of the DB
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct EegDataRow {
+    pub time: DateTime<Utc>,
+    pub channel1: i32,
+    pub channel2: i32,
+    pub channel3: i32,
+    pub channel4: i32,
+}
+
+// Struct for the query parameters on GET /api/sessions/{session_id}/eeg-data
+#[derive(Debug, Deserialize)]
+pub struct EegDataQuery {
+    pub start: DateTime<Utc>,
+    pub end: DateTime<Utc>,
 }

@@ -15,7 +15,11 @@ interface ComboBoxProps {
     isDataStreamOn?: boolean;
 }
 
-const presetWindows: Array<{ value: WindowOption; label: string; size?: number }> = [
+const presetWindows: Array<{
+    value: WindowOption;
+    label: string;
+    size?: number;
+}> = [
     { value: 'default', label: 'Default (64)', size: 64 },
     { value: 'custom', label: 'Custom' },
 ];
@@ -32,11 +36,15 @@ export default function ComboBox({
 }: ComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const [step, setStep] = React.useState<'window' | 'overlap'>('window');
-    const [customWindowInput, setCustomWindowInput] = React.useState<string>('');
-    const [customOverlapInput, setCustomOverlapInput] = React.useState<string>('');
+    const [customWindowInput, setCustomWindowInput] =
+        React.useState<string>('');
+    const [customOverlapInput, setCustomOverlapInput] =
+        React.useState<string>('');
     const [windowError, setWindowError] = React.useState<string>('');
     const [overlapError, setOverlapError] = React.useState<string>('');
-    const [overlapOption, setOverlapOption] = React.useState<'default' | 'custom'>('default');
+    const [overlapOption, setOverlapOption] = React.useState<
+        'default' | 'custom'
+    >('default');
 
     const toggleExpanded = () => {
         if (!isExpanded) {
@@ -130,7 +138,9 @@ export default function ComboBox({
                     <div
                         className={cn(
                             'absolute left-16 w-3 h-3 rounded-full',
-                            isConnected && isDataStreamOn ? 'bg-[#509693]' : 'bg-[#D3D3D3]'
+                            isConnected && isDataStreamOn
+                                ? 'bg-[#509693]'
+                                : 'bg-[#D3D3D3]'
                         )}
                     />
 
@@ -157,7 +167,10 @@ export default function ComboBox({
 
             {/* Collapsed summary */}
             {!isExpanded && (
-                <div className="space-y-3 pb-4" style={{ paddingLeft: '60px', paddingRight: '60px' }}>
+                <div
+                    className="space-y-3 pb-4"
+                    style={{ paddingLeft: '60px', paddingRight: '60px' }}
+                >
                     <div className="text-[20px] leading-tight text-black">
                         Size:{' '}
                         <span className="inline-flex w-12 h-12 rounded-full border border-[#509693] items-center justify-center">
@@ -179,22 +192,34 @@ export default function ComboBox({
                 style={{
                     maxHeight: isExpanded ? '320px' : '0px',
                     opacity: isExpanded ? 1 : 0,
-                    transition: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
+                    transition:
+                        'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
                 }}
             >
-                <div className="space-y-2 pb-3 overflow-y-auto max-h-[320px]" style={{ paddingLeft: '60px', paddingRight: '60px' }}>
-
+                <div
+                    className="space-y-2 pb-3 overflow-y-auto max-h-[320px]"
+                    style={{ paddingLeft: '60px', paddingRight: '60px' }}
+                >
                     {/* Step 1: Input size */}
                     {step === 'window' && (
                         <>
-                            <div className="text-xs text-gray-700">Input size</div>
+                            <div className="text-xs text-gray-700">
+                                Input size
+                            </div>
                             {presetWindows.map((preset) => (
                                 <button
                                     key={preset.label}
-                                    onClick={() => handlePresetSelect(preset.value, preset.size)}
+                                    onClick={() =>
+                                        handlePresetSelect(
+                                            preset.value,
+                                            preset.size
+                                        )
+                                    }
                                     className={cn(
                                         'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
-                                        selectedOption === preset.value ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+                                        selectedOption === preset.value
+                                            ? 'bg-gray-100 text-gray-900'
+                                            : 'text-gray-600 hover:bg-gray-50'
                                     )}
                                 >
                                     {preset.label}
@@ -205,7 +230,12 @@ export default function ComboBox({
                                     <input
                                         value={customWindowInput}
                                         onChange={(e) => {
-                                            setCustomWindowInput(e.target.value.replace(/[^\d]/g, ''));
+                                            setCustomWindowInput(
+                                                e.target.value.replace(
+                                                    /[^\d]/g,
+                                                    ''
+                                                )
+                                            );
                                             setWindowError('');
                                         }}
                                         placeholder="Custom integer"
@@ -220,7 +250,12 @@ export default function ComboBox({
                                 </div>
                             )}
                             {selectedOption === 'custom' && windowError && (
-                                <div className="text-xs text-red-600 -mt-1" role="alert">{windowError}</div>
+                                <div
+                                    className="text-xs text-red-600 -mt-1"
+                                    role="alert"
+                                >
+                                    {windowError}
+                                </div>
                             )}
                         </>
                     )}
@@ -228,21 +263,36 @@ export default function ComboBox({
                     {/* Step 2: Overlap size */}
                     {step === 'overlap' && (
                         <>
-                            <div className="text-xs text-gray-700">Overlap size</div>
+                            <div className="text-xs text-gray-700">
+                                Overlap size
+                            </div>
                             <button
-                                onClick={() => { setOverlapOption('default'); setOverlapSize(0); setOverlapError(''); confirmOverlap(); }}
+                                onClick={() => {
+                                    setOverlapOption('default');
+                                    setOverlapSize(0);
+                                    setOverlapError('');
+                                    confirmOverlap();
+                                }}
                                 className={cn(
                                     'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
-                                    overlapOption === 'default' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+                                    overlapOption === 'default'
+                                        ? 'bg-gray-100 text-gray-900'
+                                        : 'text-gray-600 hover:bg-gray-50'
                                 )}
                             >
                                 Default (0)
                             </button>
                             <button
-                                onClick={() => { setOverlapOption('custom'); setCustomOverlapInput(''); setOverlapError(''); }}
+                                onClick={() => {
+                                    setOverlapOption('custom');
+                                    setCustomOverlapInput('');
+                                    setOverlapError('');
+                                }}
                                 className={cn(
                                     'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
-                                    overlapOption === 'custom' ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50'
+                                    overlapOption === 'custom'
+                                        ? 'bg-gray-100 text-gray-900'
+                                        : 'text-gray-600 hover:bg-gray-50'
                                 )}
                             >
                                 Custom
@@ -252,7 +302,12 @@ export default function ComboBox({
                                     <input
                                         value={customOverlapInput}
                                         onChange={(e) => {
-                                            setCustomOverlapInput(e.target.value.replace(/[^\d]/g, ''));
+                                            setCustomOverlapInput(
+                                                e.target.value.replace(
+                                                    /[^\d]/g,
+                                                    ''
+                                                )
+                                            );
                                             setOverlapError('');
                                         }}
                                         placeholder="Custom integer"
@@ -266,10 +321,16 @@ export default function ComboBox({
                                     </button>
                                 </div>
                             )}
-                            {overlapError && <div className="text-xs text-red-600 -mt-1" role="alert">{overlapError}</div>}
+                            {overlapError && (
+                                <div
+                                    className="text-xs text-red-600 -mt-1"
+                                    role="alert"
+                                >
+                                    {overlapError}
+                                </div>
+                            )}
                         </>
                     )}
-
                 </div>
             </div>
         </div>

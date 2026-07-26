@@ -1,2 +1,12 @@
-export { NotificationsProvider, NotificationsRoot, NotificationsShowcase, useNotifications } from "./Notifications";
-export type { NotificationType, NotificationOptions, NotificationItem, NotificationsApi } from "./Notifications"; 
+export {
+    NotificationsProvider,
+    NotificationsRoot,
+    NotificationsShowcase,
+    useNotifications,
+} from './Notifications';
+export type {
+    NotificationType,
+    NotificationOptions,
+    NotificationItem,
+    NotificationsApi,
+} from './Notifications';
