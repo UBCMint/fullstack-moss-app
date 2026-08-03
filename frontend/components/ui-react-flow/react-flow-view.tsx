@@ -31,6 +31,7 @@ import ResamplingNode from '@/components/nodes/resampling-node/resampling-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
 import WindowNode from '@/components/nodes/window-node/window-node';
 import LabelNode from '@/components/nodes/label-node/label-node';
+import QualityCheckNode from '@/components/nodes/quality-check-node/quality-check-node';
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
 import {
@@ -54,6 +55,7 @@ const nodeTypes = {
     'signal-graph-node': SignalGraphNode,
     'window-node': WindowNode,
     'label-node': LabelNode,
+    'quality-check-node': QualityCheckNode,
 };
 
 // defines backend types for React Flow types
@@ -61,10 +63,12 @@ const typeMap: Record<string, string> = {
     'filter-node': 'preprocessing',
     'window-node': 'window',
     'machine-learning-node': 'ml',
+    'quality-check-node': 'preprocessing',
 };
 
 // allow for defaults of the filtering node to still be applied if user doesn't specify them in the UI
 const DEFAULT_PROCESSING = {
+    apply_quality_check: false,
     apply_bandpass: false,
     use_iir: false,
     l_freq: null,
@@ -83,6 +87,7 @@ const PIPELINE_NODE_TYPES = new Set([
     'window-node',
     'filter-node',
     'machine-learning-node',
+    'quality-check-node',
 ]);
 
 const topoSort = (nodes: Node[], edges: Edge[]) => {
@@ -527,134 +532,139 @@ const ReactFlowInterface = () => {
 
     return (
         <div
+            className="flex"
             style={{
                 width: '100vw',
                 height: '100vh',
                 position: 'relative',
+                overflow: 'hidden',
             }}
         >
-            <ReactFlow
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onDrop={onDrop}
-                onDragOver={onDragOver}
-                connectionMode={ConnectionMode.Strict}
-                fitView
-                style={{ backgroundColor: '#F7F9FB' }}
-                nodeTypes={nodeTypes}
-                snapToGrid={false}
-                snapGrid={[15, 15]}
-                defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-                minZoom={0.5}
-                maxZoom={2}
-                attributionPosition="bottom-left"
-                isValidConnection={isValidConnection}
-            >
-                {open && (
-                    <div className="flex justify-center items-center absolute top-24 left-1/2 transform -translate-x-1/2 z-10">
-                        <Alert className="w-[288px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
-                            <AlertDescription className="flex-1">
-                                <div className="flex items-center gap-5">
-                                    <LockKeyhole className="h-3.5 w-3.5 flex-shrink-0" />
-                                    <h3 className="font-bold text-sm">
-                                        Data Storage & Privacy
-                                    </h3>
-                                </div>
-                                <p className="text-[0.75rem] mt-1 ml-8">
-                                    Your data stays on your device and is never
-                                    uploaded to the cloud.
-                                </p>
-                            </AlertDescription>
-                            <button
-                                onClick={() => setOpen(false)}
-                                className="ml-2"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        </Alert>
-                    </div>
-                )}
-                {showPipelineWarning && (
-                    <div className="flex justify-center items-center absolute top-3 left-1/2 transform -translate-x-1/2 z-10">
-                        <Alert className="w-[300px] bg-[#FFF4E1] text-black flex justify-between items-start p-3 font-ibmplex border-2 border-[#F0E4CA]">
-                            <AlertDescription className="text-[0.75rem] text-center w-full">
-                                Only one pipeline can be active at a time.
-                            </AlertDescription>
-                            <button
-                                onClick={() => setShowPipelineWarning(false)}
-                                className="ml-2"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        </Alert>
-                    </div>
-                )}
-                <Panel
-                    position="top-right"
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                    }}
+            {/* Sidebar placed correctly outside of ReactFlow */}
+            <Sidebar />
+
+            {/* ReactFlow wrapped in a flex container taking the remaining space */}
+            <div className="flex-1 h-full relative">
+                <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    onDrop={onDrop}
+                    onDragOver={onDragOver}
+                    connectionMode={ConnectionMode.Strict}
+                    fitView
+                    style={{ backgroundColor: '#F7F9FB' }}
+                    nodeTypes={nodeTypes}
+                    snapToGrid={false}
+                    snapGrid={[15, 15]}
+                    defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+                    minZoom={0.5}
+                    maxZoom={2}
+                    attributionPosition="bottom-left"
+                    isValidConnection={isValidConnection}
                 >
-                    <button
-                        onClick={toggleControls}
-                        className="p-1 rounded-full bg-white border"
+                    {open && (
+                        <div className="flex justify-center items-center absolute top-24 left-1/2 transform -translate-x-1/2 z-10">
+                            <Alert className="w-[288px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
+                                <AlertDescription className="flex-1">
+                                    <div className="flex items-center gap-5">
+                                        <LockKeyhole className="h-3.5 w-3.5 flex-shrink-0" />
+                                        <h3 className="font-bold text-sm">
+                                            Data Storage & Privacy
+                                        </h3>
+                                    </div>
+                                    <p className="text-[0.75rem] mt-1 ml-8">
+                                        Your data stays on your device and is never
+                                        uploaded to the cloud.
+                                    </p>
+                                </AlertDescription>
+                                <button
+                                    onClick={() => setOpen(false)}
+                                    className="ml-2"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </Alert>
+                        </div>
+                    )}
+                    {showPipelineWarning && (
+                        <div className="flex justify-center items-center absolute top-3 left-1/2 transform -translate-x-1/2 z-10">
+                            <Alert className="w-[300px] bg-[#FFF4E1] text-black flex justify-between items-start p-3 font-ibmplex border-2 border-[#F0E4CA]">
+                                <AlertDescription className="text-[0.75rem] text-center w-full">
+                                    Only one pipeline can be active at a time.
+                                </AlertDescription>
+                                <button
+                                    onClick={() => setShowPipelineWarning(false)}
+                                    className="ml-2"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </Alert>
+                        </div>
+                    )}
+                    <Panel
+                        position="top-right"
                         style={{
-                            width: 30,
-                            height: 30,
-                            border: '1px solid #ebebeb',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
                         }}
                     >
-                        {isControlsOpen ? (
-                            <X size={20} />
-                        ) : (
-                            <Ellipsis size={20} />
-                        )}
-                    </button>
-                    <div
-                        style={{
-                            transition: 'opacity 0.2s, transform 0.2s',
-                            opacity: isControlsOpen ? 1 : 0,
-                            transform: isControlsOpen
-                                ? 'translateY(5px)'
-                                : 'translateY(-5px)',
-                            pointerEvents: isControlsOpen ? 'auto' : 'none',
-                        }}
-                    >
-                        <Controls
-                            showFitView={false}
-                            showInteractive={false}
+                        <button
+                            onClick={toggleControls}
+                            className="p-1 rounded-full bg-white border"
                             style={{
-                                position: 'static',
-                                boxShadow: '0 1px 1px rgba(255, 255, 255, 0)',
+                                width: 30,
+                                height: 30,
                                 border: '1px solid #ebebeb',
                             }}
                         >
-                            <ControlButton>
-                                <RotateCw
-                                    strokeWidth={2.5}
-                                    style={{ fill: 'none' }}
-                                />
-                            </ControlButton>
-                            <ControlButton>
-                                <RotateCcw
-                                    strokeWidth={2.5}
-                                    style={{ fill: 'none' }}
-                                />
-                            </ControlButton>
-                        </Controls>
-                    </div>
-                </Panel>
-                <Panel position="top-left">
-                    <Sidebar />
-                </Panel>
+                            {isControlsOpen ? (
+                                <X size={20} />
+                            ) : (
+                                <Ellipsis size={20} />
+                            )}
+                        </button>
+                        <div
+                            style={{
+                                transition: 'opacity 0.2s, transform 0.2s',
+                                opacity: isControlsOpen ? 1 : 0,
+                                transform: isControlsOpen
+                                    ? 'translateY(5px)'
+                                    : 'translateY(-5px)',
+                                pointerEvents: isControlsOpen ? 'auto' : 'none',
+                            }}
+                        >
+                            <Controls
+                                showFitView={false}
+                                showInteractive={false}
+                                style={{
+                                    position: 'static',
+                                    boxShadow: '0 1px 1px rgba(255, 255, 255, 0)',
+                                    border: '1px solid #ebebeb',
+                                }}
+                            >
+                                <ControlButton>
+                                    <RotateCw
+                                        strokeWidth={2.5}
+                                        style={{ fill: 'none' }}
+                                    />
+                                </ControlButton>
+                                <ControlButton>
+                                    <RotateCcw
+                                        strokeWidth={2.5}
+                                        style={{ fill: 'none' }}
+                                    />
+                                </ControlButton>
+                            </Controls>
+                        </div>
+                    </Panel>
 
-                <Background />
-            </ReactFlow>
+                    <Background />
+                </ReactFlow>
+            </div>
         </div>
     );
 };

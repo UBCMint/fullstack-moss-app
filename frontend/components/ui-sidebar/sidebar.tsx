@@ -48,6 +48,11 @@ export default function Sidebar() {
                     description:
                         'Configure windowing parameters for data streams',
                 },
+                {
+                    id: 'quality-check-node',
+                    label: 'Signal Quality Check',
+                    description: 'Validates EEG signal quality and detects flatlines/noise',
+                },
             ],
         },
         {
@@ -135,32 +140,32 @@ export default function Sidebar() {
                             >
                                 {searchTerm
                                     ? filteredNodes.map((node) => (
-                                          <NodeButton
-                                              key={node.id}
-                                              id={node.id}
-                                              label={node.label}
-                                              description={node.description}
-                                          />
-                                      ))
+                                        <NodeButton
+                                            key={node.id}
+                                            id={node.id}
+                                            label={node.label}
+                                            description={node.description}
+                                        />
+                                    ))
                                     : NodeCategories.map((group) => (
-                                          <div key={group.category}>
-                                              <p className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
-                                                  {group.category}
-                                              </p>
-                                              <div className="space-y-2">
-                                                  {group.nodes.map((node) => (
-                                                      <NodeButton
-                                                          key={node.id}
-                                                          id={node.id}
-                                                          label={node.label}
-                                                          description={
-                                                              node.description
-                                                          }
-                                                      />
-                                                  ))}
-                                              </div>
-                                          </div>
-                                      ))}
+                                        <div key={group.category}>
+                                            <p className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                                                {group.category}
+                                            </p>
+                                            <div className="space-y-2">
+                                                {group.nodes.map((node) => (
+                                                    <NodeButton
+                                                        key={node.id}
+                                                        id={node.id}
+                                                        label={node.label}
+                                                        description={
+                                                            node.description
+                                                        }
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
                             </div>
 
                             {/* ── Section 3: Warning footer (shrinks away when closed) ── */}

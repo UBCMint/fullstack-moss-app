@@ -6,6 +6,7 @@ import React from 'react';
 import ComboBox from './combo-box';
 
 interface FilterConfig {
+    apply_quality_check: boolean;
     apply_bandpass: boolean;
     use_iir: boolean;
     l_freq: number | null;
@@ -41,6 +42,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
     const buildConfig = React.useCallback((): FilterConfig => {
         if (!isConnected) {
             return {
+                apply_quality_check: false,
                 apply_bandpass: false,
                 use_iir: false,
                 l_freq: null,
@@ -54,6 +56,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
         switch (selectedFilter) {
             case 'lowpass':
                 return {
+                    apply_quality_check: false,
                     apply_bandpass: true,
                     use_iir: false,
                     l_freq: null,
@@ -65,6 +68,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
 
             case 'highpass':
                 return {
+                    apply_quality_check: false,
                     apply_bandpass: true,
                     use_iir: false,
                     l_freq: lowCutoff,
@@ -76,6 +80,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
 
             case 'bandpass':
                 return {
+                    apply_quality_check: false,
                     apply_bandpass: true,
                     use_iir: false,
                     l_freq: lowCutoff,
@@ -99,15 +104,15 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
             nds.map((n) =>
                 n.id === id
                     ? {
-                          ...n,
-                          data: {
-                              ...n.data,
-                              config,
-                              _highCutoff: highCutoff,
-                              _lowCutoff: lowCutoff,
-                              _selectedFilter: selectedFilter,
-                          },
-                      }
+                        ...n,
+                        data: {
+                            ...n.data,
+                            config,
+                            _highCutoff: highCutoff,
+                            _lowCutoff: lowCutoff,
+                            _selectedFilter: selectedFilter,
+                        },
+                    }
                     : n
             )
         );
