@@ -6,6 +6,7 @@ use lsl::{resolve_bypred, Pullable, StreamInlet};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::Sender;
 use tokio_util::sync::CancellationToken;
+
 // use crate::signal_processing::signal_processor::SignalProcessor;
 use crate::pipeline::{Pipeline, PreprocessingConfig, WindowConfig};
 use crate::signal_processing::pipeline_gateway::{PipelineGateway, PipelineOutput};
@@ -20,14 +21,25 @@ pub struct EEGDataPacket {
     pub ml_result: Option<PipelineOutput>,
 }
 
+// Status message sent to the client when the EEG stream fails to start or dies.
+// reason values: "no_source" (no LSL stream found), "gateway_init_failed",
+// "internal_error" (task panicked).
+#[derive(Serialize, Debug, Clone)]
+#[serde(tag = "type")]
+pub enum ServerStatus {
+    #[serde(rename = "stream_error")]
+    StreamError { reason: String },
+}
+
 // Async entry point for EEG data collection.
+// Returns Ok((successful_count, dropped_count)) on completion, or Err(reason) if
+// the stream could not be set up at all (e.g. no EEG source connected).
 pub async fn receive_eeg(
     tx: Sender<Arc<EEGDataPacket>>,
     cancel_token: CancellationToken,
     pipeline: Pipeline,
-) {
+) -> Result<(u32, u32), String> {
     info!("Starting EEG data receiver");
-
     // Extract configs from the pipeline, falling back to defaults if a node is missing
     let preprocessing_config = pipeline.preprocessing_config().cloned().unwrap_or_default();
     let window_config = pipeline.window_config().cloned().unwrap_or_default();
@@ -37,12 +49,10 @@ pub async fn receive_eeg(
         preprocessing_config.l_freq,
         preprocessing_config.h_freq
     );
-
     // Create a watch channel from the initial window config.
     // The receiver is passed into the collection loop so it can react to future updates.
     let (_windowing_tx, windowing_rx) = tokio::sync::watch::channel(window_config);
-
-    receive_eeg_with_config(tx, cancel_token, preprocessing_config, windowing_rx).await;
+    receive_eeg_with_config(tx, cancel_token, preprocessing_config, windowing_rx).await
 }
 
 // Async entry point for EEG data collection.
@@ -51,11 +61,10 @@ pub async fn receive_eeg_with_config(
     cancel_token: CancellationToken,
     processing_config: ProcessingConfig,
     windowing_rx: tokio::sync::watch::Receiver<WindowingConfig>,
-) {
+) -> Result<(u32, u32), String> {
     info!("Starting EEG data receiver");
     // let python_script_path = std::env::var("SIGNAL_PROCESSING_SCRIPT")
     //     .unwrap_or_else(|_| "../shared-logic/src/signal_processing/signalProcessing.py".to_string());
-
     let manager_script_path = std::env::var("PIPELINE_MANAGER_SCRIPT").unwrap_or_else(|_| {
         "/app/shared-logic/src/signal_processing/moss/mock_manager.py".to_string()
     });
@@ -69,7 +78,7 @@ pub async fn receive_eeg_with_config(
                 info!("current path: {:?}", std::env::current_dir());
                 info!("Looking for manager script at: {}", manager_script_path);
                 error!("Failed to initialize pipeline gateway: {}", e);
-                return (0, 0);
+                return Err(format!("gateway_init_failed: {}", e));
             }
         };
 
@@ -78,31 +87,34 @@ pub async fn receive_eeg_with_config(
             Ok(inlet) => inlet,
             Err(e) => {
                 error!("Failed to setup EEG stream: {}", e);
-                return (0, 0);
+                return Err("no_source".to_string());
             }
         };
 
         // Run collection loop
-        run_eeg_collection(
+        Ok(run_eeg_collection(
             inlet,
             tx,
             cancel_token,
             processing_config,
             gateway,
             windowing_rx,
-        )
+        ))
     });
 
     // Handle results
     match result.await {
-        Ok((count, drop)) => {
+        Ok(Ok((count, drop))) => {
             info!(
                 "EEG session completed - received: {}, dropped: {}",
                 count, drop
             );
+            Ok((count, drop))
         }
+        Ok(Err(reason)) => Err(reason),
         Err(e) => {
             error!("EEG receiver task panicked: {}", e);
+            Err("internal_error".to_string())
         }
     }
 }
@@ -110,7 +122,7 @@ pub async fn receive_eeg_with_config(
 // Resolves EEG stream and creates inlet for data reception.
 // Returns error if no streams found or inlet creation fails.
 fn setup_eeg_stream() -> Result<StreamInlet, String> {
-    let streams = resolve_bypred("type='EEG'", 1, lsl::FOREVER)
+    let streams = resolve_bypred("type='EEG'", 1, 5.0)
         .map_err(|e| format!("Could not resolve EEG stream: {}", e))?;
 
     if streams.is_empty() {
@@ -134,7 +146,6 @@ fn run_eeg_collection(
 ) -> (u32, u32) {
     let mut count = 0;
     let mut drop = 0;
-
     let mut windowing = windowing_rx.borrow().clone();
 
     // Creates a buffer that stores overlapping eeg samples
@@ -151,6 +162,7 @@ fn run_eeg_collection(
     // Calculate the offset between LSL clock and Unix epoch
     let lsl_to_unix_offset =
         Utc::now().timestamp_nanos_opt().unwrap() as f64 / 1_000_000_000.0 - lsl::local_clock();
+
     loop {
         if windowing_rx.has_changed().unwrap_or(false) {
             windowing = windowing_rx.borrow().clone();
@@ -202,7 +214,6 @@ fn run_eeg_collection(
                                 new_ch.extend_from_slice(ch);
                                 *ch = new_ch;
                             }
-
                             // Timestamps: prepend placeholders (or track overlap timestamps)
                             // For simplicity, pad with copies of the first timestamp
                             let first_ts = packet.timestamps[0];
@@ -258,6 +269,7 @@ fn run_eeg_collection(
             }
         }
     }
+
     (count, drop)
 }
 
@@ -284,11 +296,11 @@ fn accumulate_sample(
         (timestamp.fract() * 1_000_000_000.0) as u32,
     )
     .unwrap_or_else(Utc::now);
-
     // info!("Raw timestamp: {}, Converted: {:?}", timestamp, timestamp_dt);
 
     // Add sample to packet
     packet.timestamps.push(timestamp_dt);
+
     // Add sample to each channel
     for (ch_idx, ch_data) in packet.signals.iter_mut().enumerate() {
         ch_data.push(sample[ch_idx] as f64); // Convert here
@@ -329,40 +341,6 @@ fn process_and_send(
         }
     };
     info!("done pipeline processing");
-
-    // // Old PyO3 calls via SignalProcessor — replaced by gateway above
-    // if config.apply_bandpass {
-    //     packet.signals = if config.use_iir {
-    //         processor.apply_iir_bandpass(&packet.signals, config.sfreq, config.l_freq, config.h_freq)?
-    //     } else {
-    //         processor.apply_fir_bandpass(&packet.signals, config.sfreq, config.l_freq, config.h_freq)?
-    //     };
-    // }
-
-    //  // Log last 5 samples before filtering
-    // for (ch_idx, channel) in packet.signals.iter().enumerate() {
-    //     let start = channel.len().saturating_sub(5);
-    //     info!("Before ch{}: {:?}", ch_idx, &channel[start..]);
-    // }
-    // // Log last 5 samples after filtering
-    // for (ch_idx, channel) in packet.signals.iter().enumerate() {
-    //     let start = channel.len().saturating_sub(5);
-    //     info!("After ch{}: {:?}", ch_idx, &channel[start..]);
-    // }
-
-    // // Apply downsampling
-    // if let Some(factor) = config.downsample_factor {
-    //     packet.signals = processor.downsample(&packet.signals, factor)?;
-
-    //     // Adjust timestamps to match downsampled data
-    //     let new_n_samples = packet.signals[0].len();
-    //     let step = packet.timestamps.len() / new_n_samples;
-    //     packet.timestamps = packet.timestamps.iter()
-    //         .step_by(step.max(1))
-    //         .take(new_n_samples)
-    //         .cloned()
-    //         .collect();
-    // }
 
     // Send the processed packet
     tx.send(Arc::new(packet.clone()))

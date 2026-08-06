@@ -1,8 +1,7 @@
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Receiver;
-
+use crate::lsl::{receive_eeg, EEGDataPacket, ServerStatus};
 use crate::db::{get_db_client, insert_batch_eeg};
-use crate::lsl::{receive_eeg, EEGDataPacket};
 use crate::mockeeg::generate_mock_data;
 use crate::pipeline::Pipeline;
 use futures_util::stream::SplitSink;
@@ -38,8 +37,9 @@ pub async fn start_broadcast(
     //spawn a sender task
     let tx_clone = tx.clone();
     let sender_token = cancel_token.clone();
+    let write_for_err = write.clone();
     let sender = tokio::spawn(async move {
-        receive_eeg(tx_clone, sender_token, pipeline).await;
+        receive_eeg(tx_clone, sender_token, pipeline).await
     });
 
     // Subscribe for websocket Receiver
@@ -55,9 +55,19 @@ pub async fn start_broadcast(
 
     //waits for sender to complete.
     match sender.await {
-        Ok(_) => info!("Task finished successfully"),
-        Err(e) => error!("Task panicked: {:?}", e),
+    Ok(Ok(_)) => info!("Task finished successfully"),
+    Ok(Err(reason)) => {
+        error!("EEG receive failed: {}", reason);
+        let status = ServerStatus::StreamError { reason };
+        if let Ok(msg) = serde_json::to_string(&status) {
+            let mut w = write_for_err.lock().await;
+            if let Err(e) = w.send(Message::Text(msg)).await {
+                error!("Failed to send stream_error to client: {}", e);
+            }
+        }
     }
+    Err(e) => error!("Task panicked: {:?}", e),
+}
 }
 
 // ws_broadcast_receiver takes a EEGDataPacket  struct from the broadcast sender, and converts it to JSON, then send it to the connected websocket client.

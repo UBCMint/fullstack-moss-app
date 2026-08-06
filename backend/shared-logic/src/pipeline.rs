@@ -35,6 +35,7 @@ impl Default for WindowConfig {
 
 // Fields moved from ProcessingConfig in lsl.rs
 #[derive(Deserialize, Serialize, Debug, Clone)]
+#[serde(default)]
 pub struct PreprocessingConfig {
     pub apply_bandpass: bool,
     pub apply_quality_check: bool,
