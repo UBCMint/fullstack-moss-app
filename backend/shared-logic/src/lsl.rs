@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::Sender;
 use tokio_util::sync::CancellationToken;
 // use crate::signal_processing::signal_processor::SignalProcessor;
+use crate::models::NUM_CHANNELS;
 use crate::pipeline::{Pipeline, PreprocessingConfig, WindowConfig};
 use crate::signal_processing::pipeline_gateway::{PipelineGateway, PipelineOutput};
 
@@ -138,11 +139,11 @@ fn run_eeg_collection(
     let mut windowing = windowing_rx.borrow().clone();
 
     // Creates a buffer that stores overlapping eeg samples
-    let mut overlap_buffer: Vec<Vec<f64>> = vec![Vec::new(); 4];
+    let mut overlap_buffer: Vec<Vec<f64>> = vec![Vec::new(); NUM_CHANNELS];
 
     let mut packet = EEGDataPacket {
         timestamps: Vec::with_capacity(windowing.chunk_size + 1),
-        signals: (0..4)
+        signals: (0..NUM_CHANNELS)
             .map(|_| Vec::with_capacity(windowing.chunk_size + 1))
             .collect::<Vec<_>>(),
         ml_result: None,
@@ -262,8 +263,8 @@ fn run_eeg_collection(
 }
 
 // Accumulates LSL sample into EEGDataPacket.
-// Returns Ok(true) when packet reaches 65 samples, Ok(false) otherwise.
-// Requires at least 4 channels in sample.
+// Returns Ok(true) when packet reaches chunk_size samples, Ok(false) otherwise.
+// Requires at least NUM_CHANNELS channels in sample.
 fn accumulate_sample(
     sample: &[f32],
     timestamp: f64,
@@ -271,30 +272,26 @@ fn accumulate_sample(
     chunk_size: usize,
 ) -> Result<bool, String> {
     // Validate sample length
-    if sample.len() < 4 {
+    if sample.len() < NUM_CHANNELS {
         return Err(format!(
-            "Invalid sample length: got {} channels, expected at least 4",
-            sample.len()
+            "Invalid sample length: got {} channels, expected at least {}",
+            sample.len(),
+            NUM_CHANNELS
         ));
     }
 
-    // Convert timestamp
     let timestamp_dt = DateTime::from_timestamp(
         timestamp as i64,
         (timestamp.fract() * 1_000_000_000.0) as u32,
     )
     .unwrap_or_else(Utc::now);
 
-    // info!("Raw timestamp: {}, Converted: {:?}", timestamp, timestamp_dt);
-
     // Add sample to packet
     packet.timestamps.push(timestamp_dt);
-    // Add sample to each channel
     for (ch_idx, ch_data) in packet.signals.iter_mut().enumerate() {
-        ch_data.push(sample[ch_idx] as f64); // Convert here
+        ch_data.push(sample[ch_idx] as f64);
     }
 
-    // Check if packet is full
     Ok(packet.signals[0].len() >= chunk_size)
 }
 

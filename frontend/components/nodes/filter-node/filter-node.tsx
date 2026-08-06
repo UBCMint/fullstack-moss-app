@@ -4,6 +4,7 @@ import { useGlobalContext } from '@/context/GlobalContext';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
 import ComboBox from './combo-box';
+import { NUM_CHANNELS } from '@/lib/channels';
 
 interface FilterConfig {
     apply_bandpass: boolean;
@@ -47,7 +48,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                 h_freq: null,
                 downsample_factor: null,
                 sfreq: 256,
-                n_channels: 4,
+                n_channels: NUM_CHANNELS,
             };
         }
 
@@ -60,7 +61,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                     h_freq: highCutoff,
                     downsample_factor: null,
                     sfreq: 256,
-                    n_channels: 4,
+                    n_channels: NUM_CHANNELS,
                 };
 
             case 'highpass':
@@ -71,7 +72,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                     h_freq: null,
                     downsample_factor: null,
                     sfreq: 256,
-                    n_channels: 4,
+                    n_channels: NUM_CHANNELS,
                 };
 
             case 'bandpass':
@@ -82,7 +83,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                     h_freq: highCutoff,
                     downsample_factor: null,
                     sfreq: 256,
-                    n_channels: 4,
+                    n_channels: NUM_CHANNELS,
                 };
 
             default:
