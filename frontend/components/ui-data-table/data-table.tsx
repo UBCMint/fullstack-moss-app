@@ -7,13 +7,11 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { CHANNEL_LABELS, CHANNEL_INDICES, NUM_CHANNELS } from '@/lib/channels';
 
 interface SignalData {
     time: string;
-    signal1: number;
-    signal2: number;
-    signal3: number;
-    signal4: number;
+    channels: number[];
 }
 
 interface DataTableProps {
@@ -21,20 +19,15 @@ interface DataTableProps {
     data?: SignalData[];
 }
 
+const emptyRow = (): SignalData => ({
+    time: '--:--:-- --',
+    channels: new Array(NUM_CHANNELS).fill(0),
+});
+
 const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
     const rows = Array(rowCount)
         .fill(null)
-        .map((_, index) => {
-            return (
-                data[data.length - 1 - index] || {
-                    time: '--:--:-- --',
-                    signal1: 0,
-                    signal2: 0,
-                    signal3: 0,
-                    signal4: 0,
-                }
-            );
-        });
+        .map((_, index) => data[data.length - 1 - index] ?? emptyRow());
 
     return (
         <div className="w-full overflow-hidden">
@@ -44,18 +37,14 @@ const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
                         <TableHead className="text-center font-medium text-[#0D585F]">
                             Time
                         </TableHead>
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Channel 1
-                        </TableHead>
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Channel 2
-                        </TableHead>
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Channel 3
-                        </TableHead>
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Channel 4
-                        </TableHead>
+                        {CHANNEL_INDICES.map((i) => (
+                            <TableHead
+                                key={i}
+                                className="text-center font-medium text-[#0D585F]"
+                            >
+                                {CHANNEL_LABELS[i]}
+                            </TableHead>
+                        ))}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -71,18 +60,14 @@ const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
                             <TableCell className="text-center text-[#0D585F]">
                                 {row.time}
                             </TableCell>
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.signal1}
-                            </TableCell>
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.signal2}
-                            </TableCell>
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.signal3}
-                            </TableCell>
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.signal4}
-                            </TableCell>
+                            {CHANNEL_INDICES.map((i) => (
+                                <TableCell
+                                    key={i}
+                                    className="text-center text-[#0D585F]"
+                                >
+                                    {row.channels[i] ?? 0}
+                                </TableCell>
+                            ))}
                         </TableRow>
                     ))}
                 </TableBody>

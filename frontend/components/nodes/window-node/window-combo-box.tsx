@@ -15,19 +15,123 @@ interface ComboBoxProps {
     isDataStreamOn?: boolean;
 }
 
-const presetWindows: Array<{
-    value: WindowOption;
+const PRESETS = [200, 250];
+
+interface SizeSectionProps {
     label: string;
-    size?: number;
-}> = [
-    { value: 'default', label: 'Default (64)', size: 64 },
-    { value: 'custom', label: 'Custom' },
-];
+    value: number;
+    onSelectPreset: (preset: number) => void;
+    onSubmitCustom: (parsed: number) => string | null; // returns error message or null
+    isOpen: boolean;
+    onToggle: () => void;
+}
+
+function SizeSection({
+    label,
+    value,
+    onSelectPreset,
+    onSubmitCustom,
+    isOpen,
+    onToggle,
+}: SizeSectionProps) {
+    const [customInput, setCustomInput] = React.useState<string>('');
+    const [error, setError] = React.useState<string>('');
+    const isCustom = !PRESETS.includes(value);
+
+    const submitCustom = () => {
+        if (customInput === '') return;
+        const parsed = Number(customInput);
+        const err = onSubmitCustom(parsed);
+        if (err) {
+            setError(err);
+            return;
+        }
+        setError('');
+    };
+
+    return (
+        <div>
+            {/* Section label bar (click to reveal options) */}
+            <button
+                onClick={onToggle}
+                className="nodrag w-full text-left rounded-md px-3 py-2 text-[20px] text-black bg-gray-100"
+            >
+                {label}
+            </button>
+
+            {/* Options — only visible when this section is open */}
+            <div
+                className="overflow-hidden"
+                style={{
+                    maxHeight: isOpen ? '260px' : '0px',
+                    opacity: isOpen ? 1 : 0,
+                    transition:
+                        'max-height 0.25s ease-in-out, opacity 0.25s ease-in-out',
+                }}
+            >
+                {/* Preset options */}
+                {PRESETS.map((preset) => (
+                    <button
+                        key={preset}
+                        onClick={() => {
+                            onSelectPreset(preset);
+                            setCustomInput('');
+                            setError('');
+                        }}
+                        className={cn(
+                            'nodrag w-full text-left px-3 py-1 text-[20px] rounded-md hover:bg-gray-50',
+                            value === preset
+                                ? 'text-black font-medium'
+                                : 'text-black'
+                        )}
+                    >
+                        {preset} Hz
+                    </button>
+                ))}
+
+                {/* Divider */}
+                <div className="border-t border-gray-200 mt-2" />
+
+                {/* Optional custom input */}
+                <div className="flex items-baseline gap-2 px-3 pt-3">
+                    <label className="text-[18px] text-gray-400 whitespace-nowrap">
+                        Enter the optional input:
+                    </label>
+                    <input
+                        value={customInput}
+                        onChange={(e) => {
+                            setCustomInput(
+                                e.target.value.replace(/[^\d]/g, '')
+                            );
+                            setError('');
+                        }}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') submitCustom();
+                        }}
+                        onBlur={submitCustom}
+                        placeholder="______________"
+                        className={cn(
+                            'nodrag min-w-0 flex-1 bg-transparent text-[18px] text-gray-700 placeholder:text-gray-400 focus:outline-none',
+                            isCustom && 'text-gray-900'
+                        )}
+                    />
+                </div>
+                {error && (
+                    <div
+                        className="text-xs text-red-600 px-3 pt-1"
+                        role="alert"
+                    >
+                        {error}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
 
 export default function ComboBox({
     windowSize,
     overlapSize,
-    selectedOption,
     setWindowSize,
     setOverlapSize,
     setSelectedOption,
@@ -35,83 +139,49 @@ export default function ComboBox({
     isDataStreamOn = false,
 }: ComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
-    const [step, setStep] = React.useState<'window' | 'overlap'>('window');
-    const [customWindowInput, setCustomWindowInput] =
-        React.useState<string>('');
-    const [customOverlapInput, setCustomOverlapInput] =
-        React.useState<string>('');
-    const [windowError, setWindowError] = React.useState<string>('');
-    const [overlapError, setOverlapError] = React.useState<string>('');
-    const [overlapOption, setOverlapOption] = React.useState<
-        'default' | 'custom'
-    >('default');
+    const [openSection, setOpenSection] = React.useState<
+        'window' | 'overlap' | null
+    >('window');
 
-    const toggleExpanded = () => {
-        if (!isExpanded) {
-            setStep('window');
-            setWindowError('');
-            setOverlapError('');
-        }
-        setIsExpanded(!isExpanded);
-    };
+    const toggleExpanded = () => setIsExpanded((v) => !v);
 
-    const confirmWindow = () => {
-        setStep('overlap');
-    };
+    const toggleSection = (section: 'window' | 'overlap') =>
+        setOpenSection((curr) => (curr === section ? null : section));
 
-    const confirmOverlap = () => {
-        setIsExpanded(false);
-        setStep('window');
-    };
-
-    const handlePresetSelect = (optionValue: WindowOption, size?: number) => {
-        setSelectedOption(optionValue);
-        setWindowError('');
-        if (typeof size === 'number') {
-            setWindowSize(size);
-            if (overlapSize >= size) {
-                setOverlapSize(0);
-                setOverlapOption('default');
-            }
-        }
-        if (optionValue === 'custom') {
-            setCustomWindowInput('');
-        } else {
-            confirmWindow();
+    const selectWindowPreset = (preset: number) => {
+        setSelectedOption(PRESETS.includes(preset) ? 'default' : 'custom');
+        setWindowSize(preset);
+        if (overlapSize >= preset) {
+            setOverlapSize(0);
         }
     };
 
-    const submitCustomWindow = () => {
-        const parsed = Number(customWindowInput);
+    const submitCustomWindow = (parsed: number): string | null => {
         if (!Number.isInteger(parsed) || parsed <= 0) {
-            setWindowError('Window size must be a positive integer');
-            return;
+            return 'Window size must be a positive integer';
         }
         if (overlapSize >= parsed) {
-            setWindowError('Window size must be greater than overlap size');
-            return;
+            return 'Window size must be greater than overlap size';
         }
         setSelectedOption('custom');
         setWindowSize(parsed);
-        setWindowError('');
-        setOverlapError('');
-        confirmWindow();
+        return null;
     };
 
-    const submitCustomOverlap = () => {
-        const parsed = Number(customOverlapInput);
+    const selectOverlapPreset = (preset: number): void => {
+        if (preset >= windowSize) return;
+        setOverlapSize(preset);
+    };
+
+    const submitCustomOverlap = (parsed: number): string | null => {
         if (!Number.isInteger(parsed) || parsed < 0) {
-            setOverlapError('Overlap size must be a non-negative integer');
-            return;
+            return 'Overlap size must be a non-negative integer';
         }
         if (parsed >= windowSize) {
-            setOverlapError('Overlap size must be less than window size');
-            return;
+            return 'Overlap size must be less than window size';
         }
         setOverlapSize(parsed);
-        setOverlapError('');
-        setWindowError('');
-        confirmOverlap();
+        return null;
     };
 
     return (
@@ -168,20 +238,14 @@ export default function ComboBox({
             {/* Collapsed summary */}
             {!isExpanded && (
                 <div
-                    className="space-y-3 pb-4"
+                    className="space-y-1 pb-4"
                     style={{ paddingLeft: '60px', paddingRight: '60px' }}
                 >
                     <div className="text-[20px] leading-tight text-black">
-                        Size:{' '}
-                        <span className="inline-flex w-12 h-12 rounded-full border border-[#509693] items-center justify-center">
-                            {windowSize}
-                        </span>
+                        Window size: {windowSize}Hz
                     </div>
                     <div className="text-[20px] leading-tight text-black">
-                        Overlap Size:{' '}
-                        <span className="inline-flex w-12 h-12 rounded-full border border-[#509693] items-center justify-center">
-                            {overlapSize}
-                        </span>
+                        Overlap size: {overlapSize}Hz
                     </div>
                 </div>
             )}
@@ -190,147 +254,32 @@ export default function ComboBox({
             <div
                 className="overflow-hidden nodrag"
                 style={{
-                    maxHeight: isExpanded ? '320px' : '0px',
+                    maxHeight: isExpanded ? '420px' : '0px',
                     opacity: isExpanded ? 1 : 0,
                     transition:
                         'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
                 }}
             >
                 <div
-                    className="space-y-2 pb-3 overflow-y-auto max-h-[320px]"
-                    style={{ paddingLeft: '60px', paddingRight: '60px' }}
+                    className="space-y-4 pb-4 overflow-y-auto max-h-[420px]"
+                    style={{ paddingLeft: '24px', paddingRight: '24px' }}
                 >
-                    {/* Step 1: Input size */}
-                    {step === 'window' && (
-                        <>
-                            <div className="text-xs text-gray-700">
-                                Input size
-                            </div>
-                            {presetWindows.map((preset) => (
-                                <button
-                                    key={preset.label}
-                                    onClick={() =>
-                                        handlePresetSelect(
-                                            preset.value,
-                                            preset.size
-                                        )
-                                    }
-                                    className={cn(
-                                        'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
-                                        selectedOption === preset.value
-                                            ? 'bg-gray-100 text-gray-900'
-                                            : 'text-gray-600 hover:bg-gray-50'
-                                    )}
-                                >
-                                    {preset.label}
-                                </button>
-                            ))}
-                            {selectedOption === 'custom' && (
-                                <div className="flex items-center gap-2 pt-1">
-                                    <input
-                                        value={customWindowInput}
-                                        onChange={(e) => {
-                                            setCustomWindowInput(
-                                                e.target.value.replace(
-                                                    /[^\d]/g,
-                                                    ''
-                                                )
-                                            );
-                                            setWindowError('');
-                                        }}
-                                        placeholder="Custom integer"
-                                        className="nodrag h-8 w-full rounded-md border border-gray-300 px-2 text-sm"
-                                    />
-                                    <button
-                                        onClick={submitCustomWindow}
-                                        className="nodrag h-8 px-3 rounded-md border border-gray-300 text-sm hover:bg-gray-50"
-                                    >
-                                        OK
-                                    </button>
-                                </div>
-                            )}
-                            {selectedOption === 'custom' && windowError && (
-                                <div
-                                    className="text-xs text-red-600 -mt-1"
-                                    role="alert"
-                                >
-                                    {windowError}
-                                </div>
-                            )}
-                        </>
-                    )}
-
-                    {/* Step 2: Overlap size */}
-                    {step === 'overlap' && (
-                        <>
-                            <div className="text-xs text-gray-700">
-                                Overlap size
-                            </div>
-                            <button
-                                onClick={() => {
-                                    setOverlapOption('default');
-                                    setOverlapSize(0);
-                                    setOverlapError('');
-                                    confirmOverlap();
-                                }}
-                                className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
-                                    overlapOption === 'default'
-                                        ? 'bg-gray-100 text-gray-900'
-                                        : 'text-gray-600 hover:bg-gray-50'
-                                )}
-                            >
-                                Default (0)
-                            </button>
-                            <button
-                                onClick={() => {
-                                    setOverlapOption('custom');
-                                    setCustomOverlapInput('');
-                                    setOverlapError('');
-                                }}
-                                className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
-                                    overlapOption === 'custom'
-                                        ? 'bg-gray-100 text-gray-900'
-                                        : 'text-gray-600 hover:bg-gray-50'
-                                )}
-                            >
-                                Custom
-                            </button>
-                            {overlapOption === 'custom' && (
-                                <div className="flex items-center gap-2 pt-1">
-                                    <input
-                                        value={customOverlapInput}
-                                        onChange={(e) => {
-                                            setCustomOverlapInput(
-                                                e.target.value.replace(
-                                                    /[^\d]/g,
-                                                    ''
-                                                )
-                                            );
-                                            setOverlapError('');
-                                        }}
-                                        placeholder="Custom integer"
-                                        className="nodrag h-8 w-full rounded-md border border-gray-300 px-2 text-sm"
-                                    />
-                                    <button
-                                        onClick={submitCustomOverlap}
-                                        className="nodrag h-8 px-3 rounded-md border border-gray-300 text-sm hover:bg-gray-50"
-                                    >
-                                        OK
-                                    </button>
-                                </div>
-                            )}
-                            {overlapError && (
-                                <div
-                                    className="text-xs text-red-600 -mt-1"
-                                    role="alert"
-                                >
-                                    {overlapError}
-                                </div>
-                            )}
-                        </>
-                    )}
+                    <SizeSection
+                        label="Window size"
+                        value={windowSize}
+                        onSelectPreset={selectWindowPreset}
+                        onSubmitCustom={submitCustomWindow}
+                        isOpen={openSection === 'window'}
+                        onToggle={() => toggleSection('window')}
+                    />
+                    <SizeSection
+                        label="Overlap size"
+                        value={overlapSize}
+                        onSelectPreset={selectOverlapPreset}
+                        onSubmitCustom={submitCustomOverlap}
+                        isOpen={openSection === 'overlap'}
+                        onToggle={() => toggleSection('overlap')}
+                    />
                 </div>
             </div>
         </div>

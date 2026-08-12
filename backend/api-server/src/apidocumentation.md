@@ -125,3 +125,22 @@ This should respond with the updated user.
 To delete a user, we send a DELETE request to the endpoint with the specified user id in the url, such as `BASE_URL/users/5`. No JSON body is needed, just the user ID in the url.
 
 
+## EEG Data
+
+Every EEG payload carries **12 channels** on a shared time axis:
+
+- Indices `0..=7` are **EEG** channels (labels `EEG1`..`EEG8`).
+- Indices `8..=11` are **EMG** channels (labels `EMG1`..`EMG4`).
+
+`EegDataRow` (as returned by `GET /api/sessions/{session_id}/eeg-data?start=...&end=...`):
+
+```
+type EegDataRow = {
+  time: string;         // RFC3339 timestamp
+  channels: number[];   // length MUST be 12; order 0..7 = EEG, 8..11 = EMG
+};
+```
+
+Requests with any other channel count are rejected — this is a hard cutover, there is no legacy 4-channel path.
+
+CSV import/export uses columns `time,channel1,channel2,...,channel12` in that order.

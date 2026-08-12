@@ -101,12 +101,11 @@ export type TimeLabel = {
     color: string;
 };
 
+// Matches the backend EegDataRow: `channels` is length NUM_CHANNELS
+// (indices 0..7 = EEG, 8..11 = EMG).
 export type EegDataRow = {
     time: string;
-    channel1: number;
-    channel2: number;
-    channel3: number;
-    channel4: number;
+    channels: number[];
 };
 
 export async function saveTimeLabels(
