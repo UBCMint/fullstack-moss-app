@@ -23,6 +23,7 @@ import {
     OnConnect,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { NUM_CHANNELS } from '@/lib/channels';
 import SourceNode from '@/components/nodes/source-node';
 import ArtifactNode from '@/components/nodes/artifact-node/artifact-node';
 import FilterNode from '@/components/nodes/filter-node/filter-node';
@@ -71,7 +72,7 @@ const DEFAULT_PROCESSING = {
     h_freq: null,
     downsample_factor: null,
     sfreq: 256,
-    n_channels: 4,
+    n_channels: NUM_CHANNELS,
 };
 const DEFAULT_WINDOWING = {
     chunk_size: 64,
@@ -160,14 +161,11 @@ const validatePipeline = (nodes: Node[], edges: Edge[]) => {
     if (windowNodes.length > 1)
         errors.push('Multiple Window nodes are not allowed.');
 
-    // Require window node must connect directly to source
+    // Require window node to be connected to an upstream node
     windowNodes.forEach((win) => {
         const ins = incoming.get(win.id) ?? [];
-        if (
-            ins.length === 0 ||
-            ins.some((id) => byId.get(id)?.type !== 'source-node')
-        ) {
-            errors.push('Window node must connect directly from Source.');
+        if (ins.length === 0) {
+            errors.push('Window node must be connected to an upstream node.');
         }
     });
 
@@ -505,11 +503,6 @@ const ReactFlowInterface = () => {
                     (e) => e.source === sourceNode.id
                 );
                 if (hasOutgoing) return false;
-            }
-
-            // Block window node not directly connecting to source
-            if (targetNode.type === 'window-node') {
-                return sourceNode.type === 'source-node';
             }
 
             // Output nodes are terminal: block any outgoing edge from them

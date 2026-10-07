@@ -18,15 +18,19 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+    CHANNEL_COLORS,
+    CHANNEL_INDICES,
+    CHANNEL_LABELS,
+    CHANNEL_TYPES,
+    NUM_CHANNELS,
+} from '@/lib/channels';
 
 interface SignalGraphViewProps {
     data: {
         time: string;
         rawTime?: string;
-        signal1: number;
-        signal2: number;
-        signal3: number;
-        signal4: number;
+        channels: number[];
     }[];
     onTimeframeChange?: (start: string, end: string) => void;
 }
@@ -38,7 +42,7 @@ export default function SignalGraphView({
     onTimeframeChange,
 }: SignalGraphViewProps) {
     const { dataStreaming, setDataStreaming } = useGlobalContext();
-    const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
+    const [selectedChannel, setSelectedChannel] = useState<number | null>(null);
 
     const [brushRange, setBrushRange] = useState<{
         start: number;
@@ -53,12 +57,12 @@ export default function SignalGraphView({
     const timeStart = data.length > 0 ? data[0].time : null;
     const timeEnd = data.length > 0 ? data[data.length - 1].time : null;
 
-    const signals = [
-        { key: 'signal1', colour: '#0000ff', name: 'Channel 1' },
-        { key: 'signal2', colour: '#00ff00', name: 'Channel 2' },
-        { key: 'signal3', colour: '#FF00D0', name: 'Channel 3' },
-        { key: 'signal4', colour: '#FF0000', name: 'Channel 4' },
-    ];
+    const signals = CHANNEL_INDICES.map((i) => ({
+        index: i,
+        colour: CHANNEL_COLORS[i],
+        name: CHANNEL_LABELS[i],
+        type: CHANNEL_TYPES[i],
+    }));
 
     const handleStartStop = () => {
         setDataStreaming(!dataStreaming);
@@ -113,15 +117,17 @@ export default function SignalGraphView({
                         />
                         {signals.map((s) => (
                             <Line
-                                key={s.key}
-                                dataKey={s.key}
+                                key={s.index}
+                                dataKey={(row: { channels: number[] }) =>
+                                    row.channels?.[s.index]
+                                }
                                 isAnimationActive={false}
                                 dot={false}
                                 type="monotone"
                                 stroke={
-                                    selectedSignal === null
+                                    selectedChannel === null
                                         ? s.colour
-                                        : selectedSignal === s.key
+                                        : selectedChannel === s.index
                                           ? s.colour
                                           : '#C0C0C0'
                                 }
@@ -165,43 +171,59 @@ export default function SignalGraphView({
                     Time (HH:MM:SS.mmm)
                 </div>
 
-                {/* Signal selector */}
-                <div className="flex gap-4 justify-center mt-2">
-                    {signals.map((s) => {
-                        const isSelected = selectedSignal === s.key;
-                        const anySelected = selectedSignal !== null;
-                        return (
-                            <button
-                                key={s.key}
-                                onClick={() =>
-                                    setSelectedSignal(isSelected ? null : s.key)
-                                }
-                                className="flex items-center gap-4 px-3 py-1 rounded transition"
-                            >
-                                <span
-                                    className="w-7 h-0.5"
-                                    style={{
-                                        backgroundColor: anySelected
-                                            ? isSelected
-                                                ? s.colour
-                                                : '#C0C0C0'
-                                            : s.colour,
-                                    }}
-                                />
-                                <span
-                                    className={
-                                        anySelected
-                                            ? isSelected
-                                                ? 'text-black'
-                                                : 'text-gray-400'
-                                            : 'text-black'
-                                    }
-                                >
-                                    {s.name}
-                                </span>
-                            </button>
-                        );
-                    })}
+                {/* Signal selector — grouped by EEG / EMG */}
+                <div className="flex flex-col gap-2 mt-2">
+                    {(['eeg', 'emg'] as const).map((group) => (
+                        <div
+                            key={group}
+                            className="flex flex-wrap gap-3 justify-center items-center"
+                        >
+                            <span className="text-xs font-semibold text-[#0D585F] mr-1">
+                                {group.toUpperCase()}
+                            </span>
+                            {signals
+                                .filter((s) => s.type === group)
+                                .map((s) => {
+                                    const isSelected =
+                                        selectedChannel === s.index;
+                                    const anySelected =
+                                        selectedChannel !== null;
+                                    return (
+                                        <button
+                                            key={s.index}
+                                            onClick={() =>
+                                                setSelectedChannel(
+                                                    isSelected ? null : s.index
+                                                )
+                                            }
+                                            className="flex items-center gap-2 px-2 py-0.5 rounded transition"
+                                        >
+                                            <span
+                                                className="w-5 h-0.5"
+                                                style={{
+                                                    backgroundColor: anySelected
+                                                        ? isSelected
+                                                            ? s.colour
+                                                            : '#C0C0C0'
+                                                        : s.colour,
+                                                }}
+                                            />
+                                            <span
+                                                className={
+                                                    anySelected
+                                                        ? isSelected
+                                                            ? 'text-black text-xs'
+                                                            : 'text-gray-400 text-xs'
+                                                        : 'text-black text-xs'
+                                                }
+                                            >
+                                                {s.name}
+                                            </span>
+                                        </button>
+                                    );
+                                })}
+                        </div>
+                    ))}
                 </div>
             </div>
 
@@ -227,7 +249,8 @@ export default function SignalGraphView({
                     to actual frequency (Hz)
                 </span>
                 <span>
-                    <span className="font-semibold">Channels:</span> 4 (EEG)
+                    <span className="font-semibold">Channels:</span>{' '}
+                    {NUM_CHANNELS} (8 EEG + 4 EMG)
                 </span>
             </div>
 
