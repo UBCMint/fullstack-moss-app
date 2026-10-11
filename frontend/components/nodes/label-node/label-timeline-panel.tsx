@@ -11,6 +11,12 @@ import {
     XAxis,
     YAxis,
 } from 'recharts';
+import {
+    CHANNEL_COLORS,
+    CHANNEL_INDICES,
+    CHANNEL_LABELS,
+    CHANNEL_TYPES,
+} from '@/lib/channels';
 
 export type TimelineRowSource = 'Trigger' | 'Manual' | 'Auto';
 
@@ -27,10 +33,7 @@ export interface TimelineLabelRow {
 export interface LabelGraphPoint {
     id: string;
     time: string;
-    signal1: number;
-    signal2: number;
-    signal3: number;
-    signal4: number;
+    channels: number[]; // length = NUM_CHANNELS
 }
 
 export interface LabelTimelinePanelProps {
@@ -45,11 +48,11 @@ export interface LabelTimelinePanelProps {
     onTimelineViewClick?: () => void;
     viewMode: 'timeline' | 'graph';
     graphData: LabelGraphPoint[];
-    isLoadingLabels?: boolean;
     fetchDataForLabel?: (
         start: string,
         end: string
     ) => Promise<LabelGraphPoint[]>;
+    isLoadingLabels?: boolean;
 }
 
 interface PackedTimelineEntry {
@@ -162,28 +165,23 @@ export default function LabelTimelinePanel({
     isConnected,
     isDataStreamOn,
     graphData,
-    isLoadingLabels = false,
     fetchDataForLabel,
+    isLoadingLabels = false,
 }: LabelTimelinePanelProps) {
     const latestMs = parseTimestampMs(latestBackendTimestamp);
     const fallbackStartMs = parseTimestampMs(sessionStartTimestamp);
 
     const axisStartMs = React.useMemo(() => {
-        // When the current stream has started, anchor the timeline to it.
-        // This prevents loaded historical labels (from a previous session) from
-        // corrupting the axis scale by spanning an enormous time range.
-        if (fallbackStartMs !== null) {
-            return fallbackStartMs;
-        }
-
-        // No active stream — use the earliest label timestamp (e.g. viewing a
-        // loaded session's labels without having started a new stream yet).
         const startCandidates = rows
             .map((row) => parseTimestampMs(row.startTimestamp))
             .filter((value): value is number => value !== null);
 
         if (startCandidates.length > 0) {
             return Math.min(...startCandidates);
+        }
+
+        if (fallbackStartMs !== null) {
+            return fallbackStartMs;
         }
 
         if (latestMs !== null) {
@@ -211,12 +209,8 @@ export default function LabelTimelinePanel({
 
     const elapsedDurationMs = Math.max(axisEndMs - axisStartMs, 1);
     const virtualDurationMs = Math.max(elapsedDurationMs, VISIBLE_WINDOW_MS);
-    // Cap at 2000% (20× the visible window) so mixed historical/current timestamps
-    // don't produce an impossibly wide track that causes layout glitches.
-    const virtualTrackWidthPercent = Math.min(
-        (virtualDurationMs / VISIBLE_WINDOW_MS) * 100,
-        2000
-    );
+    const virtualTrackWidthPercent =
+        (virtualDurationMs / VISIBLE_WINDOW_MS) * 100;
 
     const ticks = React.useMemo(() => {
         const tickCount = Math.floor(virtualDurationMs / TICK_INTERVAL_MS) + 1;
@@ -312,9 +306,8 @@ export default function LabelTimelinePanel({
         return groups;
     }, [packedEntries]);
 
-    const [highlightedSignal, setHighlightedSignal] = React.useState<
-        'signal1' | 'signal2' | 'signal3' | 'signal4'
-    >('signal1');
+    const [highlightedChannel, setHighlightedChannel] =
+        React.useState<number>(0);
     const [selectedGraphEventId, setSelectedGraphEventId] = React.useState<
         string | null
     >(null);
@@ -327,21 +320,15 @@ export default function LabelTimelinePanel({
     >(null);
     const [isFetchingData, setIsFetchingData] = React.useState(false);
 
-    const signalConfigs: Array<{
-        key: 'signal1' | 'signal2' | 'signal3' | 'signal4';
-        label: string;
-        color: string;
-    }> = [
-        { key: 'signal1', label: 'Channel 1', color: '#0000ff' },
-        { key: 'signal2', label: 'Channel 2', color: '#00ff00' },
-        { key: 'signal3', label: 'Channel 3', color: '#FF00D0' },
-        { key: 'signal4', label: 'Channel 4', color: '#FF0000' },
-    ];
+    const signalConfigs = CHANNEL_INDICES.map((i) => ({
+        index: i,
+        label: CHANNEL_LABELS[i],
+        color: CHANNEL_COLORS[i],
+        type: CHANNEL_TYPES[i],
+    }));
 
-    const toggleSignal = (
-        signalKey: 'signal1' | 'signal2' | 'signal3' | 'signal4'
-    ) => {
-        setHighlightedSignal(signalKey);
+    const toggleSignal = (channelIndex: number) => {
+        setHighlightedChannel(channelIndex);
     };
 
     // beginning of new, not sure if this works
@@ -382,11 +369,11 @@ export default function LabelTimelinePanel({
             return graphData;
         }
 
-        return focused.map((p) => {
-            const { timeMs, ...point } = p;
-            void timeMs;
-            return point;
-        });
+        return focused.map(({ id, time, channels }) => ({
+            id,
+            time,
+            channels,
+        }));
     }, [fetchedFocusData, focusWindowMs, graphData, normalizedGraphData]);
 
     // Chart data with a numeric timeMs field so XAxis can use type="number"
@@ -484,26 +471,13 @@ export default function LabelTimelinePanel({
             return;
         }
 
-        // Only auto-scroll to the live edge when a stream is active.
-        // When viewing a loaded session with no active stream, keep the
-        // viewport at the left so all tick labels and labels are visible.
-        if (latestMs === null) {
-            return;
-        }
-
         const node = timelineScrollRef.current;
         if (!node || !isAtLiveEdgeRef.current) {
             return;
         }
 
         node.scrollLeft = Math.max(node.scrollWidth - node.clientWidth, 0);
-    }, [
-        axisEndMs,
-        laneGroups.length,
-        latestMs,
-        virtualTrackWidthPercent,
-        viewMode,
-    ]);
+    }, [axisEndMs, laneGroups.length, virtualTrackWidthPercent, viewMode]);
 
     if (!isExpanded) {
         return null;
@@ -525,7 +499,6 @@ export default function LabelTimelinePanel({
                             <span className="w-3 h-3 rounded-full bg-white" />
                         )}
                     </span>
-
                     {/* Status dot */}
                     <div
                         className={cn(
@@ -690,28 +663,35 @@ export default function LabelTimelinePanel({
                                         {[
                                             ...signalConfigs.filter(
                                                 (s) =>
-                                                    s.key !== highlightedSignal
+                                                    s.index !==
+                                                    highlightedChannel
                                             ),
                                             ...signalConfigs.filter(
                                                 (s) =>
-                                                    s.key === highlightedSignal
+                                                    s.index ===
+                                                    highlightedChannel
                                             ),
                                         ].map((signal) => (
                                             <Line
-                                                key={signal.key}
-                                                dataKey={signal.key}
+                                                key={signal.index}
+                                                dataKey={(row: {
+                                                    channels: number[];
+                                                }) =>
+                                                    row.channels?.[signal.index]
+                                                }
+                                                name={signal.label}
                                                 type="monotone"
                                                 isAnimationActive={false}
                                                 dot={false}
                                                 stroke={
-                                                    highlightedSignal ===
-                                                    signal.key
+                                                    highlightedChannel ===
+                                                    signal.index
                                                         ? signal.color
                                                         : '#C0C0C0'
                                                 }
                                                 strokeWidth={
-                                                    highlightedSignal ===
-                                                    signal.key
+                                                    highlightedChannel ===
+                                                    signal.index
                                                         ? 2
                                                         : 1
                                                 }
@@ -726,51 +706,74 @@ export default function LabelTimelinePanel({
                                     <h4 className="mb-2 text-sm font-semibold text-black">
                                         Highlight
                                     </h4>
-                                    <div className="space-y-2">
-                                        {signalConfigs.map((signal) => (
-                                            <button
-                                                key={signal.key}
-                                                className="nodrag nopan flex items-center gap-2 text-sm text-black"
-                                                onClick={() =>
-                                                    toggleSignal(signal.key)
-                                                }
-                                            >
-                                                <span
-                                                    className="h-3.5 w-3.5 rounded-sm flex items-center justify-center flex-shrink-0"
-                                                    style={{
-                                                        backgroundColor:
-                                                            highlightedSignal ===
-                                                            signal.key
-                                                                ? signal.color
-                                                                : 'transparent',
-                                                        border:
-                                                            highlightedSignal ===
-                                                            signal.key
-                                                                ? 'none'
-                                                                : '1.5px solid #BFBFBF',
-                                                    }}
-                                                >
-                                                    {highlightedSignal ===
-                                                        signal.key && (
-                                                        <svg
-                                                            width="8"
-                                                            height="7"
-                                                            viewBox="0 0 8 7"
-                                                            fill="none"
-                                                        >
-                                                            <path
-                                                                d="M1 3L3 5.5L7 1"
-                                                                stroke="white"
-                                                                strokeWidth="1.5"
-                                                                strokeLinecap="round"
-                                                                strokeLinejoin="round"
-                                                            />
-                                                        </svg>
-                                                    )}
-                                                </span>
-                                                {signal.label}
-                                            </button>
-                                        ))}
+                                    <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1">
+                                        {(['eeg', 'emg'] as const).map(
+                                            (group) => (
+                                                <div key={group}>
+                                                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[#7A7A7A]">
+                                                        {group}
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        {signalConfigs
+                                                            .filter(
+                                                                (s) =>
+                                                                    s.type ===
+                                                                    group
+                                                            )
+                                                            .map((signal) => (
+                                                                <button
+                                                                    key={
+                                                                        signal.index
+                                                                    }
+                                                                    className="nodrag nopan flex items-center gap-2 text-xs text-black"
+                                                                    onClick={() =>
+                                                                        toggleSignal(
+                                                                            signal.index
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <span
+                                                                        className="h-3 w-3 rounded-sm flex items-center justify-center flex-shrink-0"
+                                                                        style={{
+                                                                            backgroundColor:
+                                                                                highlightedChannel ===
+                                                                                signal.index
+                                                                                    ? signal.color
+                                                                                    : 'transparent',
+                                                                            border:
+                                                                                highlightedChannel ===
+                                                                                signal.index
+                                                                                    ? 'none'
+                                                                                    : '1.5px solid #BFBFBF',
+                                                                        }}
+                                                                    >
+                                                                        {highlightedChannel ===
+                                                                            signal.index && (
+                                                                            <svg
+                                                                                width="8"
+                                                                                height="7"
+                                                                                viewBox="0 0 8 7"
+                                                                                fill="none"
+                                                                            >
+                                                                                <path
+                                                                                    d="M1 3L3 5.5L7 1"
+                                                                                    stroke="white"
+                                                                                    strokeWidth="1.5"
+                                                                                    strokeLinecap="round"
+                                                                                    strokeLinejoin="round"
+                                                                                />
+                                                                            </svg>
+                                                                        )}
+                                                                    </span>
+                                                                    {
+                                                                        signal.label
+                                                                    }
+                                                                </button>
+                                                            ))}
+                                                    </div>
+                                                </div>
+                                            )
+                                        )}
                                     </div>
                                 </div>
 
@@ -881,7 +884,7 @@ export default function LabelTimelinePanel({
                                     {ticks.map((tick) => (
                                         <div
                                             key={`${tick.ratio}-${tick.label}`}
-                                            className="absolute top-0 -translate-x-1/2 text-xs text-[#7A7A7A] whitespace-nowrap"
+                                            className="absolute top-0 -translate-x-1/2 text-xs text-[#7A7A7A]"
                                             style={{
                                                 left: `${tick.ratio * 100}%`,
                                             }}
@@ -1043,96 +1046,57 @@ export default function LabelTimelinePanel({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {isLoadingLabels && (
+                                    {tableRows.length === 0 && (
                                         <tr>
                                             <td
                                                 colSpan={4}
-                                                className="px-3 py-4"
+                                                className="px-3 py-3 text-[#8A8A8A]"
                                             >
-                                                <div className="flex items-center gap-3 text-[#8A8A8A]">
-                                                    <svg
-                                                        className="animate-spin h-4 w-4 text-[#6CAFA4] flex-shrink-0"
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        fill="none"
-                                                        viewBox="0 0 24 24"
-                                                    >
-                                                        <circle
-                                                            className="opacity-25"
-                                                            cx="12"
-                                                            cy="12"
-                                                            r="10"
-                                                            stroke="currentColor"
-                                                            strokeWidth="4"
-                                                        />
-                                                        <path
-                                                            className="opacity-75"
-                                                            fill="currentColor"
-                                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                                                        />
-                                                    </svg>
-                                                    <span className="text-sm">
-                                                        Loading saved labels…
-                                                    </span>
-                                                </div>
+                                                No events logged yet.
                                             </td>
                                         </tr>
                                     )}
-                                    {!isLoadingLabels &&
-                                        tableRows.length === 0 && (
-                                            <tr>
-                                                <td
-                                                    colSpan={4}
-                                                    className="px-3 py-3 text-[#8A8A8A]"
-                                                >
-                                                    No events logged yet.
+
+                                    {tableRows.map((row) => {
+                                        const startMs = parseTimestampMs(
+                                            row.startTimestamp
+                                        );
+                                        const endMs = parseTimestampMs(
+                                            row.endTimestamp ??
+                                                latestBackendTimestamp
+                                        );
+                                        const durationMs =
+                                            startMs !== null && endMs !== null
+                                                ? endMs - startMs
+                                                : null;
+
+                                        return (
+                                            <tr
+                                                key={row.id}
+                                                className="border-t border-[#EFEFEF]"
+                                            >
+                                                <td className="px-3 py-2 text-[#5A5A5A]">
+                                                    {startMs !== null
+                                                        ? formatAbsoluteTimeWithMs(
+                                                              startMs
+                                                          )
+                                                        : '--:--'}
+                                                </td>
+                                                <td className="px-3 py-2 text-black">
+                                                    {row.label}
+                                                    {row.isInProgress
+                                                        ? ' (recording)'
+                                                        : ''}
+                                                </td>
+                                                <td className="px-3 py-2 text-[#5A5A5A]">
+                                                    {formatDuration(durationMs)}
+                                                </td>
+                                                <td className="px-3 py-2 text-[#5A5A5A]">
+                                                    {row.source}
                                                 </td>
                                             </tr>
-                                        )}
-
-                                    {!isLoadingLabels &&
-                                        tableRows.map((row) => {
-                                            const startMs = parseTimestampMs(
-                                                row.startTimestamp
-                                            );
-                                            const endMs = parseTimestampMs(
-                                                row.endTimestamp ??
-                                                    latestBackendTimestamp
-                                            );
-                                            const durationMs =
-                                                startMs !== null &&
-                                                endMs !== null
-                                                    ? endMs - startMs
-                                                    : null;
-
-                                            return (
-                                                <tr
-                                                    key={row.id}
-                                                    className="border-t border-[#EFEFEF]"
-                                                >
-                                                    <td className="px-3 py-2 text-[#5A5A5A]">
-                                                        {startMs !== null
-                                                            ? formatAbsoluteTimeWithMs(
-                                                                  startMs
-                                                              )
-                                                            : '--:--'}
-                                                    </td>
-                                                    <td className="px-3 py-2 text-black">
-                                                        {row.label}
-                                                        {row.isInProgress
-                                                            ? ' (recording)'
-                                                            : ''}
-                                                    </td>
-                                                    <td className="px-3 py-2 text-[#5A5A5A]">
-                                                        {formatDuration(
-                                                            durationMs
-                                                        )}
-                                                    </td>
-                                                    <td className="px-3 py-2 text-[#5A5A5A]">
-                                                        {row.source}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

@@ -11,13 +11,11 @@ import React, {
 import { useGlobalContext } from './GlobalContext';
 import { PipelinePayload } from '@/lib/pipeline';
 
+// Channels is length NUM_CHANNELS (12); indices 0..7 = EEG, 8..11 = EMG.
 export type DataPoint = {
     time: string;
     rawTime: string;
-    signal1: number;
-    signal2: number;
-    signal3: number;
-    signal4: number;
+    channels: number[];
 };
 
 type Subscriber = (points: DataPoint[]) => void;
@@ -50,10 +48,7 @@ function normalizeBatch(batch: WebSocketBatch): DataPoint[] {
     return batch.timestamps.map((time: unknown, i: number) => ({
         time: formatTimestamp(time),
         rawTime: String(time),
-        signal1: Number(batch.signals[0][i]) ?? 0,
-        signal2: Number(batch.signals[1][i]) ?? 0,
-        signal3: Number(batch.signals[2][i]) ?? 0,
-        signal4: Number(batch.signals[3][i]) ?? 0,
+        channels: batch.signals.map((ch) => (ch as number[])[i]),
     }));
 }
 

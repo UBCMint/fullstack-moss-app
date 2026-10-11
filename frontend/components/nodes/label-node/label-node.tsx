@@ -11,6 +11,7 @@ import {
 } from '@/components/nodes/label-node/label-timeline-panel';
 import { saveTimeLabels, getTimeLabels } from '@/lib/session-api';
 import { exportEEGData } from '@/lib/eeg-api';
+import { NUM_CHANNELS } from '@/lib/channels';
 import { useNotifications } from '@/components/notifications';
 
 interface LabelNodeProps {
@@ -420,7 +421,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
                 const timeIdx = header.findIndex(
                     (h) => h.includes('time') || h === 'timestamp'
                 );
-                const chIdxs = [0, 1, 2, 3].map((n) => {
+                const chIdxs = Array.from({ length: NUM_CHANNELS }, (_, n) => {
                     const pats = [`ch${n + 1}`, `channel${n + 1}`];
                     return header.findIndex((h) => pats.includes(h));
                 });
@@ -437,10 +438,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
                         {
                             id: `fetched-${i}`,
                             time: cols[timeIdx],
-                            signal1: vals[0],
-                            signal2: vals[1],
-                            signal3: vals[2],
-                            signal4: vals[3],
+                            channels: vals,
                         },
                     ];
                 });
@@ -488,13 +486,13 @@ export default function LabelNode({ id }: LabelNodeProps) {
     const graphData = React.useMemo<LabelGraphPoint[]>(() => {
         return renderData
             .map((item, index: number) => {
+                const channels = Array.isArray(item.channels)
+                    ? item.channels.map((v) => Number(v ?? 0))
+                    : new Array(NUM_CHANNELS).fill(0);
                 return {
                     id: `graph-point-${index}`,
                     time: item.rawTime ?? item.time,
-                    signal1: Number(item.signal1 ?? 0),
-                    signal2: Number(item.signal2 ?? 0),
-                    signal3: Number(item.signal3 ?? 0),
-                    signal4: Number(item.signal4 ?? 0),
+                    channels,
                 };
             })
             .slice(-300);
