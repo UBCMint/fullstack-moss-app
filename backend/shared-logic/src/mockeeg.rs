@@ -1,3 +1,15 @@
+//! Synthetic EEG source for development without a headset.
+//!
+//! [`generate_mock_data`] publishes an LSL outlet named `MyStream` (type `EEG`, source id
+//! `muse-simulator-eeg`, 4 × float32 channels, nominal 256 Hz). Each sample is uniform random
+//! in `[0, 100)`, pushed about every 4 ms, so the real rate is a little under 250 Hz. It runs
+//! until the cancellation token fires.
+//!
+//! It is started by `bc::start_broadcast` for every connection, and `lsl::receive_eeg` picks
+//! the first `EEG` stream it finds. So a real `muselsl` stream and the mock (or several
+//! connections' mocks) can be mixed up. The loop uses `thread::sleep`, which blocks a tokio
+//! worker thread while it runs.
+
 use log::info;
 use lsl::{ChannelFormat, ExPushable, StreamInfo, StreamOutlet};
 use rand::Rng;
