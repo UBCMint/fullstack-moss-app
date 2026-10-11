@@ -5,6 +5,41 @@ Mental State Classifier using NeuroLM + Muse 2
 Version: 1.0  |  March 2026  |  UBC MINT Team
 
 ----------------------------------------------------------------
+DEVELOPER ENTRY POINTS (current repository integration)
+----------------------------------------------------------------
+The live Rust bridge calls manager.py or mock_manager.py, not coordinator.py.
+The default mock returns a fixed focus/focused/0.85 result regardless of input.
+Rust currently emits quality-check and bandpass nodes only, with no ML node.
+See ../README.md for manager selection, dictionary/array contracts, all module
+outputs, the separate legacy blink API, and known integration limitations.
+
+Recommended standalone modular CSV prediction (run from this moss directory):
+  python coordinator.py predict --input "recording.csv" --task focus --pretty
+
+The older muse2_predict.py/predict.bat instructions below are legacy: that
+script hardcodes NEUROLM_DIR to C:\Users\kiara\NeuroLM. Adjust that constant
+to your NeuroLM source/checkpoint directory before using it, or use the
+coordinator command above with the documented local checkpoint layout.
+
+coordinator.py returns classification fields plus source sample rate, duration,
+segment count and per-segment time ranges. Overall confidence is the winning
+label's fraction of segment votes, not its mean probability. The CLI prints a
+JSON result, but model-loading messages can also appear on stdout.
+
+The modules are: coordinator (orchestration/result dict), preprocessing
+(resampled window list plus rate/duration), segmenter ((4, 800) windows), encoder
+((N, 768) embeddings), and classifier (labels and class probabilities). loader
+returns raw (samples, 4) data plus detected rate; resampler returns 200 Hz data.
+Canonical channel order is TP9, AF7, AF8, TP10. Windows are 4 seconds with a
+2-second step; incomplete tails are discarded.
+
+Checkpoint paths differ today: coordinator.py and encoder.py use
+checkpoints/checkpoints/NeuroLM-B.pt; manager.py uses checkpoints/NeuroLM-B.pt.
+Weights are not included. The PyO3 synthetic filename also affects manager.py's
+relative paths; changing PIPELINE_MANAGER_SCRIPT alone is insufficient for real
+live inference. See ../README.md before attempting that integration.
+
+----------------------------------------------------------------
 WHAT THIS DOES
 ----------------------------------------------------------------
 Given a Muse 2 EEG recording (CSV from Mind Monitor app),
@@ -38,7 +73,8 @@ ONE-TIME SETUP (do this once)
    - Takes about 5-10 minutes
 
 3. Download NeuroLM model weights (ONE required file, ~500MB):
-   https://huggingface.co/username/neurolm  (ask Natalia for link)
+   Ask the model maintainer (Natalia) for the NeuroLM-B.pt download location.
+   This repository does not provide a verified download URL.
 
    Place the file here:
    MOSS\checkpoints\checkpoints\NeuroLM-B.pt
@@ -152,6 +188,6 @@ CONTACT
 ----------------------------------------------------------------
 Questions? Contact Natalia (UBC MINT Team)
 Project: MOSS — Modular Open-Source Signal System
-GitHub: [link TBD]
+Repository setup and CI: see the root README.md and .github/README.md.
 
 ================================================================
