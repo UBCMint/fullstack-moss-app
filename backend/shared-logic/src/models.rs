@@ -73,14 +73,108 @@ pub struct NewTimeLabel {
     pub color: String,
 }
 
-// Struct for a row of EEG data coming OUT of the DB
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub const NUM_EEG: usize = 8;
+pub const NUM_EMG: usize = 4;
+pub const NUM_CHANNELS: usize = NUM_EEG + NUM_EMG;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChannelType {
+    Eeg,
+    Emg,
+}
+
+pub const DEFAULT_CHANNEL_LABELS: [&str; NUM_CHANNELS] = [
+    "EEG1", "EEG2", "EEG3", "EEG4", "EEG5", "EEG6", "EEG7", "EEG8", "EMG1", "EMG2", "EMG3", "EMG4",
+];
+
+pub const DEFAULT_CHANNEL_TYPES: [ChannelType; NUM_CHANNELS] = [
+    ChannelType::Eeg,
+    ChannelType::Eeg,
+    ChannelType::Eeg,
+    ChannelType::Eeg,
+    ChannelType::Eeg,
+    ChannelType::Eeg,
+    ChannelType::Eeg,
+    ChannelType::Eeg,
+    ChannelType::Emg,
+    ChannelType::Emg,
+    ChannelType::Emg,
+    ChannelType::Emg,
+];
+
+// Row of EEG data coming OUT of the DB. `channels` is length NUM_CHANNELS,
+// ordered 0..8 = EEG, 8..12 = EMG.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EegDataRow {
     pub time: DateTime<Utc>,
-    pub channel1: i32,
-    pub channel2: i32,
-    pub channel3: i32,
-    pub channel4: i32,
+    pub channels: Vec<i32>,
+}
+
+impl EegDataRow {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.channels.len() != NUM_CHANNELS {
+            return Err(format!(
+                "expected {} channels, got {}",
+                NUM_CHANNELS,
+                self.channels.len()
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn constants_are_consistent() {
+        assert_eq!(NUM_CHANNELS, 12);
+        assert_eq!(NUM_EEG + NUM_EMG, NUM_CHANNELS);
+        assert_eq!(DEFAULT_CHANNEL_LABELS.len(), NUM_CHANNELS);
+        assert_eq!(DEFAULT_CHANNEL_TYPES.len(), NUM_CHANNELS);
+    }
+
+    #[test]
+    fn channel_ordering_matches_spec() {
+        for (i, ch_type) in DEFAULT_CHANNEL_TYPES.iter().enumerate().take(NUM_EEG) {
+            assert_eq!(*ch_type, ChannelType::Eeg, "index {} should be EEG", i);
+        }
+        for (i, ch_type) in DEFAULT_CHANNEL_TYPES.iter().enumerate().skip(NUM_EEG) {
+            assert_eq!(*ch_type, ChannelType::Emg, "index {} should be EMG", i);
+        }
+    }
+
+    #[test]
+    fn validate_accepts_correct_length() {
+        let row = EegDataRow {
+            time: Utc::now(),
+            channels: vec![0; NUM_CHANNELS],
+        };
+        assert!(row.validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_wrong_length() {
+        let too_few = EegDataRow {
+            time: Utc::now(),
+            channels: vec![0; 4],
+        };
+        assert!(too_few.validate().is_err());
+
+        let too_many = EegDataRow {
+            time: Utc::now(),
+            channels: vec![0; 13],
+        };
+        assert!(too_many.validate().is_err());
+    }
+
+    #[test]
+    fn channel_type_serializes_lowercase() {
+        assert_eq!(serde_json::to_string(&ChannelType::Eeg).unwrap(), "\"eeg\"");
+        assert_eq!(serde_json::to_string(&ChannelType::Emg).unwrap(), "\"emg\"");
+    }
 }
 
 // Struct for the query parameters on GET /api/sessions/{session_id}/eeg-data

@@ -1,6 +1,6 @@
 use super::models::{
     EegDataRow, FrontendState, NewTimeLabel, NewUser, Session, TimeLabel, TimeSeriesData,
-    UpdateUser, User,
+    UpdateUser, User, NUM_CHANNELS,
 };
 use crate::lsl::EEGDataPacket;
 use argon2::password_hash::SaltString;
@@ -19,14 +19,10 @@ pub static DB_POOL: OnceCell<Arc<PgPool>> = OnceCell::new();
 
 pub type DbClient = Arc<PgPool>;
 
-// struct for EEG rows to convert to CSV
-#[derive(serde::Serialize)]
-struct EEGCsvRow {
-    time: String,
-    channel1: i32,
-    channel2: i32,
-    channel3: i32,
-    channel4: i32,
+fn csv_channel_headers() -> Vec<String> {
+    (1..=NUM_CHANNELS)
+        .map(|i| format!("channel{}", i))
+        .collect()
 }
 
 pub async fn initialize_connection() -> Result<DbClient, Error> {
@@ -163,31 +159,32 @@ pub async fn insert_batch_eeg(
         return Ok(());
     }
 
-    // Construct a single SQL insert statement
-    let mut query_builder = sqlx::QueryBuilder::new(
-        "INSERT INTO eeg_data (session_id, time, channel1, channel2, channel3, channel4) ",
-    );
+    if packet.signals.len() != NUM_CHANNELS {
+        return Err(sqlx::Error::Protocol(format!(
+            "expected {} channels in packet, got {}",
+            NUM_CHANNELS,
+            packet.signals.len()
+        )));
+    }
 
-    // Iterate through all data in the packet, pairing timestamp to the signal, and insert them
+    let mut query_builder =
+        sqlx::QueryBuilder::new("INSERT INTO eeg_data (session_id, time, channels) ");
 
     query_builder.push_values(
         (0..n_samples).map(|sample_idx| {
+            let channels: Vec<i32> = (0..NUM_CHANNELS)
+                .map(|ch_idx| packet.signals[ch_idx][sample_idx] as i32)
+                .collect();
             (
                 session_id,
                 &packet.timestamps[sample_idx],
-                packet.signals[0][sample_idx], // Channel 0
-                packet.signals[1][sample_idx], // Channel 1
-                packet.signals[2][sample_idx], // Channel 2
-                packet.signals[3][sample_idx], // Channel 3
+                serde_json::json!(channels),
             )
         }),
-        |mut b, (session_id, timestamp, ch0, ch1, ch2, ch3)| {
+        |mut b, (session_id, timestamp, channels_json)| {
             b.push_bind(session_id)
                 .push_bind(timestamp)
-                .push_bind(ch0)
-                .push_bind(ch1)
-                .push_bind(ch2)
-                .push_bind(ch3);
+                .push_bind(channels_json);
         },
     );
 
@@ -485,15 +482,26 @@ pub async fn get_eeg_data_by_range(
         session_id, start, end
     );
 
-    let data = sqlx::query_as!(
-        EegDataRow,
-        "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data WHERE session_id = $1 AND time >= $2 AND time <= $3 ORDER BY time",
+    let rows = sqlx::query!(
+        "SELECT time, channels FROM eeg_data WHERE session_id = $1 AND time >= $2 AND time <= $3 ORDER BY time",
         session_id,
         start,
         end,
     )
     .fetch_all(&**client)
     .await?;
+
+    let data = rows
+        .into_iter()
+        .map(|row| {
+            let channels: Vec<i32> = serde_json::from_value(row.channels)
+                .map_err(|e| Error::Protocol(format!("Invalid channels JSON: {}", e)))?;
+            Ok(EegDataRow {
+                time: row.time,
+                channels,
+            })
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
 
     info!("Retrieved {} EEG data rows.", data.len());
     Ok(data)
@@ -545,7 +553,7 @@ pub async fn export_eeg_data_as_csv(
 
     // get the data from the database
     let data = sqlx::query!(
-        "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data
+        "SELECT time, channels FROM eeg_data
         WHERE session_id = $1 AND time >= $2 AND time <= $3
         ORDER BY time ASC",
         session_id,
@@ -555,29 +563,33 @@ pub async fn export_eeg_data_as_csv(
     .fetch_all(&**client)
     .await?;
 
-    // build the CSV using the csv crate
-
     let mut writer = csv::WriterBuilder::new()
         .has_headers(false)
         .from_writer(vec![]);
 
-    // write the header based on include_header flag
     if include_header {
+        let mut header = vec!["time".to_string()];
+        header.extend(csv_channel_headers());
         writer
-            .write_record(["time", "channel1", "channel2", "channel3", "channel4"])
+            .write_record(&header)
             .map_err(|e| Error::Protocol(e.to_string()))?;
     }
 
-    // now, iterate through the data and write each row
     for row in data {
+        let channels: Vec<i32> = serde_json::from_value(row.channels)
+            .map_err(|e| Error::Protocol(format!("Invalid channels JSON: {}", e)))?;
+        if channels.len() != NUM_CHANNELS {
+            return Err(Error::Protocol(format!(
+                "expected {} channels, got {}",
+                NUM_CHANNELS,
+                channels.len()
+            )));
+        }
+        let mut record: Vec<String> = Vec::with_capacity(NUM_CHANNELS + 1);
+        record.push(row.time.to_rfc3339());
+        record.extend(channels.iter().map(|v| v.to_string()));
         writer
-            .serialize(EEGCsvRow {
-                time: row.time.to_rfc3339(),
-                channel1: row.channel1,
-                channel2: row.channel2,
-                channel3: row.channel3,
-                channel4: row.channel4,
-            })
+            .write_record(&record)
             .map_err(|e| Error::Protocol(e.to_string()))?;
     }
 
@@ -592,7 +604,7 @@ pub async fn export_eeg_data_as_csv(
 }
 
 /// Import EEG data from a CSV byte stream for a given session ID. The CSV is expected
-/// to have columns: "time", "channel1", "channel2", "channel3", "channel4".
+/// to have columns: "time", "channel1", ..., "channel12" (in that order).
 ///
 /// Returns Ok(()) on success.
 pub async fn import_eeg_data_from_csv(
@@ -602,66 +614,40 @@ pub async fn import_eeg_data_from_csv(
 ) -> Result<(), Error> {
     info!("Importing EEG data for session id {} from CSV", session_id);
 
-    // we use the csv crate to read the CSV data, converting them to the struct we made for CSV rows
     let mut reader = csv::ReaderBuilder::new()
-        .has_headers(true) // we expect the CSV to have headers, should probably make this clear somewhere
+        .has_headers(true)
         .from_reader(csv_bytes);
 
-    // set up our vectors to hold the parsed EEG data rows, so we can batch insert them later
     let mut timestamps: Vec<DateTime<Utc>> = Vec::new();
-    let mut channel1_data: Vec<f64> = Vec::new();
-    let mut channel2_data: Vec<f64> = Vec::new();
-    let mut channel3_data: Vec<f64> = Vec::new();
-    let mut channel4_data: Vec<f64> = Vec::new();
+    let mut signals: Vec<Vec<f64>> = vec![Vec::new(); NUM_CHANNELS];
 
-    // we iterate through the CSV records, parsing each row and converting it to the format we need for insertion
     for result in reader.records() {
-        // unwrap the record, if there's an error we return it
         let record = result.map_err(|e| Error::Protocol(e.to_string()))?;
 
-        // now we parse the fields, converting time to DateTime<Utc> and channels to i32
         let time_str = record
             .get(0)
             .ok_or_else(|| Error::Protocol("Missing time field".to_string()))?;
-
-        // we assume the time is in RFC3339 format
         let time = DateTime::parse_from_rfc3339(time_str)
             .map_err(|e| Error::Protocol(format!("Invalid time format: {}", e)))?
             .with_timezone(&Utc);
-
-        let channel1 = record
-            .get(1)
-            .ok_or_else(|| Error::Protocol("Missing channel1 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel1 value: {}", e)))?;
-        let channel2 = record
-            .get(2)
-            .ok_or_else(|| Error::Protocol("Missing channel2 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel2 value: {}", e)))?;
-        let channel3 = record
-            .get(3)
-            .ok_or_else(|| Error::Protocol("Missing channel3 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel3 value: {}", e)))?;
-        let channel4 = record
-            .get(4)
-            .ok_or_else(|| Error::Protocol("Missing channel4 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel4 value: {}", e)))?;
-
-        // now we construct the tuple and add it to our vectors
         timestamps.push(time);
-        channel1_data.push(channel1);
-        channel2_data.push(channel2);
-        channel3_data.push(channel3);
-        channel4_data.push(channel4);
+
+        for (ch_idx, signal) in signals.iter_mut().enumerate() {
+            let field_idx = ch_idx + 1;
+            let value = record
+                .get(field_idx)
+                .ok_or_else(|| Error::Protocol(format!("Missing channel{} field", ch_idx + 1)))?
+                .parse::<f64>()
+                .map_err(|e| {
+                    Error::Protocol(format!("Invalid channel{} value: {}", ch_idx + 1, e))
+                })?;
+            signal.push(value);
+        }
     }
 
-    // now we use our existing batch insert function to insert the data into the database
     let eeg_rows = EEGDataPacket {
         timestamps,
-        signals: vec![channel1_data, channel2_data, channel3_data, channel4_data],
+        signals,
         ml_result: None,
     };
 

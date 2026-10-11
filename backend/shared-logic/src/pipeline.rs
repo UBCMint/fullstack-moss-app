@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::NUM_CHANNELS;
+
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Pipeline {
     pub nodes: Vec<Node>,
@@ -56,7 +58,7 @@ impl Default for PreprocessingConfig {
             h_freq: Some(50.0),
             downsample_factor: None,
             sfreq: 256.0,
-            n_channels: 4,
+            n_channels: NUM_CHANNELS,
         }
     }
 }
