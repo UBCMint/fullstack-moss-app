@@ -8,7 +8,6 @@ specs live in the backend:
 - [backend/docs/pipeline-nodes.md](../backend/docs/pipeline-nodes.md): every
   pipeline node type, its fields, its defaults, and what it changes.
 
-
 ## Where this lives in the frontend
 
 | Concern                                                                      | File                                                                                                                                              |
