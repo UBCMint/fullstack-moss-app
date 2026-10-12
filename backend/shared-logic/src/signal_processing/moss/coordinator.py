@@ -3,10 +3,11 @@ MOSS - coordinator.py
 =====================
 Python coordinator layer — orchestrates preprocessing, encoding, and classification.
 
-This is the main entry point for the Rust signal_processor.rs to call into.
-It exposes a clean JSON interface so Rust can invoke it via subprocess or PyO3.
+This is a standalone Python/CLI entry point, not the active Rust bridge.
+The live Rust pipeline_gateway.rs calls manager.py or mock_manager.py instead.
+The CLI prints a JSON result; model-loading logs may also appear on stdout.
 
-Usage (from command line / Rust subprocess):
+Usage (from command line):
     python coordinator.py predict --input recording.csv --task activity
     python coordinator.py predict --input recording.csv --task focus
     python coordinator.py predict --input recording.csv --task emotion
@@ -27,9 +28,9 @@ Output (JSON to stdout):
     }
 
 Architecture:
-    Rust (signal_processor.rs)
+    Python caller / CLI
         |
-        v  subprocess / PyO3
+        v
     coordinator.py          <- you are here
         |           |               |
     preprocessing  encoder    classifier
