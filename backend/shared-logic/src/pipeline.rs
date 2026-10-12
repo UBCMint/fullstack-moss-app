@@ -1,3 +1,17 @@
+//! Client-configured processing pipeline, sent as `nodes` in the websocket init message.
+//!
+//! Each [`Node`] is serialized adjacently tagged as `{"type": "...", "config": {...}}`, with
+//! `type` one of `"window"`, `"preprocessing"` or `"ml"`. The backend doesn't run the
+//! nodes as a graph. It looks up the first node of each type with the accessors on
+//! [`Pipeline`], and falls back to `Default` when a type is missing.
+//!
+//! None of the config structs use `#[serde(default)]`, so every non-`Option` field is
+//! required whenever its node is present. One missing field rejects the whole init message.
+//!
+//! This module is the contract the frontend node editor
+//! (`frontend/components/ui-react-flow/react-flow-view.tsx`) has to match. Field-by-field
+//! spec: `backend/docs/pipeline-nodes.md`.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

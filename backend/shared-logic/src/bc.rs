@@ -1,3 +1,18 @@
+//! Fan-out for a live session.
+//!
+//! [`start_broadcast`] is the runtime core of one websocket connection. It spawns:
+//!
+//! - the mock EEG generator ([`generate_mock_data`]), always on for now; comment it out to
+//!   use a real headset,
+//! - the acquisition loop ([`receive_eeg`]), which batches samples, runs ML and publishes
+//!   [`EEGDataPacket`]s on a `tokio::broadcast` channel (capacity 1000),
+//! - [`ws_receiver`], which serializes each packet to JSON and sends it to the client,
+//! - [`db_receiver`], which inserts each packet into `eeg_data` for the session.
+//!
+//! `start_broadcast` returns once acquisition stops (after the cancellation token fires).
+//! It doesn't wait for the websocket or DB consumers, so the last packet can reach the
+//! client after `"confirmed closing"`.
+
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Receiver;
 
