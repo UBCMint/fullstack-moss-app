@@ -1,3 +1,21 @@
+//! EEG acquisition loop: LSL samples in, windowed [`EEGDataPacket`]s out.
+//!
+//! [`receive_eeg`] reads the window and preprocessing configs from the [`Pipeline`] (using
+//! defaults for missing nodes), loads the Python manager named by `PIPELINE_MANAGER_SCRIPT`
+//! (default: `moss/mock_manager.py`), and connects to the first LSL stream of type `EEG`.
+//! It blocks until one exists. Then, on a blocking thread:
+//!
+//! - collects 4-channel samples (fewer channels: dropped; extra channels: ignored) and
+//!   converts LSL clock time to UTC,
+//! - every `chunk_size` samples, prepends the previous batch's last `overlap_size` samples
+//!   (with placeholder timestamps), runs [`PipelineGateway::call_pipeline`] to fill in
+//!   `ml_result`, and publishes the packet,
+//! - on cancellation, publishes whatever samples are left as a final, shorter packet.
+//!
+//! `signals` in the published packet are always raw. Preprocessing only affects the ML input.
+//! [`EEGDataPacket`] is the exact JSON sent to websocket clients (see
+//! `backend/docs/websocket-protocol.md`).
+
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};

@@ -1,3 +1,22 @@
+//! Live EEG websocket server.
+//!
+//! Accepts raw TCP on `WS_HOST:WS_PORT` (default `127.0.0.1:8080`), upgrades each connection
+//! to a websocket, and runs one live session per connection:
+//!
+//! 1. Waits for the first text frame that parses as a [`WebSocketInitMessage`]
+//!    (`{session_id, nodes}`). Frames that don't parse are logged and skipped. No error is
+//!    sent to the client.
+//! 2. Builds a [`Pipeline`] from `nodes` and spawns [`start_broadcast`], which streams
+//!    `EEGDataPacket` JSON batches to the client and writes them to the database.
+//! 3. On the text frame `"clientClosing"`, cancels the pipeline, waits for acquisition to
+//!    stop, and replies `"confirmed closing"`.
+//!
+//! A Close frame or a disconnect *without* `"clientClosing"` doesn't cancel the pipeline,
+//! so it keeps running in the background (known issue).
+//!
+//! Full protocol: `backend/docs/websocket-protocol.md`. Node configs:
+//! `backend/docs/pipeline-nodes.md`.
+
 use dotenvy::dotenv;
 use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
