@@ -1,119 +1,155 @@
-https://www.figma.com/board/4UUXdzNg0rMLQoMUcc5R3e/ubcmint_backend?node-id=0-1&t=NO81CLSnXEB2WoHj-1
+# MOSS Backend
 
-For more info on set up: https://docs.tigerdata.com/self-hosted/latest/install/installation-docker/
+Rust backend for the MOSS EEG platform: a REST API, a websocket server for live EEG streaming,
+and a TimescaleDB database.
 
-# Prerequisites
-- docker, https://www.docker.com/get-started/
+Architecture diagram: https://www.figma.com/board/4UUXdzNg0rMLQoMUcc5R3e/ubcmint_backend?node-id=0-1&t=NO81CLSnXEB2WoHj-1
 
-# Setup Docker container 
-- Pull the timescaleDB image
-```
-docker pull timescale/timescaledb:latest-pg17
-```
+- [Part 1: Setup](#part-1-setup)
+- [Part 2: How the system works](#part-2-how-the-system-works)
 
-- Run the container, replace `C:\Users\local_folder` with the folder location on your computer
-```
-docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=my_secure_password_123 -v C:\Users\local_folder:/var/lib/postgresql/data timescale/timescaledb:latest-pg17
-```
+---
 
-# Setting up Database
+# Part 1: Setup
 
-- Access the database 
-```sql
-docker exec -it timescaledb psql -U postgres
-```
+Steps to run the backend locally. Commands assume you start in the repository root.
 
-*Note: to copy and paste, Ctr + Shift+ C*
+## Prerequisites
 
-- Set up Mint User
-```sql
-CREATE USER team_user WITH PASSWORD 'ubcmintpw';
-\du --to check user is created
-CREATE DATABASE ubcmint;
-\l --to check the database was created
-GRANT ALL PRIVILEGES ON DATABASE ubcmint TO team_user; 
+| Tool | Used for |
+|---|---|
+| Docker | Running the database |
+| Rust (`cargo`) | Building and running the servers |
+| `sqlx-cli` | Applying database migrations |
+| Python 3.8 to 3.11, with development headers | The servers embed Python through PyO3 0.18, which does not support newer versions. The `python3` on your `PATH` is the one it builds against |
+| `numpy` below 2.0, installed in that Python | The websocket server passes EEG data to Python as numpy arrays |
+| CMake and a C/C++ toolchain | Building the LSL library (`lsl-sys`) |
 
-SET ROLE team_user;
-SELECT CURRENT_USER; --to check the current role is team_user
+Install `sqlx-cli` (the version the Docker image uses) with:
+
+```sh
+cargo install sqlx-cli --version 0.8.3 --no-default-features --features postgres
 ```
 
-- Go into the created ubcmint database
-```sql
-\c ubcmint
+Install numpy with:
+
+```sh
+pip install "numpy<2"
 ```
 
-- Creating the tables
+The mock pipeline manager used by default needs nothing else. The real model needs the full list in
+`backend/api-server/python/requirements.txt`.
 
- ```
- -- Create Users table
- CREATE TABLE users (
-   id SERIAL PRIMARY KEY,
-   username VARCHAR(50) NOT NULL UNIQUE,
-   email VARCHAR(100) NOT NULL UNIQUE
- );
- 
- -- Create User_Settings table
- CREATE TABLE user_settings (
-   id SERIAL PRIMARY KEY,
-   user_id INTEGER NOT NULL REFERENCES users(id),
-   filter_config JSONB,
-   interface_prefs JSONB
- );
- 
- -- Create Sessions table
- CREATE TABLE sessions (
-   id SERIAL PRIMARY KEY,
-   user_id INTEGER NOT NULL REFERENCES users(id),
-   started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-   ended_at TIMESTAMPTZ
- );
- 
- -- Create Headsets table
- CREATE TABLE headsets (
-   id SERIAL PRIMARY KEY,
-   model VARCHAR(100) NOT NULL,
-   manufacturer VARCHAR(100) NOT NULL,
-   serial_number TEXT UNIQUE,
-   calibration_data JSONB
- );
- 
- -- Create ML_Models table
- CREATE TABLE ml_models (
-   id SERIAL PRIMARY KEY,
-   name VARCHAR(100) NOT NULL,
-   version VARCHAR(50),
-   description TEXT,
-   config JSONB
- );
- 
- -- Create User_ML_Selections table
- CREATE TABLE user_ml_selections (
-   id SERIAL PRIMARY KEY,
-   user_id INTEGER NOT NULL REFERENCES users(id),
-   ml_model_id INTEGER NOT NULL REFERENCES ml_models(id),
-   parameters JSONB
- );
- 
- -- Create EEG_Data table (to store time-series EEG data)
- CREATE TABLE eeg_data (
-   time TIMESTAMPTZ NOT NULL,
-   session_id INTEGER NOT NULL REFERENCES sessions(id),
-   headset_id INTEGER NOT NULL REFERENCES headsets(id),
-   channel1 DOUBLE PRECISION,
-   channel2 DOUBLE PRECISION,
-   channel3 DOUBLE PRECISION,
-   channel4 DOUBLE PRECISION,
-   PRIMARY KEY (time, session_id)
- );
- 
- -- Convert the eeg_data table into a hypertable
- SELECT create_hypertable('eeg_data', 'time');
- ```
- 
-- to escape
-```sql
-exit
+## 1. Start the database
+
+```sh
+docker compose up -d db
 ```
+
+This starts TimescaleDB (PostgreSQL 16) on port `5432` with these credentials, taken from
+`docker-compose.yml`:
+
+| Setting | Value |
+|---|---|
+| User | `postgres` |
+| Password | `my_secure_password_123` |
+| Database | `postgres` |
+
+## 2. Apply the migrations
+
+```sh
+export DATABASE_URL="postgres://postgres:my_secure_password_123@localhost:5432/postgres"
+sqlx migrate run --source backend/migrations
+```
+
+Run this before building the servers. They check their SQL queries against the live database at
+compile time, so the tables must exist first.
+
+## 3. Run the API server
+
+```sh
+cd backend/api-server
+cargo run
+```
+
+Listens on `127.0.0.1:9000` by default.
+
+## 4. Run the websocket server
+
+In a second terminal:
+
+```sh
+export DATABASE_URL="postgres://postgres:my_secure_password_123@localhost:5432/postgres"
+export PIPELINE_MANAGER_SCRIPT="$(pwd)/backend/shared-logic/src/signal_processing/moss/mock_manager.py"
+cd backend/websocket-server
+cargo run
+```
+
+Listens on `127.0.0.1:8080` by default. `PIPELINE_MANAGER_SCRIPT` must be set for local runs; its
+default is a path that only exists inside the Docker image.
+
+## Environment variables
+
+| Variable | Used by | Default | Purpose |
+|---|---|---|---|
+| `DATABASE_URL` | all | none (required) | PostgreSQL connection string |
+| `API_HOST` | api-server | `127.0.0.1` | Address to bind |
+| `API_PORT` | api-server | `9000` | Port to bind |
+| `WS_HOST` | websocket-server | `127.0.0.1` | Address to bind |
+| `WS_PORT` | websocket-server | `8080` | Port to bind |
+| `PIPELINE_MANAGER_SCRIPT` | websocket-server | `/app/shared-logic/src/signal_processing/moss/mock_manager.py` | Python pipeline manager to load |
+
+## Check that it works
+
+With the database and API server running:
+
+```sh
+curl http://127.0.0.1:9000/users
+```
+
+A fresh database returns `[]`. The full list of routes is in
+[`api-server/src/apidocumentation.md`](api-server/src/apidocumentation.md).
+
+## Resetting the database
+
+```sh
+docker compose down -v
+```
+
+This deletes the database volume and all data in it. Repeat steps 1 and 2 afterwards.
+
+---
+
+# Part 2: How the system works
+
+## Workspace layout
+
+`backend/` is a Cargo workspace with three crates.
+
+| Crate | Role |
+|---|---|
+| `shared-logic` | Library used by both servers: database access (`db.rs`), shared data types (`models.rs`), and the EEG acquisition and processing code |
+| `api-server` | REST API (Axum) for users, sessions, saved frontend state, time labels, and EEG data import/export |
+| `websocket-server` | Accepts a websocket connection from the frontend and streams EEG data to it while saving it to the database |
+
+`backend/test-lsl` is a standalone binary for testing the LSL stream and is not part of the
+workspace.
+
+## How a request is handled
+
+**REST (`api-server`).** The frontend calls the API server for anything that is a request and
+response: creating sessions, saving UI state, reading or exporting stored EEG data. Handlers in
+`api-server/src/main.rs` call functions in `shared-logic/src/db.rs`, which run SQL against the
+database. See [`api-server/src/apidocumentation.md`](api-server/src/apidocumentation.md) for every
+route.
+
+**Live streaming (`websocket-server`).** For a live session the frontend opens a websocket, sends
+a first message containing the session id and the processing pipeline, and then receives EEG
+batches as they arrive. The same batches are written to the `eeg_data` table, so after a session
+the data is read back through the REST API.
+
+The websocket server, pipeline definition, and Python signal processing code are not covered in
+this README.
 
 ## Database
 
