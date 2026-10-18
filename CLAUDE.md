@@ -97,3 +97,4 @@ npx prettier --check .
 
 - `.github/workflows/code-quality.yml` gates PRs on `cargo fmt`, `cargo clippy -D warnings`, `ruff format`/`ruff check`, and frontend `eslint`/`tsc --noEmit`/`prettier --check` — run the relevant subset locally before pushing.
 - `.github/workflows/pr-workflow.yml` auto-labels PRs by path (`frontend/`, `backend/`, `.github/`) and requires lead or team approval before merge; it's automatic and doesn't need local action.
+- Before committing any change under `frontend/` (including Markdown docs like this kind of README), run `npx prettier --write <paths>` from `frontend/` — CI only *checks* formatting and fails on drift, it doesn't fix it. If prettier can't be run in the session, say so and remind the user to run it before pushing, rather than leaving it to CI to catch.

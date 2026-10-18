@@ -41,9 +41,9 @@ jobs:
             // CONFIGURATION
             // -------------------
             const rules = {
-              frontend: { path: "frontend/", label: "frontend", lead: ["MaddieWright"], team: [] },
-              backend:  { path: "backend/",  label: "backend",  lead: ["HeisSteve"], team: [] },
-              infra:    { path: ".github/",  label: "infra",    lead: ["HeisSteve", "MaddieWright" ], team: [] }
+              frontend: { path: "frontend/", label: "frontend", lead: ["xshauryaa"], team: [] },
+              backend:  { path: "backend/",  label: "backend",  lead: ["xshauryaa"], team: [] },
+              infra:    { path: ".github/",  label: "infra",    lead: ["xshauryaa"], team: [] }
             };
 
             const labelsToAdd = new Set();
