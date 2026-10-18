@@ -25,9 +25,9 @@ reviewers:
 
 | Changed path | Label | Lead reviewers |
 | --- | --- | --- |
-| `frontend/` | `frontend` | `MaddieWright` |
-| `backend/` | `backend` | `HeisSteve` |
-| `.github/` | `infra` | `HeisSteve`, `MaddieWright` |
+| `frontend/` | `frontend` | `xshauryaa` |
+| `backend/` | `backend` | `xshauryaa` |
+| `.github/` | `infra` | `xshauryaa` |
 
 `PR Check` updates one marked approval-status comment and fails unless at least
 one lead from the combined applicable rules has approved, or two configured
