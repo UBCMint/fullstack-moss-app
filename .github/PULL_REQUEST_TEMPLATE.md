@@ -32,4 +32,4 @@ Attach images or videos if possible.
 -   This template is intended to **guide** your PR submission, but feel free to
     modify sections as needed.
 -   For the PR title, just reference the appropriate Github Issue/Notion Task
-    -   eg. `steve/[Bug Fix] Changed color of background`
+    -   eg. `shaurya/[Bug Fix] Changed color of background`
