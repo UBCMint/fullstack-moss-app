@@ -107,7 +107,7 @@ export default function MLComboBox({
                     {/* Left connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'absolute left-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute left-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
                                 ? 'border-[#000000]'
                                 : 'border-[#D3D3D3]'
@@ -148,7 +148,7 @@ export default function MLComboBox({
                     {/* Right connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'absolute right-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute right-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
                                 ? 'border-[#000000]'
                                 : 'border-[#D3D3D3]'

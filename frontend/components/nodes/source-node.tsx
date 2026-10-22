@@ -22,7 +22,7 @@ export default function SourceNode() {
             </div>
 
             {/* Right circle */}
-            <span className="absolute right-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center border-[3px] border-[#000000]">
+            <span className="absolute right-6 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center border-[3px] border-[#000000]">
                 <span className="w-3 h-3 rounded-full bg-white" />
                 <Handle
                     type="source"
@@ -30,8 +30,8 @@ export default function SourceNode() {
                     id="source-node-output"
                     style={{
                         transform: 'translateY(-50%)',
-                        width: '18px',
-                        height: '18px',
+                        width: '32px',
+                        height: '32px',
                         backgroundColor: 'transparent',
                         border: '2px solid transparent',
                         borderRadius: '50%',
