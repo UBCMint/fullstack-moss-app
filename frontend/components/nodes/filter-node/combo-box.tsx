@@ -75,7 +75,7 @@ export default function ComboBox({
                     {/* Left connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'absolute left-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute left-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
@@ -119,7 +119,7 @@ export default function ComboBox({
                     {/* Right connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'absolute right-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute right-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected

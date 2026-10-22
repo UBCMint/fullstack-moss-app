@@ -87,7 +87,7 @@ export default function ComboBox({
                         <div className="flex items-center">
                             <span
                                 className={cn(
-                                    'absolute left-6 w-6 h-6 rounded-full flex items-center justify-center border-[3px]',
+                                    'absolute left-6 w-8 h-8 rounded-full flex items-center justify-center border-[3px]',
                                     isConnected
                                         ? 'border-black'
                                         : 'border-[#D3D3D3]'
@@ -116,7 +116,7 @@ export default function ComboBox({
                         <div className="flex items-center">
                             <span
                                 className={cn(
-                                    'absolute right-6 w-6 h-6 rounded-full flex items-center justify-center border-[3px]',
+                                    'absolute right-6 w-8 h-8 rounded-full flex items-center justify-center border-[3px]',
                                     isConnected
                                         ? 'border-black'
                                         : 'border-[#D3D3D3]'
