@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useNotifications } from '@/components/notifications';
 import { exportEEGData, downloadCSV } from '@/lib/eeg-api';
+import { getUserFacingErrorMessage } from '@/lib/errors';
 import { ExitIcon } from '@radix-ui/react-icons';
 
 type ExportDialogProps = {
@@ -77,8 +78,7 @@ export default function ExportDialog({
         } catch (error) {
             notifications.error({
                 title: 'Export failed',
-                description:
-                    error instanceof Error ? error.message : 'Unexpected error',
+                description: getUserFacingErrorMessage(error),
             });
         } finally {
             setIsExporting(false);

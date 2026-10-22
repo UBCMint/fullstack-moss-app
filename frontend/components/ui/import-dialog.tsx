@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { useNotifications } from '@/components/notifications';
 import { importEEGData } from '@/lib/eeg-api';
+import { getUserFacingErrorMessage } from '@/lib/errors';
 import { Folder } from 'lucide-react';
 import { EnterIcon, InfoCircledIcon } from '@radix-ui/react-icons';
 import {
@@ -74,8 +75,7 @@ export default function ImportDialog({
         } catch (error) {
             notifications.error({
                 title: 'Import failed',
-                description:
-                    error instanceof Error ? error.message : 'Unexpected error',
+                description: getUserFacingErrorMessage(error),
             });
         } finally {
             setIsImporting(false);
