@@ -14,6 +14,7 @@ export interface ArtifactComboBoxProps {
     onIntensityChange: (intensity: number) => void;
     isConnected?: boolean;
     isDataStreamOn?: boolean;
+    isNodeSelected?: boolean;
 }
 
 export default function ArtifactComboBox({
@@ -25,6 +26,7 @@ export default function ArtifactComboBox({
     onIntensityChange,
     isConnected = false,
     isDataStreamOn = false,
+    isNodeSelected = false,
 }: ArtifactComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
 
@@ -43,8 +45,10 @@ export default function ArtifactComboBox({
     return (
         <div
             className={cn(
-                'bg-white rounded-[30px] border-2 overflow-hidden',
-                'border-[#D3D3D3]'
+                'bg-white rounded-[30px] border-2 overflow-hidden transition-colors',
+                isNodeSelected
+                    ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                    : 'border-[#D3D3D3]'
             )}
             style={{
                 width: 'fit-content',

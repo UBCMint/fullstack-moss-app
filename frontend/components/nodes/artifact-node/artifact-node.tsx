@@ -13,9 +13,14 @@ interface ArtifactNodeData {
 interface ArtifactNodeProps {
     id: string;
     data?: ArtifactNodeData;
+    selected?: boolean;
 }
 
-export default function ArtifactNode({ id, data }: ArtifactNodeProps) {
+export default function ArtifactNode({
+    id,
+    data,
+    selected,
+}: ArtifactNodeProps) {
     // Initial values from data or defaults
     const [mode, setMode] = React.useState<ArtifactMode>(data?.mode || 'auto');
     const [selectedArtifacts, setSelectedArtifacts] = React.useState<string[]>(
@@ -153,6 +158,7 @@ export default function ArtifactNode({ id, data }: ArtifactNodeProps) {
                 onIntensityChange={setIntensity}
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
+                isNodeSelected={selected}
             />
         </div>
     );

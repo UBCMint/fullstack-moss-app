@@ -10,9 +10,10 @@ interface WindowNodeProps {
         config?: { chunk_size?: number; overlap_size?: number };
         selectedOption?: WindowOption;
     };
+    selected?: boolean;
 }
 
-export default function WindowNode({ id, data }: WindowNodeProps) {
+export default function WindowNode({ id, data, selected }: WindowNodeProps) {
     const DEFAULT_WINDOW_SIZE = 64;
     const DEFAULT_OVERLAP_SIZE = 0;
 
@@ -193,6 +194,7 @@ export default function WindowNode({ id, data }: WindowNodeProps) {
                 setSelectedOption={setSelectedOption}
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
+                isNodeSelected={selected}
             />
         </div>
     );
