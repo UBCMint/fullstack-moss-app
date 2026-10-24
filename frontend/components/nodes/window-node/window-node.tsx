@@ -143,7 +143,7 @@ export default function WindowNode({ id, data, selected }: WindowNodeProps) {
     }, [pushConfigToNodeData, isValidConfig]);
 
     return (
-        <div className="relative">
+        <fieldset disabled={dataStreaming} className="relative">
             {/* Input Handle - positioned to align with left circle */}
             <Handle
                 type="target"
@@ -196,6 +196,6 @@ export default function WindowNode({ id, data, selected }: WindowNodeProps) {
                 isDataStreamOn={dataStreaming}
                 isNodeSelected={selected}
             />
-        </div>
+        </fieldset>
     );
 }

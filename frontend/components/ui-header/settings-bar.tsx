@@ -131,7 +131,11 @@ export default function SettingsBar() {
     }, [leftTimerSeconds, dataStreaming, setDataStreaming]);
 
     const handleStartStop = () => {
-        setDataStreaming(!dataStreaming);
+        if (dataStreaming) {
+            setDataStreaming(false);
+        } else {
+            window.dispatchEvent(new Event('pipeline-start'));
+        }
     };
 
     const handleConfirmReset = () => {
