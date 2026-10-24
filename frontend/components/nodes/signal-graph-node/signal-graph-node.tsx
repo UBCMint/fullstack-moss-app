@@ -2,8 +2,8 @@ import { Card } from '@/components/ui/card';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
-import { ArrowUpRight, Download } from 'lucide-react';
-import React, { useState } from 'react';
+import { ArrowUpRight } from 'lucide-react';
+import React from 'react';
 
 import {
     Dialog,
@@ -14,7 +14,6 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import SignalGraphView from './signal-graph-full';
-import ExportDialog from '@/components/ui/export-dialog';
 import { exportEEGData } from '@/lib/eeg-api';
 
 interface SignalDataPoint {
@@ -96,7 +95,6 @@ export default function SignalGraphNode({
     const { renderData } = useNodeData(500, 10);
     const reactFlowInstance = useReactFlow();
     const [isConnected, setIsConnected] = React.useState(false);
-    const [isExportOpen, setIsExportOpen] = useState(false);
     const [seedData, setSeedData] = React.useState<SignalDataPoint[]>([]);
 
     // Determine if this Chart View node has an upstream path from a Source
@@ -230,38 +228,20 @@ export default function SignalGraphNode({
                     <span
                         className={`absolute left-16 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full  ${dataStreaming && isConnected ? 'bg-[#509693]' : 'bg-[#D3D3D3]'}`}
                     />
-                    <div className="flex flex-col items-start justify-center ml-24">
-                        <span className="absolute font-geist text-[25px] font-[550] leading-tight text-black tracking-wider">
+                    <div className="flex flex-col items-start justify-center gap-1 ml-24">
+                        <span className="font-geist text-[25px] font-[550] leading-none text-black tracking-wider">
                             Chart View
                         </span>
                         {isConnected && (
-                            <div className="w-full mt-[50px] transition-all duration-300 ease-in-out flex items-center gap-3">
-                                <DialogTrigger asChild>
-                                    <button
-                                        className="font-geist text-[14px] font-normal leading-tight text-black flex items-center gap-1 hover:opacity-80 transition"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        Preview{' '}
-                                        <ArrowUpRight
-                                            size={14}
-                                            className="transition-transform duration-200 hover:scale-110"
-                                        />
-                                    </button>
-                                </DialogTrigger>
+                            <DialogTrigger asChild>
                                 <button
-                                    className="font-geist text-[14px] font-normal leading-tight text-black flex items-center gap-1 hover:opacity-80 transition"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setIsExportOpen(true);
-                                    }}
+                                    className="font-geist text-[16px] font-medium leading-none text-black rounded-full px-3 -ml-3 py-1 flex items-center gap-1.5 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E7B75] focus-visible:ring-offset-2 transition-colors"
+                                    onClick={(e) => e.stopPropagation()}
                                 >
-                                    Export{' '}
-                                    <Download
-                                        size={14}
-                                        className="transition-transform duration-200 hover:scale-110"
-                                    />
+                                    Preview
+                                    <ArrowUpRight size={16} />
                                 </button>
-                            </div>
+                            </DialogTrigger>
                         )}
                     </div>
                     {/* Right decorative circle only (no output handle for end of pipeline) */}
@@ -290,13 +270,6 @@ export default function SignalGraphNode({
                     </div>
                 </DialogContent>
             </Card>
-
-            {/* Export dialog — outside the ReactFlow Dialog to avoid nesting */}
-            <ExportDialog
-                open={isExportOpen}
-                sessionId={activeSessionId}
-                onOpenChange={setIsExportOpen}
-            />
         </Dialog>
     );
 }
