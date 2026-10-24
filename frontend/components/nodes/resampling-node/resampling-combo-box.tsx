@@ -17,6 +17,7 @@ interface ResamplingComboBoxProps {
     onCustomRateChange: (hz: number) => void;
     isConnected?: boolean;
     isDataStreamOn?: boolean;
+    isNodeSelected?: boolean;
 }
 
 export default function ResamplingComboBox({
@@ -26,6 +27,7 @@ export default function ResamplingComboBox({
     onCustomRateChange,
     isConnected = false,
     isDataStreamOn = false,
+    isNodeSelected = false,
 }: ResamplingComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
 
@@ -34,8 +36,10 @@ export default function ResamplingComboBox({
     return (
         <div
             className={cn(
-                'bg-white rounded-[30px] border-2 overflow-hidden',
-                'border-[#D3D3D3]'
+                'bg-white rounded-[30px] border-2 overflow-hidden transition-colors',
+                isNodeSelected
+                    ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                    : 'border-[#D3D3D3]'
             )}
             style={{ width: 'fit-content', minWidth: '396px' }}
         >
@@ -47,7 +51,7 @@ export default function ResamplingComboBox({
                 <div className="flex items-center">
                     <div
                         className={cn(
-                            'absolute left-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute left-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected ? 'border-black' : 'border-gray-300'
                         )}
                     />
@@ -71,7 +75,7 @@ export default function ResamplingComboBox({
                     </div>
                     <div
                         className={cn(
-                            'absolute right-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute right-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected ? 'border-black' : 'border-gray-300'
                         )}
                     />

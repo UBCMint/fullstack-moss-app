@@ -15,6 +15,7 @@ import { useNotifications } from '@/components/notifications';
 
 interface LabelNodeProps {
     id?: string;
+    selected?: boolean;
 }
 
 interface LabeledMoment {
@@ -68,7 +69,7 @@ function normalizeNodeTimestamp(raw: unknown): string | null {
     return date.toISOString();
 }
 
-export default function LabelNode({ id }: LabelNodeProps) {
+export default function LabelNode({ id, selected }: LabelNodeProps) {
     const [isConnected, setIsConnected] = React.useState(false);
     const [isTriggerActive, setIsTriggerActive] = React.useState(false);
     const [isExpanded, setIsExpanded] = React.useState(false);
@@ -511,8 +512,8 @@ export default function LabelNode({ id }: LabelNodeProps) {
                     left: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
-                    width: '28px',
-                    height: '28px',
+                    width: '32px',
+                    height: '32px',
                     backgroundColor: 'transparent',
                     border: '2px solid transparent',
                     borderRadius: '50%',
@@ -531,8 +532,8 @@ export default function LabelNode({ id }: LabelNodeProps) {
                     right: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
-                    width: '28px',
-                    height: '28px',
+                    width: '32px',
+                    height: '32px',
                     backgroundColor: 'transparent',
                     border: '2px solid transparent',
                     borderRadius: '50%',
@@ -545,6 +546,7 @@ export default function LabelNode({ id }: LabelNodeProps) {
             <ComboBox
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
+                isNodeSelected={selected}
                 isTriggerActive={isTriggerActive}
                 onTriggerClick={handleTriggerClick}
                 onPreviewOpen={handlePreviewOpen}

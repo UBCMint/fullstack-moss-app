@@ -44,7 +44,7 @@ Keep `<description>` and `<your-name>` lowercase, hyphen-separated, and short en
 ## Pull requests
 
 - One PR per branch, scoped to the area named in the branch. Don't bundle unrelated frontend and backend changes into one `FE`/`BE` branch — use `FS` if a change genuinely needs both.
-- PR title references the GitHub Issue or Notion task, e.g. `steve/[Bug Fix] Changed color of background`.
+- PR title references the GitHub Issue or Notion task, e.g. `shaurya/[Bug Fix] Changed color of background`.
 - Use the existing PR template (`.github/PULL_REQUEST_TEMPLATE.md`) — fill in **What?**, **How?**, and **Testing**, with screenshots or recordings for UI changes.
 - Keep PRs small and short-lived. A PR open for weeks accumulates merge conflicts and gets harder to review.
 - Rebase (or merge `main` in) before opening the PR if your branch is behind, so CI and reviewers see the real diff.
@@ -103,5 +103,5 @@ Attach images or videos if possible.
 - This template is intended to **guide** your PR submission, but feel free to
   modify sections as needed.
 - For the PR title, just reference the appropriate Github Issue/Notion Task
-  - eg. `steve/[Bug Fix] Changed color of background`
+  - eg. `shaurya/[Bug Fix] Changed color of background`
 ```

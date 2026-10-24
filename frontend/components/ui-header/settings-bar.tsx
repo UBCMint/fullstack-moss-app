@@ -18,6 +18,7 @@ import {
     DialogClose,
 } from '@/components/ui/dialog';
 import { useNotifications } from '@/components/notifications';
+import { getUserFacingErrorMessage } from '@/lib/errors';
 import {
     createSession,
     getSessions,
@@ -169,8 +170,7 @@ export default function SettingsBar() {
             window.dispatchEvent(new Event('request-frontend-state'));
         });
 
-    const getErrorMessage = (error: unknown) =>
-        error instanceof Error ? error.message : 'Unexpected error';
+    const getErrorMessage = getUserFacingErrorMessage;
 
     const handleSaveToExistingSession = async (sessionId: number) => {
         const state = await requestFrontendState();
