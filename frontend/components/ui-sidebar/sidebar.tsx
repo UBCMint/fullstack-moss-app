@@ -7,10 +7,39 @@ import {
 } from '@/components/ui/resizable';
 import Cross1 from '@/components/radix/cross1';
 import NodeButton from './node-button';
-import React, { useState } from 'react';
+import React, { ReactNode, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { ChevronDown, X } from 'lucide-react';
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover';
+import { ChevronDown, CircleHelp, X } from 'lucide-react';
+
+// Small "?" button that opens a plain-language explanation of a term on click
+function TermHelp({ term, children }: { term: string; children: ReactNode }) {
+    return (
+        <Popover>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    aria-label={`What is ${term}?`}
+                    className="inline-flex align-middle mx-0.5 text-gray-500 hover:text-black"
+                >
+                    <CircleHelp className="h-3 w-3" />
+                </button>
+            </PopoverTrigger>
+            <PopoverContent
+                side="top"
+                className="w-64 font-ibmplex text-xs leading-relaxed space-y-2"
+            >
+                <p className="font-semibold">What is {term}?</p>
+                {children}
+            </PopoverContent>
+        </Popover>
+    );
+}
 
 export default function Sidebar() {
     const NodeCategories = [
@@ -168,11 +197,51 @@ export default function Sidebar() {
                                 <div className="flex-shrink-0 px-6 pb-6 pt-3">
                                     <Alert className="bg-[#EFEFF0] text-black flex justify-between items-start font-ibmplex">
                                         <AlertDescription className="text-[0.7rem]">
-                                            Only <b>pre-processed</b> data is{' '}
-                                            <b>saved</b> by default. To store
-                                            raw data, only use the{' '}
-                                            <b>Source Node</b> without adding
-                                            any computations.
+                                            Only <b>pre-processed</b>
+                                            <TermHelp term="pre-processed data">
+                                                <p>
+                                                    The headset records tiny
+                                                    electrical signals from your
+                                                    brain. It also picks up
+                                                    signals which aren&apos;t 
+                                                    brain activity, like those 
+                                                    from the movement of facial muscles.
+                                                </p>
+                                                <p>
+                                                    Pre-processed data is that
+                                                    recording after the app has
+                                                    cleaned it up: it filters
+                                                    out that extra noise and
+                                                    splits the signal into short
+                                                    chunks so it&apos;s easier
+                                                    to analyze. The nodes you
+                                                    add, like a Filter or Window
+                                                    node, decide how it gets
+                                                    cleaned.
+                                                </p>
+                                            </TermHelp>{' '}
+                                            data is <b>saved</b> by default. To
+                                            store <b>raw data</b>
+                                            <TermHelp term="raw data">
+                                                <p>
+                                                    Raw data is the brain signal
+                                                    exactly as the headset
+                                                    recorded it, before any
+                                                    cleanup. It includes
+                                                    everything the sensors
+                                                    picked up, noise and all.
+                                                </p>
+                                                <p>
+                                                    Save raw data if you might
+                                                    want to look at it again
+                                                    later in a different way.
+                                                    Once data has been cleaned
+                                                    up, it can&apos;t be turned
+                                                    back into the original.
+                                                </p>
+                                            </TermHelp>
+                                            , only use the <b>Source Node</b>{' '}
+                                            without adding any computations.
                                         </AlertDescription>
                                         <button
                                             onClick={() => setOpen(false)}
