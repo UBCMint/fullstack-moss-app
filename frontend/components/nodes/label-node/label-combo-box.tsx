@@ -130,37 +130,28 @@ export default function ComboBox({
                     </div>
 
                     {/* Trigger and Preview buttons */}
-                    <div className="flex flex-col items-center gap-1 pb-4">
-                        <div className="flex items-center gap-3">
-                            <button
-                                className={cn(
-                                    'nodrag nopan text-lg px-4 py-1 rounded-md border transition-colors',
-                                    isTriggerActive
-                                        ? 'bg-white text-[#2E7B75] border-[#2E7B75]'
-                                        : 'bg-[#2E7B75] text-white border-[#2E7B75]'
-                                )}
-                                onClick={onTriggerClick}
-                            >
-                                Trigger
-                            </button>
-
-                            <button
-                                className="nodrag nopan text-lg px-2 py-1 rounded-md text-black hover:text-[#2E7B75] transition-colors"
-                                onClick={onPreviewOpen}
-                            >
-                                Preview{' '}
-                                <ArrowUpRight
-                                    size={16}
-                                    className="inline ml-1"
-                                />
-                            </button>
-                        </div>
-
-                        <span className="text-[18px] leading-none text-black mt-1">
+                    <div className="flex items-center justify-center gap-3 pb-4">
+                        <button
+                            className={cn(
+                                'nodrag nopan text-lg px-4 py-1 rounded-md border transition-colors',
+                                isTriggerActive
+                                    ? 'bg-white text-[#2E7B75] border-[#2E7B75]'
+                                    : 'bg-[#2E7B75] text-white border-[#2E7B75]'
+                            )}
+                            onClick={onTriggerClick}
+                        >
                             {isTriggerActive
                                 ? 'Stop labeling'
                                 : 'Start labeling'}
-                        </span>
+                        </button>
+
+                        <button
+                            className="nodrag nopan text-lg px-2 py-1 rounded-md text-black hover:text-[#2E7B75] transition-colors"
+                            onClick={onPreviewOpen}
+                        >
+                            Preview{' '}
+                            <ArrowUpRight size={16} className="inline ml-1" />
+                        </button>
                     </div>
                 </>
             )}
