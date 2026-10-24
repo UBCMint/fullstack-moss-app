@@ -216,7 +216,7 @@ export default function ComboBox({
                                         )
                                     }
                                     className={cn(
-                                        'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
+                                        'nodrag w-full text-left px-3 py-0 rounded-lg text-sm font-normal',
                                         selectedOption === preset.value
                                             ? 'bg-gray-100 text-gray-900'
                                             : 'text-gray-600 hover:bg-gray-50'
@@ -274,7 +274,7 @@ export default function ComboBox({
                                     confirmOverlap();
                                 }}
                                 className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
+                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-sm font-normal',
                                     overlapOption === 'default'
                                         ? 'bg-gray-100 text-gray-900'
                                         : 'text-gray-600 hover:bg-gray-50'
@@ -289,7 +289,7 @@ export default function ComboBox({
                                     setOverlapError('');
                                 }}
                                 className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
+                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-sm font-normal',
                                     overlapOption === 'custom'
                                         ? 'bg-gray-100 text-gray-900'
                                         : 'text-gray-600 hover:bg-gray-50'

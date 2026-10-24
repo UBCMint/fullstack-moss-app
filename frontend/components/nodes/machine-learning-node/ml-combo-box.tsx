@@ -302,7 +302,7 @@ export default function MLComboBox({
                             key={prediction.value}
                             onClick={() => handleOptionSelect(prediction.value)}
                             className={cn(
-                                'text-left px-3 py-0 text-xs font-normal rounded-lg transition-colours',
+                                'text-left px-3 py-0 text-sm font-normal rounded-lg transition-colours',
                                 'block w-full', // Full width within the constrained container
                                 value === prediction.value
                                     ? 'bg-gray-100 text-gray-900'
