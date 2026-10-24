@@ -7,9 +7,13 @@ import MLComboBox from './ml-combo-box';
 interface MachineLearningNodeProps {
     id?: string;
     // data?: any;
+    selected?: boolean;
 }
 
-export default function MachineLearningNode({ id }: MachineLearningNodeProps) {
+export default function MachineLearningNode({
+    id,
+    selected,
+}: MachineLearningNodeProps) {
     const [selectedPrediction, setSelectedPrediction] =
         React.useState('Stress');
     const [isConnected, setIsConnected] = React.useState(false);
@@ -111,7 +115,13 @@ export default function MachineLearningNode({ id }: MachineLearningNodeProps) {
     }, [checkConnectionStatus]);
 
     return (
-        <div className="relative w-[396px] min-h-[90px] flex bg-white rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0 transition-all duration-300 ease-in-out">
+        <div
+            className={`relative w-[396px] min-h-[90px] flex bg-white rounded-[30px] border-2 shadow-none p-0 transition-all duration-300 ease-in-out ${
+                selected
+                    ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                    : 'border-[#D3D3D3]'
+            }`}
+        >
             {/* Input Handle - positioned to align with left circle */}
             <div>
                 <Handle

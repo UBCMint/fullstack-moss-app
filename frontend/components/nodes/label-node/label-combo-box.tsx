@@ -11,6 +11,7 @@ export type LabelColor = 'teal-700' | 'teal-500' | 'teal-300' | 'mint-100';
 interface ComboBoxProps {
     isConnected?: boolean;
     isDataStreamOn?: boolean;
+    isNodeSelected?: boolean;
     isTriggerActive: boolean;
     onTriggerClick: () => void;
     onPreviewOpen: () => void;
@@ -48,6 +49,7 @@ export const colorClassMap: Record<LabelColor, string> = {
 export default function ComboBox({
     isConnected = false,
     isDataStreamOn = false,
+    isNodeSelected = false,
     isTriggerActive,
     onTriggerClick,
     onPreviewOpen,
@@ -74,7 +76,10 @@ export default function ComboBox({
     return (
         <div
             className={cn(
-                'bg-white rounded-[30px] border-2 overflow-hidden border-[#D3D3D3]'
+                'bg-white rounded-[30px] border-2 overflow-hidden transition-colors',
+                isNodeSelected
+                    ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                    : 'border-[#D3D3D3]'
             )}
             style={{
                 width: isExpanded ? '760px' : 'fit-content',

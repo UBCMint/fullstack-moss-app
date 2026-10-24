@@ -12,9 +12,14 @@ interface ResamplingNodeData {
 interface ResamplingNodeProps {
     id: string;
     data?: ResamplingNodeData;
+    selected?: boolean;
 }
 
-export default function ResamplingNode({ id, data }: ResamplingNodeProps) {
+export default function ResamplingNode({
+    id,
+    data,
+    selected,
+}: ResamplingNodeProps) {
     const [rate, setRate] = React.useState<ResampleRate>(data?.rate ?? '256');
     const [customRate, setCustomRate] = React.useState<number>(
         data?.customRate ?? 256
@@ -130,6 +135,7 @@ export default function ResamplingNode({ id, data }: ResamplingNodeProps) {
                 onCustomRateChange={setCustomRate}
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
+                isNodeSelected={selected}
             />
         </div>
     );

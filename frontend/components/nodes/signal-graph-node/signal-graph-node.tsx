@@ -85,7 +85,13 @@ function parseEEG(csvContent: string): SignalDataPoint[] {
     }
 }
 
-export default function SignalGraphNode({ id }: { id?: string }) {
+export default function SignalGraphNode({
+    id,
+    selected,
+}: {
+    id?: string;
+    selected?: boolean;
+}) {
     const { dataStreaming, activeSessionId } = useGlobalContext();
     const { renderData } = useNodeData(500, 10);
     const reactFlowInstance = useReactFlow();
@@ -188,7 +194,13 @@ export default function SignalGraphNode({ id }: { id?: string }) {
 
     return (
         <Dialog>
-            <Card className="rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0 overflow-hidden bg-white h-[96px] w-[396px]">
+            <Card
+                className={`rounded-[30px] border-2 shadow-none p-0 overflow-hidden bg-white h-[96px] w-[396px] transition-colors ${
+                    selected
+                        ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                        : 'border-[#D3D3D3]'
+                }`}
+            >
                 <div
                     className={`relative flex items-center transition-all duration-300 ease-in-out h-[94px] w-[394=2px]`}
                 >

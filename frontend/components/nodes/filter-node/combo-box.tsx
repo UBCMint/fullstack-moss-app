@@ -27,6 +27,7 @@ interface ComboBoxProps {
     setHighCutoff: (v: number) => void;
     isConnected?: boolean;
     isDataStreamOn?: boolean;
+    isNodeSelected?: boolean;
 }
 
 export default function ComboBox({
@@ -38,6 +39,7 @@ export default function ComboBox({
     setHighCutoff,
     isConnected = false,
     isDataStreamOn = false,
+    isNodeSelected = false,
 }: ComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const titleRef = React.useRef<HTMLSpanElement>(null);
@@ -57,9 +59,10 @@ export default function ComboBox({
     return (
         <div
             className={cn(
-                'bg-white rounded-[30px] border-2 overflow-hidden',
-                // Node border stays gray - no change with connection
-                'border-[#D3D3D3]'
+                'bg-white rounded-[30px] border-2 overflow-hidden transition-colors',
+                isNodeSelected
+                    ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                    : 'border-[#D3D3D3]'
             )}
             style={{
                 width: 'fit-content',
