@@ -24,7 +24,7 @@ type Subscriber = (points: DataPoint[]) => void;
 
 type WebSocketContextType = {
     subscribe: (fn: Subscriber) => () => void;
-    sendPipelinePayload: (payload: PipelinePayload) => void;
+    startPipeline: (payload: PipelinePayload) => void;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(
@@ -58,7 +58,8 @@ function normalizeBatch(batch: WebSocketBatch): DataPoint[] {
 }
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
-    const { dataStreaming, activeSessionId } = useGlobalContext();
+    const { dataStreaming, setDataStreaming, activeSessionId } =
+        useGlobalContext();
     const wsRef = useRef<WebSocket | null>(null);
     const pipelinePayloadRef = useRef<PipelinePayload | null>(null);
     const subscribersRef = useRef<Set<Subscriber>>(new Set());
@@ -70,17 +71,19 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
         return () => subscribersRef.current.delete(fn);
     }, []);
 
-    const sendPipelinePayload = useCallback((payload: PipelinePayload) => {
-        pipelinePayloadRef.current = payload;
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify(payload));
-            console.log('Sent pipeline payload:', payload);
-        }
-    }, []);
+    // The caller supplies a freshly validated snapshot before opening the socket.
+    const startPipeline = useCallback(
+        (payload: PipelinePayload) => {
+            pipelinePayloadRef.current = payload;
+            setDataStreaming(true);
+        },
+        [setDataStreaming]
+    );
 
     // Manage WebSocket lifecycle
     useEffect(() => {
         if (!dataStreaming) {
+            pipelinePayloadRef.current = null;
             if (
                 wsRef.current?.readyState === WebSocket.OPEN &&
                 !isClosingGracefullyRef.current
@@ -168,7 +171,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }, [dataStreaming, activeSessionId]);
 
     return (
-        <WebSocketContext.Provider value={{ subscribe, sendPipelinePayload }}>
+        <WebSocketContext.Provider value={{ subscribe, startPipeline }}>
             {children}
         </WebSocketContext.Provider>
     );

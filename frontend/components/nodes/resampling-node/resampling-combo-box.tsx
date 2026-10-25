@@ -3,7 +3,7 @@ import { ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const PRESET_OPTIONS = [
-    { value: 'input', label: 'Input size' },
+    { value: 'input', label: 'Original rate' },
     { value: '200', label: '200 Hz' },
     { value: '256', label: '256 Hz' },
 ];
