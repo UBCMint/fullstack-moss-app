@@ -203,9 +203,10 @@ export default function Sidebar() {
                                                     The headset records tiny
                                                     electrical signals from your
                                                     brain. It also picks up
-                                                    signals which aren&apos;t 
-                                                    brain activity, like those 
-                                                    from the movement of facial muscles.
+                                                    signals which aren&apos;t
+                                                    brain activity, like those
+                                                    from the movement of facial
+                                                    muscles.
                                                 </p>
                                                 <p>
                                                     Pre-processed data is that
