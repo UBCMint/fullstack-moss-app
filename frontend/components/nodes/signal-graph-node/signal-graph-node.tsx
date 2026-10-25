@@ -1,3 +1,4 @@
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
@@ -234,13 +235,13 @@ export default function SignalGraphNode({
                         </span>
                         {isConnected && (
                             <DialogTrigger asChild>
-                                <button
-                                    className="font-geist text-[16px] font-medium leading-none text-black rounded-full px-3 -ml-3 py-1 flex items-center gap-1.5 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2E7B75] focus-visible:ring-offset-2 transition-colors"
+                                <Button
+                                    variant="nodeAction"
+                                    size="node"
                                     onClick={(e) => e.stopPropagation()}
                                 >
                                     Preview
-                                    <ArrowUpRight size={16} />
-                                </button>
+                                </Button>
                             </DialogTrigger>
                         )}
                     </div>
