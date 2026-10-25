@@ -41,6 +41,7 @@ export default function SettingsBar() {
         setActiveSessionId,
         activeSessionName,
         setActiveSessionName,
+        setDataSource,
     } = useGlobalContext();
     const notifications = useNotifications();
     const [leftTimerSeconds, setLeftTimerSeconds] = useState(0);
@@ -130,6 +131,15 @@ export default function SettingsBar() {
         }
     }, [leftTimerSeconds, dataStreaming, setDataStreaming]);
 
+    // A live stream always supersedes a prior import — once data starts
+    // flowing from a device, the Source Node should no longer claim
+    // "Imported Data" if the stream is later stopped.
+    useEffect(() => {
+        if (dataStreaming) {
+            setDataSource(null);
+        }
+    }, [dataStreaming, setDataSource]);
+
     const handleStartStop = () => {
         if (dataStreaming) {
             setDataStreaming(false);
@@ -141,6 +151,7 @@ export default function SettingsBar() {
     const handleConfirmReset = () => {
         suppressDirtyUntilRef.current = Date.now() + 2000;
         setDataStreaming(false);
+        setDataSource(null);
         setLeftTimerSeconds(0);
         setActiveSessionName(null);
         setIsDirty(false);
@@ -295,6 +306,7 @@ export default function SettingsBar() {
         setActiveSessionName(null);
         setIsDirty(false);
         setDataStreaming(false);
+        setDataSource(null);
         setLeftTimerSeconds(0);
         window.dispatchEvent(new Event('pipeline-reset'));
         setIsNewDialogOpen(false);
@@ -377,6 +389,7 @@ export default function SettingsBar() {
             setActiveSessionId(sessionId);
             const loaded = sessions.find((s) => s.id === sessionId);
             setActiveSessionName(loaded?.name ?? null);
+            setDataSource(null);
             setIsDirty(false);
             setIsSessionModalOpen(false);
             notifications.success({ title: 'Session loaded successfully' });

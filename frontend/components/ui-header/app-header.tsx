@@ -19,7 +19,7 @@ export default function AppHeader() {
     const [isOpen, setIsOpen] = useState<boolean>(false);
     const [isExportOpen, setIsExportOpen] = useState(false);
     const [isImportOpen, setIsImportOpen] = useState(false);
-    const { activeSessionId } = useGlobalContext();
+    const { activeSessionId, setDataSource } = useGlobalContext();
 
     return (
         <header className="flex justify-between items-center px-2 py-3 border-b h-25">
@@ -97,6 +97,7 @@ export default function AppHeader() {
                 open={isImportOpen}
                 sessionId={activeSessionId}
                 onOpenChange={setIsImportOpen}
+                onImportSuccess={() => setDataSource('imported')}
             />
         </header>
     );
