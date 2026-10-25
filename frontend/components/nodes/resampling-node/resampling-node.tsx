@@ -91,7 +91,7 @@ export default function ResamplingNode({
     }, [checkConnectionStatus]);
 
     return (
-        <div className="relative">
+        <fieldset disabled={dataStreaming} className="relative">
             <Handle
                 type="target"
                 position={Position.Left}
@@ -137,6 +137,6 @@ export default function ResamplingNode({
                 isDataStreamOn={dataStreaming}
                 isNodeSelected={selected}
             />
-        </div>
+        </fieldset>
     );
 }

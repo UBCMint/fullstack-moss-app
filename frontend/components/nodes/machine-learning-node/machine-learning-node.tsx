@@ -115,7 +115,8 @@ export default function MachineLearningNode({
     }, [checkConnectionStatus]);
 
     return (
-        <div
+        <fieldset
+            disabled={dataStreaming}
             className={`relative w-[396px] min-h-[90px] flex bg-white rounded-[30px] border-2 shadow-none p-0 transition-all duration-300 ease-in-out ${
                 selected
                     ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
@@ -171,6 +172,6 @@ export default function MachineLearningNode({
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
             />
-        </div>
+        </fieldset>
     );
 }
