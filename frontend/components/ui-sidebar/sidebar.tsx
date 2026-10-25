@@ -45,6 +45,7 @@ export default function Sidebar() {
     const NodeCategories = [
         {
             category: 'Input',
+            help: "Input is where your data comes from. Choose whether you want to collect data from a connected device or use data you've already recorded.",
             nodes: [
                 {
                     id: 'source-node',
@@ -55,6 +56,7 @@ export default function Sidebar() {
         },
         {
             category: 'Preprocessing',
+            help: 'Prepares recorded data for analysis by reducing unwanted noise or making adjustments to improve signal quality.',
             nodes: [
                 {
                     id: 'resampling-node',
@@ -81,6 +83,7 @@ export default function Sidebar() {
         },
         {
             category: 'Analysis',
+            help: 'Examines recorded data to help you understand and visualize patterns in brain or muscle activity.',
             nodes: [
                 {
                     id: 'machine-learning-node',
@@ -91,6 +94,7 @@ export default function Sidebar() {
         },
         {
             category: 'Output',
+            help: 'Allows you to save or export recorded data and results for later use.',
             nodes: [
                 {
                     id: 'signal-graph-node',
@@ -173,8 +177,13 @@ export default function Sidebar() {
                                       ))
                                     : NodeCategories.map((group) => (
                                           <div key={group.category}>
-                                              <p className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
+                                              <p className="mb-1.5 px-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-widest text-gray-400">
                                                   {group.category}
+                                                  <TermHelp
+                                                      term={group.category}
+                                                  >
+                                                      <p>{group.help}</p>
+                                                  </TermHelp>
                                               </p>
                                               <div className="space-y-2">
                                                   {group.nodes.map((node) => (
