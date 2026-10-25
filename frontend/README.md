@@ -116,8 +116,8 @@ two things to the rest of the tree:
 - `startPipeline(payload)` — stages a freshly validated `{session_id, nodes}`
   snapshot and starts streaming. Both Start buttons request `pipeline-start`;
   the canvas validates its current nodes and edges before calling this method.
-  Draft edits do not log validation errors or send payloads. Pipeline editing
-  is locked while streaming, and stopping clears the staged payload.
+  Draft edits do not log validation errors or send payloads. Pipeline editing is
+  locked while streaming, and stopping clears the staged payload.
 
 It implements the same `"clientClosing"` → `"confirmed closing"` handshake as
 the Rust server (with a 5s timeout fallback), and converts incoming
