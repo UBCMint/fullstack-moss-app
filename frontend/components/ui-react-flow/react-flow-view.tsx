@@ -42,7 +42,8 @@ import { useEffect, useState } from 'react';
 import { X, Ellipsis, RotateCw, RotateCcw, LockKeyhole } from 'lucide-react';
 import { Alert, AlertDescription } from '../ui/alert';
 import { useWebSocketContext } from '@/context/WebSocketContext';
-import { PipelinePayload } from '@/lib/pipeline';
+import { preparePipelineStart } from '@/lib/pipeline-validation';
+import { useNotifications } from '@/components/notifications';
 import { useGlobalContext } from '@/context/GlobalContext';
 
 const nodeTypes = {
@@ -56,228 +57,18 @@ const nodeTypes = {
     'label-node': LabelNode,
 };
 
-// defines backend types for React Flow types
-const typeMap: Record<string, string> = {
-    'filter-node': 'preprocessing',
-    'window-node': 'window',
-    'machine-learning-node': 'ml',
-};
-
-// allow for defaults of the filtering node to still be applied if user doesn't specify them in the UI
-const DEFAULT_PROCESSING = {
-    apply_bandpass: false,
-    use_iir: false,
-    l_freq: null,
-    h_freq: null,
-    downsample_factor: null,
-    sfreq: 256,
-    n_channels: 4,
-};
-const DEFAULT_WINDOWING = {
-    chunk_size: 64,
-    overlap_size: 0,
-};
-
-// Only these nodes are executed by the backend pipeline
-const PIPELINE_NODE_TYPES = new Set([
-    'window-node',
-    'filter-node',
-    'machine-learning-node',
-]);
-
-const topoSort = (nodes: Node[], edges: Edge[]) => {
-    const incoming = new Map<string, number>(); // count of incoming edges for each node
-    const outgoing = new Map<string, string[]>(); // list of target nodes for each node
-
-    // Initialize maps to 0 incoming and empty outgoing
-    nodes.forEach((n) => {
-        incoming.set(n.id, 0);
-        outgoing.set(n.id, []);
-    });
-
-    edges.forEach((e) => {
-        if (!outgoing.has(e.source)) return;
-        outgoing.get(e.source)!.push(e.target); // Add target to outgoing list of source
-        incoming.set(e.target, (incoming.get(e.target) ?? 0) + 1); // Increment incoming count for target
-    });
-
-    const queue = nodes
-        .filter((n) => (incoming.get(n.id) ?? 0) === 0)
-        .map((n) => n.id);
-
-    const ordered: string[] = [];
-
-    // Kahn's algorithm for topological sorting
-    while (queue.length > 0) {
-        const id = queue.shift()!;
-        ordered.push(id);
-
-        for (const target of outgoing.get(id) ?? []) {
-            const next = (incoming.get(target) ?? 0) - 1;
-            incoming.set(target, next);
-            if (next === 0) queue.push(target);
-        }
-    }
-
-    // In case of cycles or disconnected nodes
-    nodes.forEach((n) => {
-        if (!ordered.includes(n.id)) ordered.push(n.id);
-    });
-
-    return ordered.map((id) => nodes.find((n) => n.id === id)!).filter(Boolean);
-};
-
-const validatePipeline = (nodes: Node[], edges: Edge[]) => {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    // maps to track nodes and their connections
-    const byId = new Map(nodes.map((n) => [n.id, n]));
-    const incoming = new Map<string, string[]>();
-    const outgoing = new Map<string, string[]>();
-
-    nodes.forEach((n) => {
-        incoming.set(n.id, []);
-        outgoing.set(n.id, []);
-    });
-
-    // Build connection maps
-    edges.forEach((e) => {
-        if (!incoming.has(e.target) || !outgoing.has(e.source)) return;
-        incoming.get(e.target)!.push(e.source);
-        outgoing.get(e.source)!.push(e.target);
-    });
-
-    // Require 1 source node
-    const sourceNodes = nodes.filter((n) => n.type === 'source-node');
-    if (sourceNodes.length === 0) errors.push('Missing Source node.');
-    if (sourceNodes.length > 1)
-        errors.push('Multiple Source nodes are not allowed.');
-
-    // Require 1 window node
-    const windowNodes = nodes.filter((n) => n.type === 'window-node');
-    if (windowNodes.length === 0) errors.push('Missing Window node.');
-    if (windowNodes.length > 1)
-        errors.push('Multiple Window nodes are not allowed.');
-
-    // Require window node must connect directly to source
-    windowNodes.forEach((win) => {
-        const ins = incoming.get(win.id) ?? [];
-        if (
-            ins.length === 0 ||
-            ins.some((id) => byId.get(id)?.type !== 'source-node')
-        ) {
-            errors.push('Window node must connect directly from Source.');
-        }
-    });
-
-    // If ML node exists, window is required for the ML pipeline
-    const mlNodes = nodes.filter((n) => n.type === 'machine-learning-node');
-    if (mlNodes.length > 0 && windowNodes.length === 0) {
-        errors.push('A Window node is required for ML pipelines.');
-    }
-
-    // Require that output nodes are terminal
-    const outputTypes = new Set(['signal-graph-node', 'machine-learning-node']);
-    nodes.forEach((n) => {
-        if (outputTypes.has(n.type ?? '')) {
-            const outs = outgoing.get(n.id) ?? [];
-            if (outs.length > 0) errors.push('Output nodes must be terminal.');
-        }
-    });
-
-    // Require that ML node doesnt connect directly to source
-    nodes
-        .filter((n) => n.type === 'machine-learning-node')
-        .forEach((ml) => {
-            const ins = incoming.get(ml.id) ?? [];
-            if (ins.some((id) => byId.get(id)?.type === 'source-node')) {
-                errors.push('ML nodes cannot connect directly to Source.');
-            }
-        });
-
-    // Warn if filter node appears before window when window exists
-    const filterNodes = nodes.filter((n) => n.type === 'filter-node');
-    const filterDirectFromSource = filterNodes.some((fn) => {
-        const ins = incoming.get(fn.id) ?? [];
-        return ins.some((id) => byId.get(id)?.type === 'source-node');
-    });
-    if (windowNodes.length > 0 && filterDirectFromSource) {
-        warnings.push(
-            'Filter nodes should come after Window nodes when Window nodes are present.'
-        );
-    }
-
-    // Warn if output nodes are connected directly to Source while preprocessing exists
-    const hasPreprocessing = filterNodes.length > 0 || windowNodes.length > 0;
-    const outputDirectFromSource = nodes.some((n) => {
-        if (!outputTypes.has(n.type ?? '')) return false;
-        const ins = incoming.get(n.id) ?? [];
-        return ins.some((id) => byId.get(id)?.type === 'source-node');
-    });
-    if (hasPreprocessing && outputDirectFromSource) {
-        warnings.push(
-            'Outputs should come after preprocessing when preprocessing exists.'
-        );
-    }
-
-    // Cycle detection: if topoSort doesn't include all nodes
-    const ordered = topoSort(nodes, edges);
-    if (ordered.length !== nodes.length) {
-        errors.push('Pipeline contains a cycle.');
-    }
-
-    return { errors, warnings };
-};
-
-// Converts React Flow state to backend pipeline format
-const buildPipelinePayload = (
-    nodes: Node[],
-    edges: Edge[],
-    sessionId: string
-): PipelinePayload => {
-    const orderedNodes = topoSort(nodes, edges); // Ensure nodes are in execution order
-
-    return {
-        session_id: sessionId,
-        nodes: orderedNodes
-            .filter((n) => PIPELINE_NODE_TYPES.has(n.type ?? ''))
-            .map((n) => {
-                const type = typeMap[n.type ?? ''] ?? n.type ?? 'unknown'; // Map to backend type
-                const config =
-                    (n.data as { config?: Record<string, unknown> })?.config ??
-                    {};
-
-                if (type == 'preprocessing') {
-                    return {
-                        type,
-                        config: { ...DEFAULT_PROCESSING, ...config },
-                    }; //apply defaults if not specified by user
-                }
-
-                if (type == 'window') {
-                    return {
-                        type,
-                        config: { ...DEFAULT_WINDOWING, ...config },
-                    };
-                }
-
-                return { type, config };
-            }),
-    };
-};
-
 let id = 0;
 const getId = () => `node_${id++}`;
 
 const ReactFlowInterface = () => {
     const [nodes, setNodes] = useNodesState<Node>([]);
     const [edges, setEdges] = useEdgesState<Edge>([]);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, getNodes, getEdges } = useReactFlow();
     const [isControlsOpen, setIsControlsOpen] = useState(false);
 
     const [open, setOpen] = useState(true);
     const [showPipelineWarning, setShowPipelineWarning] = useState(false);
+    const [pipelineWarning, setPipelineWarning] = useState('');
 
     // Auto-dismiss pipeline warning after 30 seconds
     useEffect(() => {
@@ -290,8 +81,9 @@ const ReactFlowInterface = () => {
         }
     }, [showPipelineWarning]);
 
-    const { sendPipelinePayload } = useWebSocketContext();
-    const { activeSessionId } = useGlobalContext();
+    const { startPipeline } = useWebSocketContext();
+    const { activeSessionId, dataStreaming } = useGlobalContext();
+    const notifications = useNotifications();
 
     // Listen for global pipeline reset to clear nodes/edges
     useEffect(() => {
@@ -370,6 +162,8 @@ const ReactFlowInterface = () => {
 
     const onConnect: OnConnect = useCallback(
         (connection) => {
+            // The backend uses the graph configured at Start; stop before adding edges.
+            if (dataStreaming) return;
             // Validate new connections before adding the edge
             const sourceNode = nodes.find((n) => n.id === connection.source);
             const targetNode = nodes.find((n) => n.id === connection.target);
@@ -400,52 +194,93 @@ const ReactFlowInterface = () => {
             // dispatch immediately after scheduling state update
             dispatchEdgesChanged();
         },
-        [nodes, setEdges]
+        [nodes, setEdges, dataStreaming]
     );
 
-    // Send updated pipeline to backend on any changes to nodes, edges, or active session
+    // Keep draft editing separate from execution: incomplete boards are normal while
+    // editing. This effect only registers a Start listener; validation and payload
+    // creation happen inside that listener when either Start button dispatches the event.
     useEffect(() => {
-        if (nodes.length === 0) return;
-        if (activeSessionId == null) return; //no session yet
-
-        // Validate pipeline before sending
-        const { errors, warnings } = validatePipeline(nodes, edges);
-        if (errors.length > 0) {
-            console.error('Pipeline validation errors:', errors);
-            return; // Don't send invalid pipeline
-        }
-        if (warnings.length > 0) {
-            console.warn('Pipeline validation warnings:', warnings);
-            setShowPipelineWarning(true);
-        }
-
-        const payload = buildPipelinePayload(
-            nodes,
-            edges,
-            String(activeSessionId)
-        );
-        console.log(
-            '[pipeline] payload being stored/sent:',
-            JSON.stringify(payload)
-        );
-        sendPipelinePayload(payload);
-    }, [nodes, edges, activeSessionId, sendPipelinePayload]);
+        const start = () => {
+            // Ignore another Start request while a stream is already active.
+            if (dataStreaming) return;
+            // Read the board at click time rather than capturing nodes/edges from
+            // a previous render or reusing the last valid board's payload.
+            const currentNodes = getNodes();
+            const currentEdges = getEdges();
+            const { errors, warnings, payload } = preparePipelineStart(
+                currentNodes,
+                currentEdges,
+                activeSessionId
+            );
+            // Invalid boards (or a missing session) must not open a WebSocket.
+            if (!payload) {
+                notifications.error({
+                    title: 'Complete your pipeline before starting',
+                    description: errors.join(' '),
+                });
+                return;
+            }
+            setPipelineWarning(warnings.join(' '));
+            setShowPipelineWarning(warnings.length > 0);
+            // Store the validated configuration before enabling the socket lifecycle.
+            startPipeline(payload);
+        };
+        // Header and chart Start buttons share this canvas-owned validation path.
+        window.addEventListener('pipeline-start', start);
+        // React calls this cleanup before replacing the effect and on unmount.
+        // Remove the old listener to avoid duplicate calls and stale captured values;
+        // this does not clear the board, chart samples, or recorded session data.
+        return () => window.removeEventListener('pipeline-start', start);
+        // Re-register when a captured value/function changes so the listener stays
+        // current. Getter dependencies track function identity, not board contents:
+        // editing nodes/edges does not itself invoke Start or run validation.
+    }, [
+        getNodes,
+        getEdges,
+        activeSessionId,
+        dataStreaming,
+        notifications,
+        startPipeline,
+    ]);
 
     const onNodesChange: OnNodesChange = useCallback(
         (changes) => {
-            setNodes((nds) => applyNodeChanges(changes, nds));
+            // During streaming, allow selection, dragging, and layout measurement,
+            // but reject structural changes such as adding/removing/replacing nodes.
+            // Positions are display-only and do not change the backend payload.
+            setNodes((nds) =>
+                applyNodeChanges(
+                    dataStreaming
+                        ? changes.filter(
+                              (change) =>
+                                  change.type === 'select' ||
+                                  change.type === 'position' ||
+                                  change.type === 'dimensions'
+                          )
+                        : changes,
+                    nds
+                )
+            );
             window.dispatchEvent(new Event('canvas-changed'));
         },
-        [setNodes]
+        [setNodes, dataStreaming]
     );
 
     const onEdgesChange: OnEdgesChange = useCallback(
         (changes) =>
             setEdges((eds) => {
-                const updated = applyEdgeChanges(changes, eds);
+                // Edges may be selected while streaming, but their structure must
+                // stay unchanged until Stop (including removal via change events).
+                const updated = applyEdgeChanges(
+                    dataStreaming
+                        ? changes.filter((change) => change.type === 'select')
+                        : changes,
+                    eds
+                );
                 return updated;
             }),
-        [setEdges]
+        [setEdges, dataStreaming]
     );
 
     const onDragOver = (event: React.DragEvent<HTMLDivElement>) => {
@@ -459,6 +294,8 @@ const ReactFlowInterface = () => {
 
     const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
         event.preventDefault();
+        // Sidebar drops add new nodes; only moving existing nodes is allowed live.
+        if (dataStreaming) return;
 
         const nodeType = event.dataTransfer.getData('application/reactflow');
 
@@ -467,6 +304,7 @@ const ReactFlowInterface = () => {
         if (nodeType === 'source-node') {
             const existingSource = nodes.find((n) => n.type === 'source-node');
             if (existingSource) {
+                setPipelineWarning('Only one Source node is allowed.');
                 setShowPipelineWarning(true);
                 return;
             }
@@ -489,6 +327,8 @@ const ReactFlowInterface = () => {
 
     const isValidConnection = useCallback(
         (connection: Connection | Edge) => {
+            // Reject connection attempts during streaming as well as guarding onConnect.
+            if (dataStreaming) return false;
             if (connection.source === connection.target) return false;
             const sourceNode = nodes.find((n) => n.id === connection.source);
             const targetNode = nodes.find((n) => n.id === connection.target);
@@ -522,18 +362,24 @@ const ReactFlowInterface = () => {
 
             return true;
         },
-        [nodes, edges]
+        [nodes, edges, dataStreaming]
     );
 
     return (
         <div
             style={{
-                width: '100vw',
-                height: '100vh',
+                width: '100%',
+                height: '100%',
                 position: 'relative',
             }}
         >
+            {/* Keep dragging available, but disable connection edits and keyboard
+                deletion during streaming. Handler guards above also enforce this. */}
             <ReactFlow
+                nodesDraggable
+                nodesConnectable={!dataStreaming}
+                edgesReconnectable={!dataStreaming}
+                deleteKeyCode={dataStreaming ? null : ['Backspace', 'Delete']}
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={onNodesChange}
@@ -553,6 +399,17 @@ const ReactFlowInterface = () => {
                 attributionPosition="bottom-left"
                 isValidConnection={isValidConnection}
             >
+                {/* Explain the editing restrictions only while they are active. */}
+                {dataStreaming && (
+                    <Panel position="bottom-center">
+                        <p
+                            role="status"
+                            className="rounded border bg-white px-4 py-2 text-sm"
+                        >
+                            Stop the data stream to edit the pipeline.
+                        </p>
+                    </Panel>
+                )}
                 {open && (
                     <div className="flex justify-center items-center absolute top-24 left-1/2 transform -translate-x-1/2 z-10">
                         <Alert className="w-[288px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
@@ -581,7 +438,7 @@ const ReactFlowInterface = () => {
                     <div className="flex justify-center items-center absolute top-3 left-1/2 transform -translate-x-1/2 z-10">
                         <Alert className="w-[300px] bg-[#FFF4E1] text-black flex justify-between items-start p-3 font-ibmplex border-2 border-[#F0E4CA]">
                             <AlertDescription className="text-[0.75rem] text-center w-full">
-                                Only one pipeline can be active at a time.
+                                {pipelineWarning}
                             </AlertDescription>
                             <button
                                 onClick={() => setShowPipelineWarning(false)}

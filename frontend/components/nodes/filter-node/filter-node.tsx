@@ -200,7 +200,7 @@ export default function FilterNode({ id, data, selected }: FilterNodeProps) {
     }, [pushConfigToNodeData]);
 
     return (
-        <div className="relative">
+        <fieldset disabled={dataStreaming} className="relative">
             {/* Input Handle - positioned to align with left circle */}
             <Handle
                 type="target"
@@ -253,6 +253,6 @@ export default function FilterNode({ id, data, selected }: FilterNodeProps) {
                 isDataStreamOn={dataStreaming}
                 isNodeSelected={selected}
             />
-        </div>
+        </fieldset>
     );
 }
