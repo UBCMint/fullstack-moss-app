@@ -11,6 +11,7 @@ export type LabelColor = 'teal-700' | 'teal-500' | 'teal-300' | 'mint-100';
 interface ComboBoxProps {
     isConnected?: boolean;
     isDataStreamOn?: boolean;
+    isNodeSelected?: boolean;
     isTriggerActive: boolean;
     onTriggerClick: () => void;
     onPreviewOpen: () => void;
@@ -48,6 +49,7 @@ export const colorClassMap: Record<LabelColor, string> = {
 export default function ComboBox({
     isConnected = false,
     isDataStreamOn = false,
+    isNodeSelected = false,
     isTriggerActive,
     onTriggerClick,
     onPreviewOpen,
@@ -74,7 +76,10 @@ export default function ComboBox({
     return (
         <div
             className={cn(
-                'bg-white rounded-[30px] border-2 overflow-hidden border-[#D3D3D3]'
+                'bg-white rounded-[30px] border-2 overflow-hidden transition-colors',
+                isNodeSelected
+                    ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                    : 'border-[#D3D3D3]'
             )}
             style={{
                 width: isExpanded ? '760px' : 'fit-content',
@@ -87,7 +92,7 @@ export default function ComboBox({
                         <div className="flex items-center">
                             <span
                                 className={cn(
-                                    'absolute left-6 w-6 h-6 rounded-full flex items-center justify-center border-[3px]',
+                                    'absolute left-6 w-8 h-8 rounded-full flex items-center justify-center border-[3px]',
                                     isConnected
                                         ? 'border-black'
                                         : 'border-[#D3D3D3]'
@@ -116,7 +121,7 @@ export default function ComboBox({
                         <div className="flex items-center">
                             <span
                                 className={cn(
-                                    'absolute right-6 w-6 h-6 rounded-full flex items-center justify-center border-[3px]',
+                                    'absolute right-6 w-8 h-8 rounded-full flex items-center justify-center border-[3px]',
                                     isConnected
                                         ? 'border-black'
                                         : 'border-[#D3D3D3]'
@@ -130,37 +135,28 @@ export default function ComboBox({
                     </div>
 
                     {/* Trigger and Preview buttons */}
-                    <div className="flex flex-col items-center gap-1 pb-4">
-                        <div className="flex items-center gap-3">
-                            <button
-                                className={cn(
-                                    'nodrag nopan text-lg px-4 py-1 rounded-md border transition-colors',
-                                    isTriggerActive
-                                        ? 'bg-white text-[#2E7B75] border-[#2E7B75]'
-                                        : 'bg-[#2E7B75] text-white border-[#2E7B75]'
-                                )}
-                                onClick={onTriggerClick}
-                            >
-                                Trigger
-                            </button>
-
-                            <button
-                                className="nodrag nopan text-lg px-2 py-1 rounded-md text-black hover:text-[#2E7B75] transition-colors"
-                                onClick={onPreviewOpen}
-                            >
-                                Preview{' '}
-                                <ArrowUpRight
-                                    size={16}
-                                    className="inline ml-1"
-                                />
-                            </button>
-                        </div>
-
-                        <span className="text-[18px] leading-none text-black mt-1">
+                    <div className="flex items-center justify-center gap-3 pb-4">
+                        <button
+                            className={cn(
+                                'nodrag nopan text-lg px-4 py-1 rounded-md border transition-colors',
+                                isTriggerActive
+                                    ? 'bg-white text-[#2E7B75] border-[#2E7B75]'
+                                    : 'bg-[#2E7B75] text-white border-[#2E7B75]'
+                            )}
+                            onClick={onTriggerClick}
+                        >
                             {isTriggerActive
                                 ? 'Stop labeling'
                                 : 'Start labeling'}
-                        </span>
+                        </button>
+
+                        <button
+                            className="nodrag nopan text-lg px-2 py-1 rounded-md text-black hover:text-[#2E7B75] transition-colors"
+                            onClick={onPreviewOpen}
+                        >
+                            Preview{' '}
+                            <ArrowUpRight size={16} className="inline ml-1" />
+                        </button>
                     </div>
                 </>
             )}

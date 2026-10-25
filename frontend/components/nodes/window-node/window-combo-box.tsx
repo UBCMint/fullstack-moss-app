@@ -13,6 +13,7 @@ interface ComboBoxProps {
     setSelectedOption: (option: WindowOption) => void;
     isConnected?: boolean;
     isDataStreamOn?: boolean;
+    isNodeSelected?: boolean;
 }
 
 const presetWindows: Array<{
@@ -33,6 +34,7 @@ export default function ComboBox({
     setSelectedOption,
     isConnected = false,
     isDataStreamOn = false,
+    isNodeSelected = false,
 }: ComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const [step, setStep] = React.useState<'window' | 'overlap'>('window');
@@ -117,8 +119,10 @@ export default function ComboBox({
     return (
         <div
             className={cn(
-                'bg-white rounded-[30px] border-2 overflow-hidden',
-                'border-[#D3D3D3]'
+                'bg-white rounded-[30px] border-2 overflow-hidden transition-colors',
+                isNodeSelected
+                    ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                    : 'border-[#D3D3D3]'
             )}
             style={{ width: '396px' }}
         >
@@ -130,7 +134,7 @@ export default function ComboBox({
                 <div className="flex items-center">
                     <div
                         className={cn(
-                            'absolute left-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute left-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected ? 'border-black' : 'border-gray-300'
                         )}
                     />
@@ -158,7 +162,7 @@ export default function ComboBox({
 
                     <div
                         className={cn(
-                            'absolute right-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute right-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected ? 'border-black' : 'border-gray-300'
                         )}
                     />
@@ -216,7 +220,7 @@ export default function ComboBox({
                                         )
                                     }
                                     className={cn(
-                                        'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
+                                        'nodrag w-full text-left px-3 py-0 rounded-lg text-sm font-normal',
                                         selectedOption === preset.value
                                             ? 'bg-gray-100 text-gray-900'
                                             : 'text-gray-600 hover:bg-gray-50'
@@ -274,7 +278,7 @@ export default function ComboBox({
                                     confirmOverlap();
                                 }}
                                 className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
+                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-sm font-normal',
                                     overlapOption === 'default'
                                         ? 'bg-gray-100 text-gray-900'
                                         : 'text-gray-600 hover:bg-gray-50'
@@ -289,7 +293,7 @@ export default function ComboBox({
                                     setOverlapError('');
                                 }}
                                 className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-xs font-normal',
+                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-sm font-normal',
                                     overlapOption === 'custom'
                                         ? 'bg-gray-100 text-gray-900'
                                         : 'text-gray-600 hover:bg-gray-50'

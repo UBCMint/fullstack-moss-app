@@ -85,7 +85,13 @@ function parseEEG(csvContent: string): SignalDataPoint[] {
     }
 }
 
-export default function SignalGraphNode({ id }: { id?: string }) {
+export default function SignalGraphNode({
+    id,
+    selected,
+}: {
+    id?: string;
+    selected?: boolean;
+}) {
     const { dataStreaming, activeSessionId } = useGlobalContext();
     const { renderData } = useNodeData(500, 10);
     const reactFlowInstance = useReactFlow();
@@ -188,13 +194,19 @@ export default function SignalGraphNode({ id }: { id?: string }) {
 
     return (
         <Dialog>
-            <Card className="rounded-[30px] border-2 border-[#D3D3D3] shadow-none p-0 overflow-hidden bg-white h-[96px] w-[396px]">
+            <Card
+                className={`rounded-[30px] border-2 shadow-none p-0 overflow-hidden bg-white h-[96px] w-[396px] transition-colors ${
+                    selected
+                        ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                        : 'border-[#D3D3D3]'
+                }`}
+            >
                 <div
                     className={`relative flex items-center transition-all duration-300 ease-in-out h-[94px] w-[394=2px]`}
                 >
                     {/* Left circle with input (target) handle */}
                     <span
-                        className={`absolute left-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center border-[3px] ${isConnected ? 'border-[#000000]' : 'border-[#D3D3D3]'}`}
+                        className={`absolute left-6 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center border-[3px] ${isConnected ? 'border-[#000000]' : 'border-[#D3D3D3]'}`}
                     >
                         {isConnected && (
                             <span className="w-3 h-3 rounded-full bg-white" />
@@ -205,8 +217,8 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                             id="signal-graph-input"
                             style={{
                                 transform: 'translateY(-50%)',
-                                width: '18px',
-                                height: '18px',
+                                width: '32px',
+                                height: '32px',
                                 backgroundColor: 'transparent',
                                 border: '2px solid transparent',
                                 borderRadius: '50%',
@@ -254,7 +266,7 @@ export default function SignalGraphNode({ id }: { id?: string }) {
                     </div>
                     {/* Right decorative circle only (no output handle for end of pipeline) */}
                     <span
-                        className={`absolute right-6 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center border-[3px] ${isConnected ? 'border-[#000000]' : ' border-[#D3D3D3]'}`}
+                        className={`absolute right-6 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center border-[3px] ${isConnected ? 'border-[#000000]' : ' border-[#D3D3D3]'}`}
                     >
                         {isConnected && (
                             <span className="w-3 h-3 rounded-full bg-white" />

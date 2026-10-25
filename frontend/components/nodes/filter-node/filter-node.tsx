@@ -23,9 +23,10 @@ interface FilterNodeProps {
         _selectedFilter?: string;
         config?: FilterConfig;
     };
+    selected?: boolean;
 }
 
-export default function FilterNode({ id, data }: FilterNodeProps) {
+export default function FilterNode({ id, data, selected }: FilterNodeProps) {
     const [selectedFilter, setSelectedFilter] = React.useState(
         data?._selectedFilter ?? 'lowpass'
     );
@@ -209,8 +210,8 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                     left: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
-                    width: '28px',
-                    height: '28px',
+                    width: '32px',
+                    height: '32px',
                     backgroundColor: 'transparent',
                     border: '2px solid transparent',
                     borderRadius: '50%',
@@ -229,8 +230,8 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                     right: '24px',
                     top: '30px',
                     transform: 'translateY(-50%)',
-                    width: '28px',
-                    height: '28px',
+                    width: '32px',
+                    height: '32px',
                     backgroundColor: 'transparent',
                     border: '2px solid transparent',
                     borderRadius: '50%',
@@ -250,6 +251,7 @@ export default function FilterNode({ id, data }: FilterNodeProps) {
                 setHighCutoff={setHighCutoff}
                 isConnected={isConnected}
                 isDataStreamOn={dataStreaming}
+                isNodeSelected={selected}
             />
         </div>
     );

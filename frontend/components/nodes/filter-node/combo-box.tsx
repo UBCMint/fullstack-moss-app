@@ -27,6 +27,7 @@ interface ComboBoxProps {
     setHighCutoff: (v: number) => void;
     isConnected?: boolean;
     isDataStreamOn?: boolean;
+    isNodeSelected?: boolean;
 }
 
 export default function ComboBox({
@@ -38,6 +39,7 @@ export default function ComboBox({
     setHighCutoff,
     isConnected = false,
     isDataStreamOn = false,
+    isNodeSelected = false,
 }: ComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
     const titleRef = React.useRef<HTMLSpanElement>(null);
@@ -57,9 +59,10 @@ export default function ComboBox({
     return (
         <div
             className={cn(
-                'bg-white rounded-[30px] border-2 overflow-hidden',
-                // Node border stays gray - no change with connection
-                'border-[#D3D3D3]'
+                'bg-white rounded-[30px] border-2 overflow-hidden transition-colors',
+                isNodeSelected
+                    ? 'border-[#2E7B75] shadow-[0_0_0_3px_rgba(46,123,117,0.25)]'
+                    : 'border-[#D3D3D3]'
             )}
             style={{
                 width: 'fit-content',
@@ -75,7 +78,7 @@ export default function ComboBox({
                     {/* Left connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'absolute left-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute left-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
@@ -119,7 +122,7 @@ export default function ComboBox({
                     {/* Right connection circle - changes based on connection and data stream */}
                     <div
                         className={cn(
-                            'absolute right-6 w-6 h-6 rounded-full border-[3px] flex items-center justify-center bg-white',
+                            'absolute right-6 w-8 h-8 rounded-full border-[3px] flex items-center justify-center bg-white',
                             isConnected
                                 ? 'border-black' // Connected to source AND data stream on: black border (activated)
                                 : isConnected
@@ -231,7 +234,7 @@ export default function ComboBox({
                             key={filter.value}
                             onClick={() => handleOptionSelect(filter.value)}
                             className={cn(
-                                'text-left px-3 py-0 text-xs font-normal rounded-lg transition-colours',
+                                'text-left px-3 py-0 text-[18px] font-normal rounded-lg transition-colours',
                                 'block w-full', // Full width within the constrained container
                                 value === filter.value
                                     ? 'bg-gray-100 text-gray-900'
