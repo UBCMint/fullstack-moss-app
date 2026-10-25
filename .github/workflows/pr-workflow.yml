@@ -4,23 +4,66 @@ permissions:
   contents: read          # for git operations
   pull-requests: write    # to request reviewers
   issues: write           # to create/update PR comments
+  actions: write          # to re-run the PR Check after a review is submitted
 
 on:
   pull_request:
     types: [opened, synchronize, ready_for_review]  # include ready_for_review for draft PRs
+  pull_request_review:
+    types: [submitted]  # re-run the existing PR Check run so its status reflects the new review
 
 jobs:
+  # A review doesn't get its own "PR Check" run here — that would create a second,
+  # separately-required check context (shown in the UI as "(pull_request_review)")
+  # alongside the original "(pull_request)" one, and branch protection would then
+  # require BOTH to pass instead of just the latest result. Re-running the existing
+  # failed run in place keeps a single required check that just gets refreshed.
+  rerun-check-on-review:
+    name: "Re-run PR Check after review"
+    if: github.event_name == 'pull_request_review'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Re-run the latest PR Check run for this PR's head commit
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const headSha = context.payload.pull_request.head.sha;
+
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: "pr-workflow.yml",
+              event: "pull_request",
+              head_sha: headSha,
+              per_page: 5
+            });
+
+            const run = data.workflow_runs[0];
+            if (!run) {
+              console.log("No pull_request-triggered run found for this commit; nothing to re-run.");
+              return;
+            }
+            if (run.status !== "completed") {
+              console.log(`Run ${run.id} is still ${run.status}; leaving it alone.`);
+              return;
+            }
+            if (run.conclusion === "success") {
+              console.log(`Run ${run.id} already succeeded; nothing to do.`);
+              return;
+            }
+
+            await github.rest.actions.reRunWorkflowFailedJobs({ owner, repo, run_id: run.id });
+            console.log(`Re-ran failed jobs for run ${run.id}.`);
+
   pr-automation:
     name: "PR Check"
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Get changed files
-      - name: Get changed files
-        id: files
-        uses: tj-actions/changed-files@v44
-
-      # Step 2: Assign, label, request reviewers, and enforce approvals
+      # Step 1: Assign, label, request reviewers, and enforce approvals
       - name: Assign, label, request reviewers, enforce approvals
         uses: actions/github-script@v7
         with:
@@ -35,7 +78,16 @@ jobs:
               return;
             }
 
-            const changedFiles = "${{ steps.files.outputs.all_changed_files }}".split(" ").filter(f => f);
+            // Fetched via the API (rather than tj-actions/changed-files) so this works
+            // identically whether we were triggered by a push or by a review being submitted.
+            const changedFiles = (
+              await github.paginate(github.rest.pulls.listFiles, {
+                owner,
+                repo,
+                pull_number: prNumber,
+                per_page: 100
+              })
+            ).map(f => f.filename);
 
             // -------------------
             // CONFIGURATION
