@@ -3,7 +3,6 @@ import { Card } from '@/components/ui/card';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
-import { ArrowUpRight } from 'lucide-react';
 import React from 'react';
 
 import {
