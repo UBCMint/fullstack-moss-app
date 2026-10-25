@@ -11,6 +11,8 @@ import {
 } from 'recharts';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { Button } from '@/components/ui/button';
+import ExportDialog from '@/components/ui/export-dialog';
+import { Download } from 'lucide-react';
 import {
     Dialog,
     DialogContent,
@@ -37,8 +39,10 @@ export default function SignalGraphView({
     data,
     onTimeframeChange,
 }: SignalGraphViewProps) {
-    const { dataStreaming, setDataStreaming } = useGlobalContext();
+    const { dataStreaming, setDataStreaming, activeSessionId } =
+        useGlobalContext();
     const [selectedSignal, setSelectedSignal] = useState<string | null>(null);
+    const [isExportOpen, setIsExportOpen] = useState(false);
 
     const [brushRange, setBrushRange] = useState<{
         start: number;
@@ -69,12 +73,25 @@ export default function SignalGraphView({
             {/* ---- HEAD BUTTONS ---- */}
             <div className="flex justify-end mt-[-30px] space-x-[26px]">
                 <Button
+                    variant="outline"
+                    onClick={() => setIsExportOpen(true)}
+                    className="border-[#2E7B75] text-[#2E7B75] gap-2"
+                >
+                    Export
+                    <Download size={16} />
+                </Button>
+                <Button
                     onClick={handleStartStop}
                     className={dataStreaming ? 'bg-red-500' : 'bg-[#2E7B75]'}
                 >
                     {dataStreaming ? 'Stop Data Stream' : 'Start Data Stream'}
                 </Button>
             </div>
+            <ExportDialog
+                open={isExportOpen}
+                sessionId={activeSessionId}
+                onOpenChange={setIsExportOpen}
+            />
 
             {/* ---- TOP HALF: CHART ---- */}
             <div className="flex flex-col h-[55vh] border bg-white shadow-lg rounded-2xl p-4 overflow-hidden relative">
