@@ -207,7 +207,7 @@ export default function ComboBox({
                     {/* Step 1: Input size */}
                     {step === 'window' && (
                         <>
-                            <div className="text-xs text-gray-700">
+                            <div className="text-[20px] leading-tight text-gray-700">
                                 Input size
                             </div>
                             {presetWindows.map((preset) => (
@@ -220,7 +220,7 @@ export default function ComboBox({
                                         )
                                     }
                                     className={cn(
-                                        'nodrag w-full text-left px-3 py-0 rounded-lg text-sm font-normal',
+                                        'nodrag w-full text-left px-3 py-0 rounded-lg text-[20px] font-normal',
                                         selectedOption === preset.value
                                             ? 'bg-gray-100 text-gray-900'
                                             : 'text-gray-600 hover:bg-gray-50'
@@ -243,11 +243,11 @@ export default function ComboBox({
                                             setWindowError('');
                                         }}
                                         placeholder="Custom integer"
-                                        className="nodrag h-8 w-full rounded-md border border-gray-300 px-2 text-sm"
+                                        className="nodrag h-8 w-full rounded-md border border-gray-300 px-2 text-base"
                                     />
                                     <button
                                         onClick={submitCustomWindow}
-                                        className="nodrag h-8 px-3 rounded-md border border-gray-300 text-sm hover:bg-gray-50"
+                                        className="nodrag h-8 px-3 rounded-md border border-gray-300 text-base hover:bg-gray-50"
                                     >
                                         OK
                                     </button>
@@ -255,7 +255,7 @@ export default function ComboBox({
                             )}
                             {selectedOption === 'custom' && windowError && (
                                 <div
-                                    className="text-xs text-red-600 -mt-1"
+                                    className="text-base text-red-600 -mt-1"
                                     role="alert"
                                 >
                                     {windowError}
@@ -267,7 +267,7 @@ export default function ComboBox({
                     {/* Step 2: Overlap size */}
                     {step === 'overlap' && (
                         <>
-                            <div className="text-xs text-gray-700">
+                            <div className="text-[20px] leading-tight text-gray-700">
                                 Overlap size
                             </div>
                             <button
@@ -278,7 +278,7 @@ export default function ComboBox({
                                     confirmOverlap();
                                 }}
                                 className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-sm font-normal',
+                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-[20px] font-normal',
                                     overlapOption === 'default'
                                         ? 'bg-gray-100 text-gray-900'
                                         : 'text-gray-600 hover:bg-gray-50'
@@ -293,7 +293,7 @@ export default function ComboBox({
                                     setOverlapError('');
                                 }}
                                 className={cn(
-                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-sm font-normal',
+                                    'nodrag w-full text-left px-3 py-0 rounded-lg text-[20px] font-normal',
                                     overlapOption === 'custom'
                                         ? 'bg-gray-100 text-gray-900'
                                         : 'text-gray-600 hover:bg-gray-50'
@@ -315,11 +315,11 @@ export default function ComboBox({
                                             setOverlapError('');
                                         }}
                                         placeholder="Custom integer"
-                                        className="nodrag h-8 w-full rounded-md border border-gray-300 px-2 text-sm"
+                                        className="nodrag h-8 w-full rounded-md border border-gray-300 px-2 text-base"
                                     />
                                     <button
                                         onClick={submitCustomOverlap}
-                                        className="nodrag h-8 px-3 rounded-md border border-gray-300 text-sm hover:bg-gray-50"
+                                        className="nodrag h-8 px-3 rounded-md border border-gray-300 text-base hover:bg-gray-50"
                                     >
                                         OK
                                     </button>
@@ -327,7 +327,7 @@ export default function ComboBox({
                             )}
                             {overlapError && (
                                 <div
-                                    className="text-xs text-red-600 -mt-1"
+                                    className="text-base text-red-600 -mt-1"
                                     role="alert"
                                 >
                                     {overlapError}
