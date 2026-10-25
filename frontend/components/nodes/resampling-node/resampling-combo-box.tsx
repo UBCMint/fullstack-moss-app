@@ -8,6 +8,10 @@ const PRESET_OPTIONS = [
     { value: '256', label: '256 Hz' },
 ];
 
+// Custom rates are whole Hz. 256 Hz is the Muse 2 native rate (the app default).
+export const MIN_CUSTOM_RATE_HZ = 1;
+export const MAX_CUSTOM_RATE_HZ = 256;
+
 export type ResampleRate = '200' | '256' | 'input' | 'custom';
 
 interface ResamplingComboBoxProps {
@@ -30,6 +34,32 @@ export default function ResamplingComboBox({
     isNodeSelected = false,
 }: ResamplingComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
+    const [customDraft, setCustomDraft] = React.useState(String(customRate));
+
+    const draftValue = Number(customDraft);
+    const customError =
+        customDraft.trim() === ''
+            ? 'Enter a rate'
+            : !Number.isInteger(draftValue)
+              ? 'Rate must be a whole number'
+              : draftValue < MIN_CUSTOM_RATE_HZ ||
+                  draftValue > MAX_CUSTOM_RATE_HZ
+                ? `Rate must be between ${MIN_CUSTOM_RATE_HZ} and ${MAX_CUSTOM_RATE_HZ} Hz`
+                : '';
+
+    // Only valid rates reach the node; the draft holds whatever is being typed.
+    const handleCustomChange = (value: string) => {
+        setCustomDraft(value);
+        const parsed = Number(value);
+        if (
+            value.trim() !== '' &&
+            Number.isInteger(parsed) &&
+            parsed >= MIN_CUSTOM_RATE_HZ &&
+            parsed <= MAX_CUSTOM_RATE_HZ
+        ) {
+            onCustomRateChange(parsed);
+        }
+    };
 
     // selectedLabel intentionally omitted — header shows static "Resampling"
 
@@ -128,17 +158,43 @@ export default function ResamplingComboBox({
 
                     {/* Custom Hz input */}
                     {rate === 'custom' && (
-                        <div className="mt-2 px-3 flex items-center gap-2">
-                            <input
-                                type="number"
-                                min={1}
-                                value={customRate}
-                                onChange={(e) =>
-                                    onCustomRateChange(Number(e.target.value))
-                                }
-                                className="w-24 border border-gray-300 rounded-lg px-2 py-1 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#509693]"
-                            />
-                            <span className="text-sm text-gray-500">Hz</span>
+                        <div className="mt-2 px-3 flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    min={MIN_CUSTOM_RATE_HZ}
+                                    max={MAX_CUSTOM_RATE_HZ}
+                                    step={1}
+                                    value={customDraft}
+                                    onChange={(e) =>
+                                        handleCustomChange(e.target.value)
+                                    }
+                                    onBlur={() => {
+                                        if (customError) {
+                                            setCustomDraft(String(customRate));
+                                        }
+                                    }}
+                                    aria-invalid={customError !== ''}
+                                    className={cn(
+                                        'w-24 border rounded-lg px-2 py-1 text-sm text-gray-800 focus:outline-none focus:ring-1',
+                                        customError
+                                            ? 'border-red-400 focus:ring-red-400'
+                                            : 'border-gray-300 focus:ring-[#509693]'
+                                    )}
+                                />
+                                <span className="text-sm text-gray-500">
+                                    Hz ({MIN_CUSTOM_RATE_HZ}–
+                                    {MAX_CUSTOM_RATE_HZ})
+                                </span>
+                            </div>
+                            {customError && (
+                                <div
+                                    className="text-xs text-red-600"
+                                    role="alert"
+                                >
+                                    {customError}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
