@@ -13,13 +13,13 @@ export default function Home() {
                 <NotificationsProvider>
                     <div className="h-screen flex flex-col overflow-hidden">
                         {/* Top section for header and settings bar */}
-                        <div className="flex flex-col">
+                        <div className="flex shrink-0 flex-col">
                             <AppHeader />
                             <SettingsBar />
                         </div>
 
                         {/* Bottom section for workspace and sidebar */}
-                        <div className="flex-1 flex relative">
+                        <div className="relative flex min-h-0 flex-1">
                             <ReactFlowView />
                         </div>
                     </div>

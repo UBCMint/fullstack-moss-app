@@ -108,7 +108,7 @@ export default function ArtifactNode({
     }, [checkConnectionStatus]);
 
     return (
-        <div className="relative">
+        <fieldset disabled={dataStreaming} className="relative">
             {/* Input Handle */}
             <Handle
                 type="target"
@@ -160,6 +160,6 @@ export default function ArtifactNode({
                 isDataStreamOn={dataStreaming}
                 isNodeSelected={selected}
             />
-        </div>
+        </fieldset>
     );
 }

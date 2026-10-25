@@ -1,4 +1,5 @@
 import React from 'react';
+import { useGlobalContext } from '@/context/GlobalContext';
 
 interface ButtonProps {
     id: string;
@@ -7,6 +8,7 @@ interface ButtonProps {
 }
 
 const NodeButton = ({ id, label, description }: ButtonProps) => {
+    const { dataStreaming } = useGlobalContext();
     const onDragStart = (
         event: React.DragEvent<HTMLDivElement>,
         nodeType: string
@@ -21,7 +23,11 @@ const NodeButton = ({ id, label, description }: ButtonProps) => {
         <div
             className="w-full"
             onDragStart={(event) => onDragStart(event, id)}
-            draggable
+            aria-disabled={dataStreaming}
+            title={
+                dataStreaming ? 'Stop the data stream to add nodes.' : undefined
+            }
+            draggable={!dataStreaming}
         >
             <div className="w-full bg-white rounded-2xl border border-gray-300 px-3 py-2 flex items-center justify-between cursor-move">
                 <div className="flex items-center">

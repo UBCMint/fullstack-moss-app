@@ -19,12 +19,17 @@ const buttonVariants = cva(
                     'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
                 ghost: 'hover:bg-accent hover:text-accent-foreground',
                 link: 'text-primary underline-offset-4 hover:underline',
+                // Filled teal action inside a pipeline node (matches "Start labeling"), e.g. "Preview" in chart node
+                nodeAction:
+                    'font-normal text-white bg-[#2E7B75] border border-[#2E7B75] rounded-md hover:bg-[#256560] focus-visible:ring-2 focus-visible:ring-[#2E7B75] focus-visible:ring-offset-2',
             },
             size: {
                 default: 'h-9 px-4 py-2',
                 sm: 'h-8 rounded-md px-3 text-xs',
                 lg: 'h-10 rounded-md px-8',
                 icon: 'h-9 w-9',
+                //size used for nodeAction in preview
+                node: 'h-auto px-3 py-1 gap-1.5 text-[16px] leading-none',
             },
         },
         defaultVariants: {
