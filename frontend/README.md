@@ -41,8 +41,8 @@ variable.
 ## Temporary Chart Preview history flag
 
 `NEXT_PUBLIC_ENABLE_CHART_PREVIEW_HISTORY=true` in `frontend/.env` enables the
-task 24 workaround: Back closes Chart Preview without losing the pipeline.
-Set it to `false` or remove it to use the original dialog behavior. Restart the
+task 24 workaround: Back closes Chart Preview without losing the pipeline. Set
+it to `false` or remove it to use the original dialog behavior. Restart the
 frontend after changing it; production builds require rebuilding.
 
 Implementation details and retirement TODOs are in
