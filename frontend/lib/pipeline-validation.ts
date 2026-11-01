@@ -233,3 +233,14 @@ export function preparePipelineStart(
                 : null,
     };
 }
+
+export const WINDOW_AFTER_SOURCE_MESSAGE =
+    'The window node has to come straight after the source.';
+
+// Only the source node may feed the window node's input. Anything may follow the window.
+export function isWindowInputAllowed(
+    sourceType: string | undefined,
+    targetType: string | undefined
+) {
+    return targetType !== 'window-node' || sourceType === 'source-node';
+}
