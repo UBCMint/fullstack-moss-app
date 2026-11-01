@@ -38,6 +38,16 @@ The live websocket URL (`ws://localhost:8080`) is hardcoded in
 `context/WebSocketContext.tsx` and does not currently read any environment
 variable.
 
+## Temporary Chart Preview history flag
+
+`NEXT_PUBLIC_ENABLE_CHART_PREVIEW_HISTORY=true` in `frontend/.env` enables the
+task 24 workaround: Back closes Chart Preview without losing the pipeline. Set
+it to `false` or remove it to use the original dialog behavior. Restart the
+frontend after changing it; production builds require rebuilding.
+
+Implementation details and retirement TODOs are in
+`components/nodes/signal-graph-node/signal-graph-node.tsx`.
+
 ## Commands
 
 ```sh

@@ -16,6 +16,11 @@ import {
 import SignalGraphView from './signal-graph-full';
 import { exportEEGData } from '@/lib/eeg-api';
 
+// Temporary task 24 flag. Restoration instructions are above SignalGraphNode below.
+const CHART_PREVIEW_HISTORY_ENABLED =
+    process.env.NEXT_PUBLIC_ENABLE_CHART_PREVIEW_HISTORY === 'true';
+const PREVIEW_HISTORY_KEY = 'mossChartPreview';
+
 interface SignalDataPoint {
     time: string;
     rawTime?: string;
@@ -84,12 +89,111 @@ function parseEEG(csvContent: string): SignalDataPoint[] {
     }
 }
 
-export default function SignalGraphNode({
-    id,
-    selected,
-}: {
+type SignalGraphNodeProps = {
     id?: string;
     selected?: boolean;
+};
+
+/*
+ * TODO(task 24): RESTORE ORIGINAL BEHAVIOR WHEN RETIRING THE FLAG
+ *
+ * 1. Delete this exported SignalGraphNode selector function entirely.
+ * 2. Delete the entire HistorySignalGraphNode component below, including all of
+ *    its state, effect, history listener, and open/close handler.
+ * 3. Rename OriginalSignalGraphNode to SignalGraphNode and add `export default`.
+ *    Alternatively, move its body into the exported SignalGraphNode function.
+ * 4. Remove `dialogProps` from its destructured arguments and remove the optional
+ *    dialogProps type. Its resulting declaration should be:
+ *
+ *    export default function SignalGraphNode({ id, selected }: SignalGraphNodeProps) {
+ *
+ * 5. In that component's JSX, replace <Dialog {...dialogProps}> with <Dialog>.
+ *    This restores the original dialog's own open/close handling.
+ * 6. Delete CHART_PREVIEW_HISTORY_ENABLED and PREVIEW_HISTORY_KEY above.
+ * 7. Remove NEXT_PUBLIC_ENABLE_CHART_PREVIEW_HISTORY from frontend/.env and remove
+ *    the temporary flag section from frontend/README.md.
+ *
+ * Keep SignalGraphNodeProps and the existing chart content/helpers. React Flow
+ * still imports the same default component, so its registration needs no edits.
+ */
+export default function SignalGraphNode(props: SignalGraphNodeProps) {
+    if (CHART_PREVIEW_HISTORY_ENABLED) {
+        return <HistorySignalGraphNode {...props} />;
+    }
+
+    return <OriginalSignalGraphNode {...props} />;
+}
+
+// Temporary task 24 fix. Delete this component when the workaround is retired.
+function HistorySignalGraphNode(props: SignalGraphNodeProps) {
+    const { id } = props;
+    const fallbackId = React.useId();
+    const previewId = id ?? fallbackId;
+    const [previewOpen, setPreviewOpen] = React.useState(false);
+    const closingPreview = React.useRef(false);
+
+    React.useEffect(() => {
+        // Sync dialog visibility with the current history entry on mount and Back/Forward.
+        // Navigation has finished, so allow new open/close requests again.
+        const syncPreviewWithHistory = () => {
+            closingPreview.current = false;
+            setPreviewOpen(
+                window.history.state?.[PREVIEW_HISTORY_KEY] === previewId
+            );
+        };
+
+        syncPreviewWithHistory();
+        window.addEventListener('popstate', syncPreviewWithHistory);
+        return () =>
+            window.removeEventListener('popstate', syncPreviewWithHistory);
+    }, [previewId]);
+
+    // Handle dialog interactions: opening adds a Preview entry; closing goes back
+    // to the editor entry without unmounting the canvas and losing its pipeline.
+    const handlePreviewOpenChange = (open: boolean) => {
+        // Back is asynchronous; ignore repeated close requests while it is pending.
+        if (closingPreview.current) return;
+
+        if (open) {
+            // Keep the editor mounted: Back should dismiss Preview, not leave /home.
+            window.history.pushState(
+                { ...window.history.state, [PREVIEW_HISTORY_KEY]: previewId },
+                '',
+                window.location.href
+            );
+            setPreviewOpen(true);
+        } else {
+            // Close immediately for a more responsive UX, even though
+            // syncPreviewWithHistory will also close it when Back finishes.
+            setPreviewOpen(false);
+            // X, Escape and outside clicks must consume the same entry as Back.
+            closingPreview.current = true;
+            window.history.back();
+        }
+    };
+
+    return (
+        <OriginalSignalGraphNode
+            {...props}
+            dialogProps={{
+                open: previewOpen,
+                onOpenChange: handlePreviewOpenChange,
+            }}
+        />
+    );
+}
+
+// Original node behavior; optional dialog props let the temporary component reuse
+// the existing chart markup without duplicating the node implementation.
+function OriginalSignalGraphNode({
+    id,
+    selected,
+    dialogProps,
+}: SignalGraphNodeProps & {
+    dialogProps?: Pick<
+        React.ComponentProps<typeof Dialog>,
+        'open' | 'onOpenChange'
+    >;
 }) {
     const { dataStreaming, activeSessionId } = useGlobalContext();
     const { renderData } = useNodeData(500, 10);
@@ -191,7 +295,7 @@ export default function SignalGraphNode({
     };
 
     return (
-        <Dialog>
+        <Dialog {...dialogProps}>
             <Card
                 className={`rounded-[30px] border-2 shadow-none p-0 overflow-hidden bg-white h-[96px] w-[396px] transition-colors ${
                     selected
