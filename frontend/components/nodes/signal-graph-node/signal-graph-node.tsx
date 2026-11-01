@@ -16,6 +16,8 @@ import {
 import SignalGraphView from './signal-graph-full';
 import { exportEEGData } from '@/lib/eeg-api';
 
+const PREVIEW_HISTORY_KEY = 'mossChartPreview';
+
 interface SignalDataPoint {
     time: string;
     rawTime?: string;
@@ -96,6 +98,46 @@ export default function SignalGraphNode({
     const reactFlowInstance = useReactFlow();
     const [isConnected, setIsConnected] = React.useState(false);
     const [seedData, setSeedData] = React.useState<SignalDataPoint[]>([]);
+    const [previewOpen, setPreviewOpen] = React.useState(false);
+    const closingPreview = React.useRef(false);
+
+    React.useEffect(() => {
+        // Sync dialog visibility with the current history entry on mount and Back/Forward.
+        // Navigation has finished, so allow new open/close requests again.
+        const syncPreviewWithHistory = () => {
+            closingPreview.current = false;
+            setPreviewOpen(window.history.state?.[PREVIEW_HISTORY_KEY] === id);
+        };
+
+        syncPreviewWithHistory();
+        window.addEventListener('popstate', syncPreviewWithHistory);
+        return () =>
+            window.removeEventListener('popstate', syncPreviewWithHistory);
+    }, [id]);
+
+    // Handle dialog interactions: opening adds a Preview entry; closing goes back
+    // to the editor entry without unmounting the canvas and losing its pipeline.
+    const handlePreviewOpenChange = (open: boolean) => {
+        // Back is asynchronous; ignore repeated close requests while it is pending.
+        if (closingPreview.current) return;
+
+        if (open) {
+            // Keep the editor mounted: Back should dismiss Preview, not leave /home.
+            window.history.pushState(
+                { ...window.history.state, [PREVIEW_HISTORY_KEY]: id },
+                '',
+                window.location.href
+            );
+            setPreviewOpen(true);
+        } else {
+            // Close immediately for a more responsive UX, even though
+            // syncPreviewWithHistory will also close it when Back finishes.
+            setPreviewOpen(false);
+            // X, Escape and outside clicks must consume the same entry as Back.
+            closingPreview.current = true;
+            window.history.back();
+        }
+    };
 
     // Determine if this Chart View node has an upstream path from a Source
     const checkConnectionStatus = React.useCallback(() => {
@@ -191,7 +233,7 @@ export default function SignalGraphNode({
     };
 
     return (
-        <Dialog>
+        <Dialog open={previewOpen} onOpenChange={handlePreviewOpenChange}>
             <Card
                 className={`rounded-[30px] border-2 shadow-none p-0 overflow-hidden bg-white h-[96px] w-[396px] transition-colors ${
                     selected
