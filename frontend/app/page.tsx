@@ -12,6 +12,9 @@ export default function WelcomePage() {
         const timer = setTimeout(() => {
             setTransition(true);
             setTimeout(() => {
+                // middleware.ts gates /home on the session cookie and bounces
+                // to /login when it's missing, so this one push covers both
+                // "go to /home if signed in, otherwise /login".
                 router.push('/home');
             }, 200);
         }, 3000);

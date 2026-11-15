@@ -12,14 +12,17 @@ import {
 import { useState } from 'react';
 import Image from 'next/image';
 import { useGlobalContext } from '@/context/GlobalContext';
+import { useAuth } from '@/context/AuthContext';
 import ExportDialog from '@/components/ui/export-dialog';
 import ImportDialog from '@/components/ui/import-dialog';
 
 export default function AppHeader() {
     const [isOpen, setIsOpen] = useState<boolean>(false);
+    const [isAccountOpen, setIsAccountOpen] = useState<boolean>(false);
     const [isExportOpen, setIsExportOpen] = useState(false);
     const [isImportOpen, setIsImportOpen] = useState(false);
     const { activeSessionId, setDataSource } = useGlobalContext();
+    const { user, logout } = useAuth();
 
     return (
         <header className="flex justify-between items-center px-2 py-3 border-b h-25">
@@ -85,6 +88,31 @@ export default function AppHeader() {
                         <DropdownMenuItem>Cyton Driver Fix</DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+
+                {/* account */}
+                {user && (
+                    <DropdownMenu onOpenChange={setIsAccountOpen}>
+                        <DropdownMenuTrigger asChild>
+                            <div className="flex items-center space-x-1 px-3 py-2">
+                                <span className="text-sm font-medium leading-none">
+                                    {user.username}
+                                </span>
+                                <ChevronUpIcon
+                                    className={`h-4 w-4 transform transition-transform duration-300 ${
+                                        isAccountOpen
+                                            ? 'rotate-180'
+                                            : 'rotate-0'
+                                    }`}
+                                />
+                            </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="mx-4">
+                            <DropdownMenuItem onClick={() => logout()}>
+                                Log out
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
             </div>
 
             {/* Dialogs */}
