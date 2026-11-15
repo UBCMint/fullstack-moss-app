@@ -14,7 +14,8 @@ permissions:
 
 env:
   RUFF_VERSION: "0.8.4" # pin so CI doesn't break on new ruff releases
-  RUST_TOOLCHAIN: stable
+  # Match the backend Docker builds; newer Rust breaks sqlx-postgres 0.7.4 inference.
+  RUST_TOOLCHAIN: "1.88.0"
 
 jobs:
   # ---------- Rust ----------
