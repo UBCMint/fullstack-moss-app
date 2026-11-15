@@ -1,5 +1,6 @@
 import type { Node, Edge } from '@xyflow/react';
 import type { PipelinePayload } from './pipeline';
+import { isNodeTypeEnabled } from './node-availability';
 
 // defines backend types for React Flow types
 const typeMap: Record<string, string> = {
@@ -75,6 +76,14 @@ const topoSort = (nodes: Node[], edges: Edge[]) => {
 export const validatePipeline = (nodes: Node[], edges: Edge[]) => {
     const errors: string[] = [];
     const warnings: string[] = [];
+
+    nodes.forEach((node) => {
+        if (!isNodeTypeEnabled(node.type)) {
+            errors.push(
+                `Node "${node.id}" has an unavailable type (${node.type || 'missing type'}). Remove it before starting.`
+            );
+        }
+    });
 
     // maps to track nodes and their connections
     const byId = new Map(nodes.map((n) => [n.id, n]));

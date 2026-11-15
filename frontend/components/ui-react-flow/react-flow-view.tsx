@@ -1,5 +1,6 @@
 'use client';
 
+import { isNodeTypeEnabled } from '@/lib/node-availability';
 import React, { useCallback } from 'react';
 import {
     ReactFlow,
@@ -46,16 +47,18 @@ import { preparePipelineStart } from '@/lib/pipeline-validation';
 import { useNotifications } from '@/components/notifications';
 import { useGlobalContext } from '@/context/GlobalContext';
 
-const nodeTypes = {
-    'source-node': SourceNode,
-    'artifact-node': ArtifactNode,
-    'filter-node': FilterNode,
-    'resampling-node': ResamplingNode,
-    'machine-learning-node': MachineLearningNode,
-    'signal-graph-node': SignalGraphNode,
-    'window-node': WindowNode,
-    'label-node': LabelNode,
-};
+const nodeTypes = Object.fromEntries(
+    Object.entries({
+        'source-node': SourceNode,
+        'artifact-node': ArtifactNode,
+        'filter-node': FilterNode,
+        'resampling-node': ResamplingNode,
+        'machine-learning-node': MachineLearningNode,
+        'signal-graph-node': SignalGraphNode,
+        'window-node': WindowNode,
+        'label-node': LabelNode,
+    }).filter(([type]) => isNodeTypeEnabled(type))
+);
 
 let id = 0;
 const getId = () => `node_${id++}`;
@@ -299,7 +302,7 @@ const ReactFlowInterface = () => {
 
         const nodeType = event.dataTransfer.getData('application/reactflow');
 
-        if (!nodeType) return;
+        if (!isNodeTypeEnabled(nodeType)) return;
 
         if (nodeType === 'source-node') {
             const existingSource = nodes.find((n) => n.type === 'source-node');
