@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+  "query": "SELECT id, username, email, password_hash, created_at FROM users WHERE email = $1",
   "describe": {
     "columns": [
       {
@@ -21,21 +21,26 @@
       {
         "ordinal": 3,
         "name": "password_hash",
-        "type_info": "Text"
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Text",
-        "Int4"
+        "Text"
       ]
     },
     "nullable": [
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "c90b5ff74f3f075f08b371a0fb6d18dd3fabd7c5bd5e5eaf3f618a5fbcd77abd"
+  "hash": "f65f1bfea2accc2778f606bef439fdedba83cf950e57d635d65938f7e06f1232"
 }

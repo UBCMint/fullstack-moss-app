@@ -1,7 +1,7 @@
 import { forwardToBackend, passthroughJsonResponse } from '@/lib/backend-proxy';
 
 export async function GET(
-    _req: Request,
+    req: Request,
     context: {
         params: Promise<{ session_id: string }>;
     }
@@ -11,6 +11,7 @@ export async function GET(
     const response = await forwardToBackend({
         method: 'GET',
         path: `/api/sessions/${params.session_id}/frontend-state`,
+        cookie: req.headers.get('cookie'),
     });
 
     return passthroughJsonResponse(response);
@@ -29,6 +30,7 @@ export async function POST(
         method: 'POST',
         path: `/api/sessions/${params.session_id}/frontend-state`,
         body,
+        cookie: req.headers.get('cookie'),
     });
 
     return passthroughJsonResponse(response);
