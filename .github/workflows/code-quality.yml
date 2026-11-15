@@ -14,7 +14,8 @@ permissions:
 
 env:
   RUFF_VERSION: "0.8.4" # pin so CI doesn't break on new ruff releases
-  RUST_TOOLCHAIN: stable
+  # Match the backend Docker builds; newer Rust breaks sqlx-postgres 0.7.4 inference.
+  RUST_TOOLCHAIN: "1.88.0"
 
 jobs:
   # ---------- Rust ----------
@@ -37,17 +38,15 @@ jobs:
 
   clippy:
     name: clippy
-    # lsl-sys vendors an old Boost whose pthread code assumes PTHREAD_STACK_MIN
-    # is a compile-time constant (`#if PTHREAD_STACK_MIN > 0`). glibc 2.34+ made
-    # it a function call instead, which breaks that preprocessor check on every
-    # current Ubuntu runner image (20.04/22.04/24.04 all ship glibc >= 2.34).
-    # We patch the vendored header in-place after cargo fetches it (see the
-    # "Patch lsl-sys vendored Boost" step below) rather than pinning an OS
-    # version, since no currently-supported Ubuntu image avoids this.
-    runs-on: ubuntu-latest
+    # Ubuntu 26.04's GCC 15 rejects templates in lsl-sys's vendored Boost.
+    # Keep the older native toolchain and Python 3.10 supported by PyO3 0.18.
+    # Revisit this runner pin when upgrading lsl-sys/PyO3.
+    # The PTHREAD_STACK_MIN patch below is still needed on Ubuntu 22.04.
+    runs-on: ubuntu-22.04
     timeout-minutes: 15
     env:
       SQLX_OFFLINE: "true"
+      PYO3_PYTHON: /usr/bin/python3
     steps:
       - uses: actions/checkout@v4
       - name: Install system dependencies
