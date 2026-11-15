@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { Node, Edge } from '@xyflow/react';
-import { preparePipelineStart } from './pipeline-validation';
+import {
+    isWindowInputAllowed,
+    preparePipelineStart,
+} from './pipeline-validation';
 
 const source: Node = {
     id: 'source',
@@ -83,4 +86,22 @@ test('invalid edits and reset do not reuse a previous valid payload', () => {
     );
     assert.equal(restarted.payload?.session_id, '2');
     assert.equal(restarted.payload?.nodes[0].config.chunk_size, 256);
+});
+
+test('only the source node may connect into the window node', () => {
+    assert.equal(isWindowInputAllowed('source-node', 'window-node'), true);
+    assert.equal(isWindowInputAllowed('filter-node', 'window-node'), false);
+    assert.equal(
+        isWindowInputAllowed('machine-learning-node', 'window-node'),
+        false
+    );
+    assert.equal(isWindowInputAllowed('window-node', 'filter-node'), true);
+    assert.equal(
+        isWindowInputAllowed('window-node', 'machine-learning-node'),
+        true
+    );
+    assert.equal(
+        isWindowInputAllowed('window-node', 'signal-graph-node'),
+        true
+    );
 });
