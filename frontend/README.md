@@ -184,3 +184,35 @@ column — the backend doesn't know or care about its shape.
 `isFrontendWorkspaceState` guards the import path against malformed data
 (missing `id`/`type`/`data` on a node, missing `id`/`source`/`target` on an
 edge) before it's applied back onto the canvas.
+
+## Artifact node feature flag
+
+Artifact Node is disabled by default. Its implementation is retained, but it is
+hidden from the menu and excluded from editor node registration. This flag only
+enables the UI; artifact removal is still not integrated with backend
+processing.
+
+For Docker Compose, the frontend service explicitly sets
+`NEXT_PUBLIC_ENABLE_ARTIFACT_NODE: "false"` in `docker-compose.yml`. To enable
+the node, change that value to `"true"`. After changing it, run this from the
+repository root and refresh the browser:
+
+```sh
+docker compose up -d --force-recreate frontend
+```
+
+Restarting Docker Desktop is unnecessary, and `docker compose restart` alone
+does not apply changed environment variables. The current container runs the
+Next.js development server, so this flag change does not require an image
+rebuild.
+
+For local development outside Docker, set
+`NEXT_PUBLIC_ENABLE_ARTIFACT_NODE=true` in `frontend/.env.local` and restart the
+dev server. Only the exact value `true` enables the node; an unset variable or
+`false` disables it. A production Next.js build must be rebuilt after changing
+this public build-time variable.
+
+Starting a pipeline requires every node to have a recognized, enabled editor
+type. Saved/imported pipelines containing disabled or unknown types remain
+editable but cannot start until those nodes are removed. No automatic rewiring
+occurs.
