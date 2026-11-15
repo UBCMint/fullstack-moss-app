@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO sessions (name) VALUES ($1) RETURNING id, name",
+  "query": "SELECT id, name, user_id FROM sessions WHERE user_id = $1",
   "describe": {
     "columns": [
       {
@@ -12,17 +12,23 @@
         "ordinal": 1,
         "name": "name",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Int4"
       }
     ],
     "parameters": {
       "Left": [
-        "Text"
+        "Int4"
       ]
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "4c7575ee45f7cef7cf00ce1e56608329a7ebafdd7d4b84ed4c3cf057ae574e28"
+  "hash": "ca500dc75e833e5ce53f016006a41eaef8434adac5f9473765a2c469802fe883"
 }

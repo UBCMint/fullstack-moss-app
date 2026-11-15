@@ -45,6 +45,7 @@ pub struct UpdateUser {
 pub struct Session {
     pub id: i32,
     pub name: String,
+    pub user_id: i32,
 }
 
 // Struct for frontend state associated with a session

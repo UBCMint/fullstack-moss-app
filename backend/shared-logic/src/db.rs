@@ -382,15 +382,20 @@ pub async fn delete_user(client: &DbClient, user_id: i32) -> Result<(), Error> {
     Ok(())
 }
 
-/// Create a new session
+/// Create a new session owned by the given user.
 //
 /// Returns the created Session on success.
-pub async fn create_session(client: &DbClient, name: String) -> Result<Session, Error> {
-    info!("Creating session: {}", name);
+pub async fn create_session(
+    client: &DbClient,
+    name: String,
+    user_id: i32,
+) -> Result<Session, Error> {
+    info!("Creating session: {} for user {}", name, user_id);
     let session = sqlx::query_as!(
         Session,
-        "INSERT INTO sessions (name) VALUES ($1) RETURNING id, name",
+        "INSERT INTO sessions (name, user_id) VALUES ($1, $2) RETURNING id, name, user_id",
         name,
+        user_id,
     )
     .fetch_one(&**client)
     .await?;
@@ -399,17 +404,49 @@ pub async fn create_session(client: &DbClient, name: String) -> Result<Session, 
     Ok(session)
 }
 
-/// Get all sessions
+/// Get all sessions owned by the given user.
 //
 /// Returns a vector of Sessions on success.
-pub async fn get_sessions(client: &DbClient) -> Result<Vec<Session>, Error> {
-    info!("Retrieving sessions...");
-    let sessions = sqlx::query_as!(Session, "SELECT id, name FROM sessions")
-        .fetch_all(&**client)
-        .await?;
+pub async fn get_sessions(client: &DbClient, user_id: i32) -> Result<Vec<Session>, Error> {
+    info!("Retrieving sessions for user {}...", user_id);
+    let sessions = sqlx::query_as!(
+        Session,
+        "SELECT id, name, user_id FROM sessions WHERE user_id = $1",
+        user_id
+    )
+    .fetch_all(&**client)
+    .await?;
     info!("Retrieved {} sessions.", sessions.len());
 
     Ok(sessions)
+}
+
+/// Checks that `session_id` exists and is owned by `user_id`. Every
+/// `/api/sessions/:session_id/...` handler calls this before touching the
+/// session's data, so ownership is enforced in one place instead of being
+/// repeated per handler.
+///
+/// Returns `Err(Error::RowNotFound)` both when the session doesn't exist and
+/// when it belongs to someone else — callers map that to a 404, never a
+/// 403, so a caller can't use the response to tell the two cases apart and
+/// enumerate other users' session ids.
+pub async fn require_session_owner(
+    client: &DbClient,
+    session_id: i32,
+    user_id: i32,
+) -> Result<(), Error> {
+    let found = sqlx::query!(
+        "SELECT id FROM sessions WHERE id = $1 AND user_id = $2",
+        session_id,
+        user_id
+    )
+    .fetch_optional(&**client)
+    .await?;
+
+    match found {
+        Some(_) => Ok(()),
+        None => Err(Error::RowNotFound),
+    }
 }
 
 /// Delete a session by id.

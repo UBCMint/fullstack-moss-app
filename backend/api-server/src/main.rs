@@ -252,26 +252,30 @@ async fn create_user(
         .to_string();
 
     // Store user in DB
-    let created_user =
-        match shared_logic::db::add_user(&app_state.db_client, new_user_data, password_hash).await
+    let created_user = match shared_logic::db::add_user(
+        &app_state.db_client,
+        new_user_data,
+        password_hash,
+    )
+    .await
+    {
+        Ok(user) => user,
+        Err(sqlx::Error::Database(db_err))
+            if db_err.kind() == sqlx::error::ErrorKind::UniqueViolation =>
         {
-            Ok(user) => user,
-            Err(sqlx::Error::Database(db_err))
-                if db_err.kind() == sqlx::error::ErrorKind::UniqueViolation =>
-            {
-                return Err((
-                    StatusCode::CONFLICT,
-                    "An account with that email or username already exists.".to_string(),
-                ));
-            }
-            Err(e) => {
-                error!("Failed to create user: {}", e);
-                return Err((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to create user.".to_string(),
-                ));
-            }
-        };
+            return Err((
+                StatusCode::CONFLICT,
+                "An account with that email or username already exists.".to_string(),
+            ));
+        }
+        Err(e) => {
+            error!("Failed to create user: {}", e);
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create user.".to_string(),
+            ));
+        }
+    };
 
     // Convert to PublicUser to hide password
     let public_user = PublicUser {
@@ -415,18 +419,50 @@ async fn delete_user(
     }
 }
 
+/// Verifies `session_id` belongs to `user_id` before a handler touches its
+/// data. "Doesn't exist" and "exists but isn't yours" both map to the same
+/// 404 (never 403), so the response can't be used to enumerate other
+/// users' session ids.
+async fn ensure_session_owner(
+    db: &DbClient,
+    session_id: i32,
+    user_id: i32,
+) -> Result<(), (StatusCode, String)> {
+    match shared_logic::db::require_session_owner(db, session_id, user_id).await {
+        Ok(()) => Ok(()),
+        Err(sqlx::Error::RowNotFound) => {
+            Err((StatusCode::NOT_FOUND, "Session not found.".to_string()))
+        }
+        Err(e) => {
+            error!("Failed to verify session ownership: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to verify session.".to_string(),
+            ))
+        }
+    }
+}
+
 // Handler for POST /api/sessions
 async fn create_session(
     State(app_state): State<AppState>,
-    _auth: AuthUser,
+    AuthUser(user_id): AuthUser,
     Json(session_name): Json<String>,
 ) -> Result<Json<Session>, (StatusCode, String)> {
     info!("Received request to create session: {}", session_name);
 
-    match shared_logic::db::create_session(&app_state.db_client, session_name).await {
+    match shared_logic::db::create_session(&app_state.db_client, session_name, user_id).await {
         Ok(created_session) => {
             info!("Session created successfully: {:?}", created_session);
             Ok(Json(created_session))
+        }
+        Err(sqlx::Error::Database(db_err))
+            if db_err.kind() == sqlx::error::ErrorKind::UniqueViolation =>
+        {
+            Err((
+                StatusCode::CONFLICT,
+                "You already have a session with that name.".to_string(),
+            ))
         }
         Err(e) => {
             error!("Failed to create session: {}", e);
@@ -441,11 +477,11 @@ async fn create_session(
 // Handler for GET /api/sessions
 async fn get_all_sessions(
     State(app_state): State<AppState>,
-    _auth: AuthUser,
+    AuthUser(user_id): AuthUser,
 ) -> Result<Json<Vec<Session>>, (StatusCode, String)> {
     info!("Received request to get all sessions");
 
-    match shared_logic::db::get_sessions(&app_state.db_client).await {
+    match shared_logic::db::get_sessions(&app_state.db_client, user_id).await {
         Ok(sessions) => {
             info!("Retrieved {} sessions.", sessions.len());
             Ok(Json(sessions))
@@ -464,13 +500,15 @@ async fn get_all_sessions(
 async fn set_frontend_state(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
-    _auth: AuthUser,
+    AuthUser(user_id): AuthUser,
     Json(state_data): Json<Value>,
 ) -> Result<Json<FrontendState>, (StatusCode, String)> {
     info!(
         "Received request to set frontend state for session {}",
         session_id
     );
+
+    ensure_session_owner(&app_state.db_client, session_id, user_id).await?;
 
     match shared_logic::db::upsert_frontend_state(&app_state.db_client, session_id, state_data)
         .await
@@ -493,12 +531,14 @@ async fn set_frontend_state(
 async fn get_frontend_state(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
-    _auth: AuthUser,
+    AuthUser(user_id): AuthUser,
 ) -> Result<Json<Value>, (StatusCode, String)> {
     info!(
         "Received request to get frontend state for session {}",
         session_id
     );
+
+    ensure_session_owner(&app_state.db_client, session_id, user_id).await?;
 
     match shared_logic::db::get_frontend_state(&app_state.db_client, session_id).await {
         Ok(Some(v)) => {
@@ -526,13 +566,15 @@ async fn get_frontend_state(
 async fn export_eeg_data(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
-    _auth: AuthUser,
+    AuthUser(user_id): AuthUser,
     Json(request): Json<ExportEEGRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     info!(
         "Received request to export EEG data for session {}",
         session_id
     );
+
+    ensure_session_owner(&app_state.db_client, session_id, user_id).await?;
 
     // right now the only export format supported is CSV, so we just check for that
     if request.options.format.to_lowercase() != "csv" {
@@ -594,9 +636,9 @@ async fn export_eeg_data(
 // Handler for POST /api/sessions/{session_id}/time-label
 // Receives a batch of time labels from the frontend after a session ends and stores them in the DB.
 async fn store_time_labels(
-    State(app_state): State<AppState>,     // DB connection pool
-    Path(session_id): Path<i32>,           // session ID from the URL path
-    _auth: AuthUser,
+    State(app_state): State<AppState>, // DB connection pool
+    Path(session_id): Path<i32>,       // session ID from the URL path
+    AuthUser(user_id): AuthUser,
     Json(labels): Json<Vec<NewTimeLabel>>, // array of {timestamp, label} objects from the request body
 ) -> Result<StatusCode, (StatusCode, String)> {
     info!(
@@ -604,6 +646,8 @@ async fn store_time_labels(
         labels.len(),
         session_id
     );
+
+    ensure_session_owner(&app_state.db_client, session_id, user_id).await?;
 
     match shared_logic::db::insert_time_labels(&app_state.db_client, session_id, labels).await {
         Ok(_) => {
@@ -626,12 +670,14 @@ async fn get_time_labels(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
     Query(params): Query<EegDataQuery>,
-    _auth: AuthUser,
+    AuthUser(user_id): AuthUser,
 ) -> Result<Json<Vec<TimeLabel>>, (StatusCode, String)> {
     info!(
         "Received request to get time labels for session {} from {} to {}",
         session_id, params.start, params.end
     );
+
+    ensure_session_owner(&app_state.db_client, session_id, user_id).await?;
 
     match get_time_labels_by_range(&app_state.db_client, session_id, params.start, params.end).await
     {
@@ -655,12 +701,14 @@ async fn get_eeg_data(
     State(app_state): State<AppState>,  // DB connection pool
     Path(session_id): Path<i32>,        // session ID from the URL path
     Query(params): Query<EegDataQuery>, // ?start=...&end=... parsed into EegDataQuery struct
-    _auth: AuthUser,
+    AuthUser(user_id): AuthUser,
 ) -> Result<Json<Vec<EegDataRow>>, (StatusCode, String)> {
     info!(
         "Received request to get EEG data for session {} from {} to {}",
         session_id, params.start, params.end
     );
+
+    ensure_session_owner(&app_state.db_client, session_id, user_id).await?;
 
     match get_eeg_data_by_range(&app_state.db_client, session_id, params.start, params.end).await {
         Ok(rows) => {
@@ -681,10 +729,12 @@ async fn get_eeg_data(
 async fn import_eeg_data(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
-    _auth: AuthUser,
+    AuthUser(user_id): AuthUser,
     // we expect the CSV data to be sent as raw text in the body of the request
     body: Bytes,
 ) -> Result<Json<Value>, (StatusCode, String)> {
+    ensure_session_owner(&app_state.db_client, session_id, user_id).await?;
+
     shared_logic::db::import_eeg_data_from_csv(&app_state.db_client, session_id, &body)
         .await
         .map_err(|e| {
