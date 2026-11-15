@@ -1,3 +1,5 @@
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
 use axum::http::{header, HeaderMap, HeaderValue};
 use axum::response::IntoResponse;
 use axum::{
@@ -9,6 +11,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use chrono::{DateTime, Utc};
 use dotenvy::dotenv;
 use log::{error, info};
@@ -16,9 +19,11 @@ use pyo3::types::{PyList, PyModule, PyTuple};
 use pyo3::PyResult;
 use pyo3::Python;
 use pyo3::{IntoPy, ToPyObject};
+use rand::RngCore;
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
 use tokio::net::TcpListener;
@@ -38,10 +43,98 @@ use argon2::{
     Argon2,
 };
 
+/// Name of the cookie that carries the session token.
+const SESSION_COOKIE_NAME: &str = "moss_session";
+/// How long a session stays valid after login.
+const SESSION_TTL_DAYS: i64 = 7;
+
 // Define application state
 #[derive(Clone)]
 struct AppState {
     db_client: DbClient,
+}
+
+/// Generates a random 32-byte session token, hex-encoded for use as a cookie value.
+fn generate_session_token() -> String {
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    hex::encode(bytes)
+}
+
+/// Hashes a session token with SHA-256 for storage. We only ever persist this
+/// hash — never the raw token — so a leaked database can't be used to log in.
+fn hash_session_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// Whether the incoming request's Host header is localhost, used to decide
+/// whether the session cookie needs the `Secure` attribute.
+fn is_localhost_request(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .map(|host| {
+            let host_without_port = host.split(':').next().unwrap_or(host);
+            host_without_port == "localhost" || host_without_port == "127.0.0.1"
+        })
+        .unwrap_or(false)
+}
+
+/// Very small sanity check: one `@`, a non-empty local part, and a domain
+/// part that contains a dot. Not a full RFC 5322 validator, just enough to
+/// reject obviously malformed input before it reaches the database.
+fn is_valid_email(email: &str) -> bool {
+    let Some((local, domain)) = email.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && !domain.is_empty()
+        && domain.contains('.')
+        && !domain.starts_with('.')
+        && !domain.ends_with('.')
+        && email.matches('@').count() == 1
+        && !email.chars().any(char::is_whitespace)
+}
+
+/// Extracts the logged-in user's id from the `moss_session` cookie. Any
+/// handler that takes this as a parameter automatically requires a valid,
+/// non-expired session — Axum rejects the request with 401 otherwise.
+struct AuthUser(i32);
+
+#[axum::async_trait]
+impl FromRequestParts<AppState> for AuthUser {
+    type Rejection = (StatusCode, String);
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let jar = CookieJar::from_headers(&parts.headers);
+        let token = jar
+            .get(SESSION_COOKIE_NAME)
+            .map(|c| c.value().to_string())
+            .ok_or((StatusCode::UNAUTHORIZED, "Not logged in.".to_string()))?;
+
+        let token_hash = hash_session_token(&token);
+
+        let user_id = shared_logic::db::get_auth_session_user_id(&state.db_client, &token_hash)
+            .await
+            .map_err(|e| {
+                error!("Failed to look up session: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to verify session.".to_string(),
+                )
+            })?
+            .ok_or((
+                StatusCode::UNAUTHORIZED,
+                "Session expired or invalid.".to_string(),
+            ))?;
+
+        Ok(AuthUser(user_id))
+    }
 }
 
 // define request struct for exporting EEG data
@@ -70,11 +163,6 @@ struct PublicUser {
     id: i32,
     username: String,
     email: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct DeleteUserRequest {
-    id: i32,
 }
 
 /// Helper function for eeg data to get the start and end timestamps for a given session
@@ -130,7 +218,22 @@ async fn create_user(
     State(app_state): State<AppState>,
     Json(new_user_data): Json<NewUser>,
 ) -> Result<Json<PublicUser>, (StatusCode, String)> {
-    info!("Received request to create user: {:?}", new_user_data);
+    // Log only the email — NewUser deliberately doesn't derive Debug, since it
+    // carries the raw password and a stray {:?} would leak it into the logs.
+    info!("Received request to create user: {}", new_user_data.email);
+
+    if !is_valid_email(&new_user_data.email) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Please enter a valid email address.".to_string(),
+        ));
+    }
+    if new_user_data.password.chars().count() < 8 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Password must be at least 8 characters.".to_string(),
+        ));
+    }
 
     // Generate a random salt
     let salt = SaltString::generate(&mut OsRng);
@@ -150,15 +253,25 @@ async fn create_user(
 
     // Store user in DB
     let created_user =
-        shared_logic::db::add_user(&app_state.db_client, new_user_data, password_hash)
-            .await
-            .map_err(|e| {
+        match shared_logic::db::add_user(&app_state.db_client, new_user_data, password_hash).await
+        {
+            Ok(user) => user,
+            Err(sqlx::Error::Database(db_err))
+                if db_err.kind() == sqlx::error::ErrorKind::UniqueViolation =>
+            {
+                return Err((
+                    StatusCode::CONFLICT,
+                    "An account with that email or username already exists.".to_string(),
+                ));
+            }
+            Err(e) => {
                 error!("Failed to create user: {}", e);
-                (
+                return Err((
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to create user: {}", e),
-                )
-            })?;
+                    "Failed to create user.".to_string(),
+                ));
+            }
+        };
 
     // Convert to PublicUser to hide password
     let public_user = PublicUser {
@@ -173,8 +286,10 @@ async fn create_user(
 
 async fn login_user(
     State(app_state): State<AppState>,
+    headers: HeaderMap,
+    jar: CookieJar,
     Json(login_data): Json<LoginRequest>,
-) -> Result<Json<PublicUser>, (StatusCode, String)> {
+) -> Result<(CookieJar, Json<PublicUser>), (StatusCode, String)> {
     info!("Login attempt for email: {}", login_data.email);
 
     // Fetch user from DB by email
@@ -194,64 +309,107 @@ async fn login_user(
 
     if Argon2::default()
         .verify_password(login_data.password.as_bytes(), &parsed_hash)
-        .is_ok()
+        .is_err()
     {
-        let public_user = PublicUser {
-            id: user.id,
-            username: user.username,
-            email: user.email,
-        };
-        Ok(Json(public_user))
-    } else {
-        Err((StatusCode::UNAUTHORIZED, "Invalid email or password".into()))
+        return Err((StatusCode::UNAUTHORIZED, "Invalid email or password".into()));
     }
-}
 
-// Handler for GET /users
-// This function will retrieve all users from the database.
-async fn get_all_users(
-    State(app_state): State<AppState>,
-) -> Result<Json<Vec<PublicUser>>, (StatusCode, String)> {
-    info!("Received request to get all users");
+    // Issue a new session: random token, store only its hash, cookie gets the raw token.
+    let token = generate_session_token();
+    let token_hash = hash_session_token(&token);
+    let expires_at = Utc::now() + chrono::Duration::days(SESSION_TTL_DAYS);
 
-    let users = shared_logic::db::get_users(&app_state.db_client)
+    shared_logic::db::create_auth_session(&app_state.db_client, user.id, &token_hash, expires_at)
         .await
         .map_err(|e| {
-            error!("Failed to retrieve users: {}", e);
+            error!("Failed to create session: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to retrieve users: {}", e),
+                "Failed to create session.".to_string(),
             )
         })?;
 
-    let public_users: Vec<PublicUser> = users
-        .into_iter()
-        .map(|u| PublicUser {
-            id: u.id,
-            username: u.username,
-            email: u.email,
-        })
-        .collect();
+    let mut cookie = Cookie::new(SESSION_COOKIE_NAME, token);
+    cookie.set_path("/");
+    cookie.set_http_only(true);
+    cookie.set_same_site(SameSite::Lax);
+    cookie.set_max_age(time::Duration::days(SESSION_TTL_DAYS));
+    if !is_localhost_request(&headers) {
+        cookie.set_secure(true);
+    }
+    let jar = jar.add(cookie);
 
-    Ok(Json(public_users))
+    let public_user = PublicUser {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+    };
+    Ok((jar, Json(public_user)))
 }
 
+async fn logout_user(
+    State(app_state): State<AppState>,
+    jar: CookieJar,
+) -> Result<(CookieJar, StatusCode), (StatusCode, String)> {
+    if let Some(cookie) = jar.get(SESSION_COOKIE_NAME) {
+        let token_hash = hash_session_token(cookie.value());
+        shared_logic::db::delete_auth_session(&app_state.db_client, &token_hash)
+            .await
+            .map_err(|e| {
+                error!("Failed to delete session: {}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to log out.".to_string(),
+                )
+            })?;
+    }
+
+    // Must match the Path the cookie was set with, or the browser won't clear it.
+    let mut removal_cookie = Cookie::from(SESSION_COOKIE_NAME);
+    removal_cookie.set_path("/");
+    let jar = jar.remove(removal_cookie);
+
+    Ok((jar, StatusCode::OK))
+}
+
+async fn get_me(
+    State(app_state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+) -> Result<Json<PublicUser>, (StatusCode, String)> {
+    let user = shared_logic::db::get_user_by_id(&app_state.db_client, user_id)
+        .await
+        .map_err(|e| {
+            error!("Failed to fetch current user {}: {}", user_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to fetch user.".to_string(),
+            )
+        })?;
+
+    Ok(Json(PublicUser {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+    }))
+}
+
+// Handler for POST /users/delete — deletes the logged-in user's own account.
+// There is no way to pass another user's id here; AuthUser is the only
+// source of which account gets deleted.
 async fn delete_user(
     State(app_state): State<AppState>,
-    Json(payload): Json<DeleteUserRequest>,
+    AuthUser(user_id): AuthUser,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let user_id = payload.id;
-
     match shared_logic::db::delete_user(&app_state.db_client, user_id).await {
         Ok(_) => {
-            log::info!("User {} deleted successfully", user_id);
+            log::info!("User {} deleted their account", user_id);
             Ok(StatusCode::OK)
         }
         Err(e) => {
             log::error!("Failed to delete user {}: {}", user_id, e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to delete user: {}", e),
+                "Failed to delete account.".to_string(),
             ))
         }
     }
@@ -260,6 +418,7 @@ async fn delete_user(
 // Handler for POST /api/sessions
 async fn create_session(
     State(app_state): State<AppState>,
+    _auth: AuthUser,
     Json(session_name): Json<String>,
 ) -> Result<Json<Session>, (StatusCode, String)> {
     info!("Received request to create session: {}", session_name);
@@ -282,6 +441,7 @@ async fn create_session(
 // Handler for GET /api/sessions
 async fn get_all_sessions(
     State(app_state): State<AppState>,
+    _auth: AuthUser,
 ) -> Result<Json<Vec<Session>>, (StatusCode, String)> {
     info!("Received request to get all sessions");
 
@@ -304,6 +464,7 @@ async fn get_all_sessions(
 async fn set_frontend_state(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
+    _auth: AuthUser,
     Json(state_data): Json<Value>,
 ) -> Result<Json<FrontendState>, (StatusCode, String)> {
     info!(
@@ -332,6 +493,7 @@ async fn set_frontend_state(
 async fn get_frontend_state(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
+    _auth: AuthUser,
 ) -> Result<Json<Value>, (StatusCode, String)> {
     info!(
         "Received request to get frontend state for session {}",
@@ -364,6 +526,7 @@ async fn get_frontend_state(
 async fn export_eeg_data(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
+    _auth: AuthUser,
     Json(request): Json<ExportEEGRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     info!(
@@ -433,6 +596,7 @@ async fn export_eeg_data(
 async fn store_time_labels(
     State(app_state): State<AppState>,     // DB connection pool
     Path(session_id): Path<i32>,           // session ID from the URL path
+    _auth: AuthUser,
     Json(labels): Json<Vec<NewTimeLabel>>, // array of {timestamp, label} objects from the request body
 ) -> Result<StatusCode, (StatusCode, String)> {
     info!(
@@ -462,6 +626,7 @@ async fn get_time_labels(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
     Query(params): Query<EegDataQuery>,
+    _auth: AuthUser,
 ) -> Result<Json<Vec<TimeLabel>>, (StatusCode, String)> {
     info!(
         "Received request to get time labels for session {} from {} to {}",
@@ -490,6 +655,7 @@ async fn get_eeg_data(
     State(app_state): State<AppState>,  // DB connection pool
     Path(session_id): Path<i32>,        // session ID from the URL path
     Query(params): Query<EegDataQuery>, // ?start=...&end=... parsed into EegDataQuery struct
+    _auth: AuthUser,
 ) -> Result<Json<Vec<EegDataRow>>, (StatusCode, String)> {
     info!(
         "Received request to get EEG data for session {} from {} to {}",
@@ -515,6 +681,7 @@ async fn get_eeg_data(
 async fn import_eeg_data(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
+    _auth: AuthUser,
     // we expect the CSV data to be sent as raw text in the body of the request
     body: Bytes,
 ) -> Result<Json<Value>, (StatusCode, String)> {
@@ -619,9 +786,10 @@ async fn main() {
     // Build Axum router
     let app = Router::new()
         .route("/users", post(create_user))
-        .route("/users/login", post(login_user)) // Login route
-        .route("/users", get(get_all_users))
-        .route("/users/delete", post(delete_user)) //
+        .route("/users/login", post(login_user))
+        .route("/users/logout", post(logout_user))
+        .route("/users/me", get(get_me))
+        .route("/users/delete", post(delete_user))
         .route("/run-python-script", get(run_python_script_handler))
         .route("/api/sessions", post(create_session))
         .route("/api/sessions", get(get_all_sessions))

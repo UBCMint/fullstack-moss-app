@@ -15,7 +15,10 @@ pub struct User {
 // Struct for creating a user (used for data coming INTO the API)
 // Because User derived Deserialize, the serde library (which Axum used to process incoming JSON request body)
 // expected all fields in User struct to be present in JSON you sent (id was not part of payload)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+//
+// Deliberately does NOT derive Debug: it holds the user's raw password, and a
+// stray `{:?}` would put a plain-text password into the server logs.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewUser {
     pub username: String,
     pub email: String,

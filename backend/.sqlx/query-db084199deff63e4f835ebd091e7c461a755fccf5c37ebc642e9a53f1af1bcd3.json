@@ -21,13 +21,13 @@
       {
         "ordinal": 3,
         "name": "password_hash",
-        "type_info": "Text"
+        "type_info": "Varchar"
       }
     ],
     "parameters": {
       "Left": [
         "Text",
-        "Text",
+        "Varchar",
         "Int4"
       ]
     },

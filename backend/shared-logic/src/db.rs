@@ -96,15 +96,6 @@ pub async fn add_user(
     Ok(user)
 }
 
-pub async fn get_users(client: &DbClient) -> Result<Vec<User>, Error> {
-    info!("Retrieving users...");
-    let users = sqlx::query_as!(User, "SELECT id, username, email, password_hash FROM users")
-        .fetch_all(&**client)
-        .await?;
-    info!("Retrieved {} users.", users.len());
-    Ok(users)
-}
-
 pub async fn get_user_by_email(client: &DbClient, email: &str) -> Result<User, Error> {
     sqlx::query_as!(
         User,
@@ -113,6 +104,62 @@ pub async fn get_user_by_email(client: &DbClient, email: &str) -> Result<User, E
     )
     .fetch_one(&**client)
     .await
+}
+
+pub async fn get_user_by_id(client: &DbClient, user_id: i32) -> Result<User, Error> {
+    sqlx::query_as!(
+        User,
+        "SELECT id, username, email, password_hash FROM users WHERE id = $1",
+        user_id
+    )
+    .fetch_one(&**client)
+    .await
+}
+
+/// Create a session row for a logged-in user. Only the SHA-256 hash of the
+/// session token is stored — the raw token is never persisted.
+pub async fn create_auth_session(
+    client: &DbClient,
+    user_id: i32,
+    token_hash: &str,
+    expires_at: DateTime<Utc>,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
+        token_hash,
+        user_id,
+        expires_at
+    )
+    .execute(&**client)
+    .await?;
+    Ok(())
+}
+
+/// Returns the user id for a non-expired session, or `None` if the token is
+/// unknown or has expired.
+pub async fn get_auth_session_user_id(
+    client: &DbClient,
+    token_hash: &str,
+) -> Result<Option<i32>, Error> {
+    let row = sqlx::query!(
+        "SELECT user_id FROM auth_sessions WHERE token_hash = $1 AND expires_at > now()",
+        token_hash
+    )
+    .fetch_optional(&**client)
+    .await?;
+    Ok(row.map(|r| r.user_id))
+}
+
+/// Delete a session row (logout). Not finding a matching row is not an
+/// error — the session may already be expired or already logged out.
+pub async fn delete_auth_session(client: &DbClient, token_hash: &str) -> Result<(), Error> {
+    sqlx::query!(
+        "DELETE FROM auth_sessions WHERE token_hash = $1",
+        token_hash
+    )
+    .execute(&**client)
+    .await?;
+    Ok(())
 }
 
 /// Insert a new record into testtime_series using chrono's DateTime<Utc>.
