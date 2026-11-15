@@ -34,7 +34,8 @@ use shared_logic::db::{
     get_time_labels_by_range, initialize_connection, DbClient,
 };
 use shared_logic::models::{
-    EegDataQuery, EegDataRow, FrontendState, NewTimeLabel, NewUser, Session, TimeLabel,
+    ChangePasswordRequest, EegDataQuery, EegDataRow, FrontendState, NewTimeLabel, NewUser, Session,
+    TimeLabel,
 };
 
 // Argon2 imports
@@ -163,6 +164,7 @@ struct PublicUser {
     id: i32,
     username: String,
     email: String,
+    created_at: DateTime<Utc>,
 }
 
 /// Helper function for eeg data to get the start and end timestamps for a given session
@@ -282,6 +284,7 @@ async fn create_user(
         id: created_user.id,
         username: created_user.username,
         email: created_user.email,
+        created_at: created_user.created_at,
     };
 
     info!("User created successfully: {:?}", public_user);
@@ -347,6 +350,7 @@ async fn login_user(
         id: user.id,
         username: user.username,
         email: user.email,
+        created_at: user.created_at,
     };
     Ok((jar, Json(public_user)))
 }
@@ -394,6 +398,7 @@ async fn get_me(
         id: user.id,
         username: user.username,
         email: user.email,
+        created_at: user.created_at,
     }))
 }
 
@@ -417,6 +422,76 @@ async fn delete_user(
             ))
         }
     }
+}
+
+// Handler for POST /users/change-password — requires the caller's current
+// password, same as any account-security-sensitive change, so a hijacked
+// but still-logged-in session can't silently lock the real owner out.
+async fn change_password(
+    State(app_state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Json(req): Json<ChangePasswordRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    if req.new_password.chars().count() < 8 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            "Password must be at least 8 characters.".to_string(),
+        ));
+    }
+
+    let user = shared_logic::db::get_user_by_id(&app_state.db_client, user_id)
+        .await
+        .map_err(|e| {
+            error!(
+                "Failed to fetch user {} for password change: {}",
+                user_id, e
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to change password.".to_string(),
+            )
+        })?;
+
+    let parsed_hash = PasswordHash::new(&user.password_hash).map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Password parsing failed".into(),
+        )
+    })?;
+    if Argon2::default()
+        .verify_password(req.current_password.as_bytes(), &parsed_hash)
+        .is_err()
+    {
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Current password is incorrect.".to_string(),
+        ));
+    }
+
+    let salt = SaltString::generate(&mut OsRng);
+    let new_password_hash = Argon2::default()
+        .hash_password(req.new_password.as_bytes(), &salt)
+        .map_err(|e| {
+            error!("Failed to hash new password: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Password hashing failed".to_string(),
+            )
+        })?
+        .to_string();
+
+    shared_logic::db::update_password(&app_state.db_client, user_id, new_password_hash)
+        .await
+        .map_err(|e| {
+            error!("Failed to update password for user {}: {}", user_id, e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to change password.".to_string(),
+            )
+        })?;
+
+    info!("User {} changed their password", user_id);
+    Ok(StatusCode::OK)
 }
 
 /// Verifies `session_id` belongs to `user_id` before a handler touches its
@@ -840,6 +915,7 @@ async fn main() {
         .route("/users/logout", post(logout_user))
         .route("/users/me", get(get_me))
         .route("/users/delete", post(delete_user))
+        .route("/users/change-password", post(change_password))
         .route("/run-python-script", get(run_python_script_handler))
         .route("/api/sessions", post(create_session))
         .route("/api/sessions", get(get_all_sessions))

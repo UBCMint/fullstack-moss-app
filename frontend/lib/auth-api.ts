@@ -4,6 +4,7 @@ export type PublicUser = {
     id: number;
     username: string;
     email: string;
+    created_at: string;
 };
 
 export type AuthErrorKind =
@@ -109,4 +110,22 @@ export async function getMe(): Promise<PublicUser> {
         { reportSessionExpiry: true }
     );
     return (await response.json()) as PublicUser;
+}
+
+export async function changePassword(data: {
+    currentPassword: string;
+    newPassword: string;
+}): Promise<void> {
+    await authFetch('/api/users/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            current_password: data.currentPassword,
+            new_password: data.newPassword,
+        }),
+    });
+}
+
+export async function deleteAccount(): Promise<void> {
+    await authFetch('/api/users/delete', { method: 'POST' });
 }

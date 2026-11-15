@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useGlobalContext } from '@/context/GlobalContext';
 import { useAuth } from '@/context/AuthContext';
 import ExportDialog from '@/components/ui/export-dialog';
@@ -107,6 +108,9 @@ export default function AppHeader() {
                             </div>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="mx-4">
+                            <DropdownMenuItem asChild>
+                                <Link href="/profile">Profile</Link>
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => logout()}>
                                 Log out
                             </DropdownMenuItem>

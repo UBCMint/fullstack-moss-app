@@ -10,6 +10,7 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub password_hash: String, // store hashed password
+    pub created_at: DateTime<Utc>,
 }
 
 // Struct for creating a user (used for data coming INTO the API)
@@ -38,6 +39,13 @@ pub struct UpdateUser {
     pub username: Option<String>,
     pub email: Option<String>,
     pub password: Option<String>, // new field for updating password
+}
+
+// Deliberately does NOT derive Debug: both fields are raw passwords.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
 }
 
 // Struct for session data

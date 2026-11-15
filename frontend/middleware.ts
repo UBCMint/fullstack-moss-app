@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const SESSION_COOKIE_NAME = 'moss_session';
 const AUTH_PAGES = ['/login', '/signup'];
+const PROTECTED_PREFIXES = ['/home', '/profile'];
 
 // Only checks that the cookie exists — the back-end (AuthUser extractor) is
 // the one that decides whether it's actually still valid. A present-but-
@@ -11,7 +12,10 @@ export function middleware(request: NextRequest) {
     const hasSessionCookie = request.cookies.has(SESSION_COOKIE_NAME);
     const { pathname } = request.nextUrl;
 
-    if (pathname.startsWith('/home') && !hasSessionCookie) {
+    const isProtected = PROTECTED_PREFIXES.some((prefix) =>
+        pathname.startsWith(prefix)
+    );
+    if (isProtected && !hasSessionCookie) {
         return NextResponse.redirect(new URL('/login', request.url));
     }
 
@@ -23,5 +27,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/home/:path*', '/login', '/signup'],
+    matcher: ['/home/:path*', '/profile/:path*', '/login', '/signup'],
 };

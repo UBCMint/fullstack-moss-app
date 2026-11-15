@@ -85,7 +85,7 @@ pub async fn add_user(
     info!("Adding user: {} ({})", new_user.username, new_user.email);
     let user = sqlx::query_as!(
         User,
-        "INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, password_hash",
+        "INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, password_hash, created_at",
         new_user.username,
         new_user.email,
         password_hash
@@ -99,7 +99,7 @@ pub async fn add_user(
 pub async fn get_user_by_email(client: &DbClient, email: &str) -> Result<User, Error> {
     sqlx::query_as!(
         User,
-        "SELECT id, username, email, password_hash FROM users WHERE email = $1",
+        "SELECT id, username, email, password_hash, created_at FROM users WHERE email = $1",
         email
     )
     .fetch_one(&**client)
@@ -109,11 +109,29 @@ pub async fn get_user_by_email(client: &DbClient, email: &str) -> Result<User, E
 pub async fn get_user_by_id(client: &DbClient, user_id: i32) -> Result<User, Error> {
     sqlx::query_as!(
         User,
-        "SELECT id, username, email, password_hash FROM users WHERE id = $1",
+        "SELECT id, username, email, password_hash, created_at FROM users WHERE id = $1",
         user_id
     )
     .fetch_one(&**client)
     .await
+}
+
+/// Updates a user's password hash directly (the caller is responsible for
+/// verifying the current password first — see `change_password` in
+/// api-server). Only the password changes; everything else is untouched.
+pub async fn update_password(
+    client: &DbClient,
+    user_id: i32,
+    new_password_hash: String,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "UPDATE users SET password_hash = $1 WHERE id = $2",
+        new_password_hash,
+        user_id
+    )
+    .execute(&**client)
+    .await?;
+    Ok(())
 }
 
 /// Create a session row for a logged-in user. Only the SHA-256 hash of the
@@ -279,7 +297,7 @@ pub async fn update_user(
         (Some(username), Some(email), Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, email = $2, password_hash = $3 WHERE id = $4 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1, email = $2, password_hash = $3 WHERE id = $4 RETURNING id, username, email, password_hash, created_at",
                 username,
                 email,
                 password_hash,
@@ -291,7 +309,7 @@ pub async fn update_user(
         (Some(username), Some(email), None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email, password_hash, created_at",
                 username,
                 email,
                 user_id
@@ -302,7 +320,7 @@ pub async fn update_user(
         (Some(username), None, Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash, created_at",
                 username,
                 password_hash,
                 user_id
@@ -313,7 +331,7 @@ pub async fn update_user(
         (None, Some(email), Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET email = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                "UPDATE users SET email = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash, created_at",
                 email,
                 password_hash,
                 user_id
@@ -324,7 +342,7 @@ pub async fn update_user(
         (Some(username), None, None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email, password_hash, created_at",
                 username,
                 user_id
             )
@@ -334,7 +352,7 @@ pub async fn update_user(
         (None, Some(email), None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                "UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email, password_hash, created_at",
                 email,
                 user_id
             )
@@ -344,7 +362,7 @@ pub async fn update_user(
         (None, None, Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username, email, password_hash, created_at",
                 password_hash,
                 user_id
             )
