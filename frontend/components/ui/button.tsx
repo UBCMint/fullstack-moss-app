@@ -19,9 +19,12 @@ const buttonVariants = cva(
                     'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
                 ghost: 'hover:bg-accent hover:text-accent-foreground',
                 link: 'text-primary underline-offset-4 hover:underline',
-                // Filled teal action inside a pipeline node (matches "Start labeling"), e.g. "Preview" in chart node
+                // Filled teal action inside a pipeline node, e.g. "Preview" and "Start labeling"
                 nodeAction:
                     'font-normal text-white bg-[#2E7B75] border border-[#2E7B75] rounded-md hover:bg-[#256560] focus-visible:ring-2 focus-visible:ring-[#2E7B75] focus-visible:ring-offset-2',
+                // Outlined counterpart of nodeAction for an active toggle, e.g. "Stop labeling"
+                nodeActionOutline:
+                    'font-normal text-[#2E7B75] bg-white border border-[#2E7B75] rounded-md hover:bg-[#EAF1F0] focus-visible:ring-2 focus-visible:ring-[#2E7B75] focus-visible:ring-offset-2',
             },
             size: {
                 default: 'h-9 px-4 py-2',
