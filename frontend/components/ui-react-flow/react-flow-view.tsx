@@ -21,6 +21,7 @@ import {
     applyEdgeChanges,
     OnEdgesChange,
     OnConnect,
+    type OnConnectEnd,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import SourceNode from '@/components/nodes/source-node';
@@ -42,7 +43,11 @@ import { useEffect, useState } from 'react';
 import { X, Ellipsis, RotateCw, RotateCcw, LockKeyhole } from 'lucide-react';
 import { Alert, AlertDescription } from '../ui/alert';
 import { useWebSocketContext } from '@/context/WebSocketContext';
-import { preparePipelineStart } from '@/lib/pipeline-validation';
+import {
+    WINDOW_AFTER_SOURCE_MESSAGE,
+    isWindowInputAllowed,
+    preparePipelineStart,
+} from '@/lib/pipeline-validation';
 import { useNotifications } from '@/components/notifications';
 import { useGlobalContext } from '@/context/GlobalContext';
 
@@ -348,8 +353,8 @@ const ReactFlowInterface = () => {
             }
 
             // Block window node not directly connecting to source
-            if (targetNode.type === 'window-node') {
-                return sourceNode.type === 'source-node';
+            if (!isWindowInputAllowed(sourceNode.type, targetNode.type)) {
+                return false;
             }
 
             // Output nodes are terminal: block any outgoing edge from them
@@ -363,6 +368,20 @@ const ReactFlowInterface = () => {
             return true;
         },
         [nodes, edges, dataStreaming]
+    );
+
+    // isValidConnection rejects silently, so explain the window rule when a drag
+    // ends on the window node without producing a connection.
+    const onConnectEnd: OnConnectEnd = useCallback(
+        (_event, connectionState) => {
+            if (dataStreaming || connectionState.isValid !== false) return;
+            const { fromNode, toNode } = connectionState;
+            if (!isWindowInputAllowed(fromNode?.type, toNode?.type)) {
+                setPipelineWarning(WINDOW_AFTER_SOURCE_MESSAGE);
+                setShowPipelineWarning(true);
+            }
+        },
+        [dataStreaming]
     );
 
     return (
@@ -385,6 +404,7 @@ const ReactFlowInterface = () => {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                onConnectEnd={onConnectEnd}
                 onDrop={onDrop}
                 onDragOver={onDragOver}
                 connectionMode={ConnectionMode.Strict}
