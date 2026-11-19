@@ -3,7 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 use serde::{Deserialize, Serialize};
 
-use crate::lsl::ProcessingConfig;
+use crate::pipeline::MlTap;
 
 pub struct PipelineGateway {
     manager_module: Py<PyModule>,
@@ -14,6 +14,38 @@ pub struct PipelineOutput {
     pub overall_label: String,
     pub confidence: f64,
     pub task: String,
+}
+
+// The model's preprocessing in manager.py uses the closest filter before the ML node, or the
+// defaults (quality check on, 1-50 Hz FIR) if there isn't one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MlRequest {
+    pub task: String,
+    pub sfreq: f64,
+    pub quality_check: bool,
+    pub use_iir: bool,
+    pub l_freq: f64,
+    pub h_freq: f64,
+}
+
+impl MlRequest {
+    pub fn new(tap: &MlTap, sfreq: f64) -> Self {
+        let filter = tap.upstream_filter.as_ref().filter(|f| f.apply_bandpass);
+        let l_freq = filter.and_then(|f| f.l_freq).map_or(1.0, f64::from);
+        let h_freq = filter.and_then(|f| f.h_freq).map_or(50.0, f64::from);
+        Self {
+            task: tap.config.model.trim().to_lowercase(),
+            sfreq,
+            quality_check: tap
+                .upstream_filter
+                .as_ref()
+                .is_none_or(|f| f.apply_quality_check),
+            use_iir: filter.is_some_and(|f| f.use_iir),
+            l_freq,
+            // manager.py rejects cutoffs at or above nyquist (possible after a resample node)
+            h_freq: h_freq.min(0.45 * sfreq),
+        }
+    }
 }
 
 impl PipelineGateway {
@@ -33,14 +65,14 @@ impl PipelineGateway {
 
     pub fn call_pipeline(
         &self,
-        config: &ProcessingConfig,
+        request: &MlRequest,
         signals: &[Vec<f64>],
     ) -> Result<Option<PipelineOutput>, String> {
         Python::with_gil(|py| {
             let module = self.manager_module.as_ref(py);
 
-            // Translate ProcessingConfig into the dict format manager.py expects
-            let pipeline_dict = build_python_pipeline_dict(py, config)?;
+            // Translate the request into the dict format manager.py expects
+            let pipeline_dict = build_python_pipeline_dict(py, request)?;
 
             // Transpose signals from (4, n_samples) → (n_samples, 4) as manager.py expects
             let transposed = transpose_signals(signals);
@@ -101,61 +133,65 @@ impl PipelineGateway {
     }
 }
 
-// Translates ProcessingConfig into the dict format manager.py expects.
+// Translates an MlRequest into the dict format manager.py expects:
+// [signal quality check] -> bandpass filter (also resamples to 200 Hz and segments) -> ml.
 fn build_python_pipeline_dict<'py>(
     py: Python<'py>,
-    config: &ProcessingConfig,
+    request: &MlRequest,
 ) -> Result<&'py PyDict, String> {
+    fn node<'py>(
+        py: Python<'py>,
+        node_type: &str,
+        config: &[(&str, PyObject)],
+    ) -> Result<&'py PyDict, String> {
+        let config_dict = PyDict::new(py);
+        for (key, value) in config {
+            config_dict
+                .set_item(*key, value)
+                .map_err(|e| format!("Failed to set {}: {}", key, e))?;
+        }
+        let node_dict = PyDict::new(py);
+        node_dict
+            .set_item("type", node_type)
+            .map_err(|e| format!("Failed to set node type: {}", e))?;
+        node_dict
+            .set_item("config", config_dict)
+            .map_err(|e| format!("Failed to set node config: {}", e))?;
+        Ok(node_dict)
+    }
+
     let nodes_list = PyList::empty(py);
-
-    // Configurable Quality Check Node
-    if config.apply_quality_check {
-        let quality_config = PyDict::new(py);
-        quality_config
-            .set_item("sfreq", config.sfreq)
-            .map_err(|e| format!("Failed to set sfreq: {}", e))?;
-
-        let node_dict = PyDict::new(py);
-        node_dict
-            .set_item("type", "signal quality check")
-            .map_err(|e| format!("Failed to set node type: {}", e))?;
-        node_dict
-            .set_item("config", quality_config)
-            .map_err(|e| format!("Failed to set node config: {}", e))?;
-
+    let push = |n: &PyDict| {
         nodes_list
-            .append(node_dict)
-            .map_err(|e| format!("Failed to append quality check node: {}", e))?;
+            .append(n)
+            .map_err(|e| format!("Failed to append node: {}", e))
+    };
+
+    if request.quality_check {
+        push(node(
+            py,
+            "signal quality check",
+            &[("sfreq", request.sfreq.into_py(py))],
+        )?)?;
     }
-
-    // Bandpass filter configuration
-    if config.apply_bandpass {
-        let bandpass_config = PyDict::new(py);
-        bandpass_config
-            .set_item("method", if config.use_iir { "IIR" } else { "FIR" })
-            .map_err(|e| format!("Failed to set method: {}", e))?;
-        bandpass_config
-            .set_item("Filter", config.h_freq.unwrap_or(50.0))
-            .map_err(|e| format!("Failed to set Filter: {}", e))?;
-        bandpass_config
-            .set_item("low_cut_hz", config.l_freq.unwrap_or(1.0))
-            .map_err(|e| format!("Failed to set low_cut_hz: {}", e))?;
-        bandpass_config
-            .set_item("src_fs", config.sfreq)
-            .map_err(|e| format!("Failed to set src_fs: {}", e))?;
-
-        let node_dict = PyDict::new(py);
-        node_dict
-            .set_item("type", "bandpass filter")
-            .map_err(|e| format!("Failed to set node type: {}", e))?;
-        node_dict
-            .set_item("config", bandpass_config)
-            .map_err(|e| format!("Failed to set node config: {}", e))?;
-
-        nodes_list
-            .append(node_dict)
-            .map_err(|e| format!("Failed to append bandpass node: {}", e))?;
-    }
+    push(node(
+        py,
+        "bandpass filter",
+        &[
+            (
+                "method",
+                if request.use_iir { "IIR" } else { "FIR" }.into_py(py),
+            ),
+            ("Filter", request.h_freq.into_py(py)),
+            ("low_cut_hz", request.l_freq.into_py(py)),
+            ("src_fs", request.sfreq.into_py(py)),
+        ],
+    )?)?;
+    push(node(
+        py,
+        "ml",
+        &[("task", request.task.as_str().into_py(py))],
+    )?)?;
 
     let pipeline_dict = PyDict::new(py);
     pipeline_dict
@@ -183,7 +219,46 @@ pub fn transpose_signals(signals: &[Vec<f64>]) -> Vec<Vec<f64>> {
 
 #[cfg(test)]
 mod tests {
-    use super::transpose_signals;
+    use super::{transpose_signals, MlRequest};
+    use crate::pipeline::{MLConfig, MlTap, PreprocessingConfig};
+
+    fn tap(upstream_filter: Option<PreprocessingConfig>) -> MlTap {
+        MlTap {
+            node_id: "ml".into(),
+            config: MLConfig {
+                model: "Stress".into(),
+            },
+            after_stage: 1,
+            upstream_filter,
+        }
+    }
+
+    #[test]
+    fn ml_request_uses_model_as_task_and_upstream_filter() {
+        let r = MlRequest::new(
+            &tap(Some(PreprocessingConfig {
+                apply_quality_check: false,
+                use_iir: true,
+                l_freq: Some(4.0),
+                h_freq: Some(30.0),
+                ..Default::default()
+            })),
+            256.0,
+        );
+        assert_eq!(r.task, "stress");
+        assert!(!r.quality_check);
+        assert!(r.use_iir);
+        assert_eq!((r.l_freq, r.h_freq), (4.0, 30.0));
+    }
+
+    #[test]
+    fn ml_request_defaults_and_clamps_to_nyquist() {
+        let r = MlRequest::new(&tap(None), 64.0);
+        assert!(r.quality_check);
+        assert!(!r.use_iir);
+        assert_eq!(r.l_freq, 1.0);
+        assert_eq!(r.h_freq, 0.45 * 64.0);
+    }
 
     #[test]
     fn test_transpose_four_channels() {
