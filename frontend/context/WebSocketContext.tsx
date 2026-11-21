@@ -9,7 +9,7 @@ import React, {
     ReactNode,
 } from 'react';
 import { useGlobalContext } from './GlobalContext';
-import { PipelinePayload } from '@/lib/pipeline';
+import { isPipelineServerError, PipelinePayload } from '@/lib/pipeline';
 
 export type DataPoint = {
     time: string;
@@ -129,12 +129,24 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
                 ws.close();
                 isClosingGracefullyRef.current = false;
             } else {
+                let parsed: unknown;
                 try {
-                    const points = normalizeBatch(JSON.parse(message));
-                    subscribersRef.current.forEach((fn) => fn(points));
+                    parsed = JSON.parse(message);
                 } catch (e) {
                     console.error('Failed to parse WebSocket message:', e);
+                    return;
                 }
+                // pipeline rejected or stream failed; the canvas shows the message
+                if (isPipelineServerError(parsed)) {
+                    console.error('Pipeline error from server:', parsed);
+                    window.dispatchEvent(
+                        new CustomEvent('pipeline-error', { detail: parsed })
+                    );
+                    setDataStreaming(false);
+                    return;
+                }
+                const points = normalizeBatch(parsed as WebSocketBatch);
+                subscribersRef.current.forEach((fn) => fn(points));
             }
         };
 
@@ -168,7 +180,7 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
             }
             wsRef.current = null;
         };
-    }, [dataStreaming, activeSessionId]);
+    }, [dataStreaming, activeSessionId, setDataStreaming]);
 
     return (
         <WebSocketContext.Provider value={{ subscribe, startPipeline }}>

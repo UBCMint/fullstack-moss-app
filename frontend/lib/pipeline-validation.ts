@@ -3,14 +3,20 @@ import type { PipelinePayload } from './pipeline';
 
 // defines backend types for React Flow types
 const typeMap: Record<string, string> = {
-    'filter-node': 'preprocessing',
+    'source-node': 'source',
     'window-node': 'window',
+    'filter-node': 'preprocessing',
+    'resampling-node': 'resample',
+    'artifact-node': 'artifact',
+    'label-node': 'label',
     'machine-learning-node': 'ml',
+    'signal-graph-node': 'signal_graph',
 };
 
 // allow for defaults of the filtering node to still be applied if user doesn't specify them in the UI
 const DEFAULT_PROCESSING = {
     apply_bandpass: false,
+    apply_quality_check: true,
     use_iir: false,
     l_freq: null,
     h_freq: null,
@@ -23,12 +29,33 @@ const DEFAULT_WINDOWING = {
     overlap_size: 0,
 };
 
-// Only these nodes are executed by the backend pipeline
-const PIPELINE_NODE_TYPES = new Set([
-    'window-node',
-    'filter-node',
-    'machine-learning-node',
-]);
+type NodeData = {
+    config?: Record<string, unknown>;
+    rate?: string;
+    customRate?: number;
+};
+
+// 'input' keeps the original rate
+const resampleConfig = (data: NodeData) => {
+    const rate = data.rate ?? '256';
+    if (rate === 'input') return { target_hz: null };
+    const hz = rate === 'custom' ? data.customRate : Number(rate);
+    return { target_hz: Number.isFinite(hz) ? hz : null };
+};
+
+const nodeConfig = (type: string, data: NodeData): Record<string, unknown> => {
+    const config = data.config ?? {};
+    switch (type) {
+        case 'preprocessing':
+            return { ...DEFAULT_PROCESSING, ...config };
+        case 'window':
+            return { ...DEFAULT_WINDOWING, ...config };
+        case 'resample':
+            return resampleConfig(data);
+        default:
+            return config;
+    }
+};
 
 const topoSort = (nodes: Node[], edges: Edge[]) => {
     const incoming = new Map<string, number>(); // count of incoming edges for each node
@@ -177,40 +204,28 @@ export const validatePipeline = (nodes: Node[], edges: Edge[]) => {
     return { errors, warnings };
 };
 
-// Converts React Flow state to backend pipeline format
+// Converts React Flow state to backend pipeline format (nodes + edges)
 export const buildPipelinePayload = (
     nodes: Node[],
     edges: Edge[],
     sessionId: string
 ): PipelinePayload => {
-    const orderedNodes = topoSort(nodes, edges); // Ensure nodes are in execution order
+    const sent = topoSort(nodes, edges).filter((n) => typeMap[n.type ?? '']);
+    const sentIds = new Set(sent.map((n) => n.id));
 
     return {
         session_id: sessionId,
-        nodes: orderedNodes
-            .filter((n) => PIPELINE_NODE_TYPES.has(n.type ?? ''))
-            .map((n) => {
-                const type = typeMap[n.type ?? ''] ?? n.type ?? 'unknown'; // Map to backend type
-                const config =
-                    (n.data as { config?: Record<string, unknown> })?.config ??
-                    {};
-
-                if (type == 'preprocessing') {
-                    return {
-                        type,
-                        config: { ...DEFAULT_PROCESSING, ...config },
-                    }; //apply defaults if not specified by user
-                }
-
-                if (type == 'window') {
-                    return {
-                        type,
-                        config: { ...DEFAULT_WINDOWING, ...config },
-                    };
-                }
-
-                return { type, config };
-            }),
+        nodes: sent.map((n) => {
+            const type = typeMap[n.type ?? ''];
+            return {
+                id: n.id,
+                type,
+                config: nodeConfig(type, (n.data ?? {}) as NodeData),
+            };
+        }),
+        edges: edges
+            .filter((e) => sentIds.has(e.source) && sentIds.has(e.target))
+            .map((e) => ({ source: e.source, target: e.target })),
     };
 };
 

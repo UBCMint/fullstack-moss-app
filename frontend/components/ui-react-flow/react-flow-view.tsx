@@ -49,6 +49,7 @@ import {
     preparePipelineStart,
 } from '@/lib/pipeline-validation';
 import { useNotifications } from '@/components/notifications';
+import type { PipelineServerError } from '@/lib/pipeline';
 import { useGlobalContext } from '@/context/GlobalContext';
 
 const nodeTypes = {
@@ -248,6 +249,28 @@ const ReactFlowInterface = () => {
         notifications,
         startPipeline,
     ]);
+
+    // show server errors and select the node they're about
+    useEffect(() => {
+        const onPipelineError = (event: Event) => {
+            const error = (event as CustomEvent<PipelineServerError>).detail;
+            notifications.error({
+                title:
+                    error.code === 'invalid_pipeline'
+                        ? 'The pipeline could not start'
+                        : 'The stream stopped',
+                description: error.message,
+            });
+            if (error.node_id) {
+                setNodes((nds) =>
+                    nds.map((n) => ({ ...n, selected: n.id === error.node_id }))
+                );
+            }
+        };
+        window.addEventListener('pipeline-error', onPipelineError);
+        return () =>
+            window.removeEventListener('pipeline-error', onPipelineError);
+    }, [notifications, setNodes]);
 
     const onNodesChange: OnNodesChange = useCallback(
         (changes) => {
