@@ -4,6 +4,7 @@ use axum::http::{header, HeaderMap, HeaderValue};
 use axum::response::IntoResponse;
 use axum::{
     body::Bytes,
+    extract::DefaultBodyLimit,
     extract::Path,
     extract::Query,
     extract::State,
@@ -31,7 +32,7 @@ use tokio::net::TcpListener;
 // shared logic library
 use shared_logic::db::{
     export_eeg_data_as_csv, get_earliest_eeg_timestamp, get_eeg_data_by_range,
-    get_time_labels_by_range, initialize_connection, DbClient,
+    get_time_labels_by_range, initialize_connection, DbClient, EegImportError, MAX_IMPORT_BYTES,
 };
 use shared_logic::models::{
     ChangePasswordRequest, EegDataQuery, EegDataRow, FrontendState, NewTimeLabel, NewUser, Session,
@@ -147,10 +148,17 @@ struct ExportEEGRequest {
 
 #[derive(Deserialize)]
 pub struct ExportOptions {
+    /// Only "csv" is supported.
     format: String,
+    /// Write the `time,channel1,...` header row. Defaults to true.
+    #[serde(default = "default_true", alias = "includeHeader")]
     include_header: bool,
     start_time: Option<DateTime<Utc>>,
     end_time: Option<DateTime<Utc>>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -192,7 +200,11 @@ pub async fn get_eeg_time_range(
                 Ok(None) => {
                     return Err((
                         StatusCode::NOT_FOUND,
-                        format!("No EEG data found for session {}", session_id),
+                        format!(
+                            "Session {} has no recorded EEG data to export. \
+                             Record or import data first.",
+                            session_id
+                        ),
                     ))
                 }
                 Err(e) => {
@@ -208,7 +220,12 @@ pub async fn get_eeg_time_range(
     if start_time > end_time {
         return Err((
             StatusCode::BAD_REQUEST,
-            "start_time cannot be after end_time".to_string(),
+            format!(
+                "The export start time ({}) is after the end time ({}). \
+                 Choose a start time that is earlier than the end time.",
+                start_time.to_rfc3339(),
+                end_time.to_rfc3339()
+            ),
         ));
     }
 
@@ -655,7 +672,10 @@ async fn export_eeg_data(
     if request.options.format.to_lowercase() != "csv" {
         return Err((
             StatusCode::BAD_REQUEST,
-            format!("Unsupported export format: {}", request.options.format),
+            format!(
+                "Unsupported export format \"{}\". The only supported format is \"csv\".",
+                request.options.format
+            ),
         ));
     }
 
@@ -674,7 +694,19 @@ async fn export_eeg_data(
     )
     .await
     {
-        Ok(csv_data) => csv_data,
+        Ok(Some(csv_data)) => csv_data,
+        Ok(None) => {
+            return Err((
+                StatusCode::NOT_FOUND,
+                format!(
+                    "Session {} has no EEG data between {} and {}, so there is nothing to export. \
+                     Try a longer time range or choose \"All data\".",
+                    session_id,
+                    start_time.to_rfc3339(),
+                    end_time.to_rfc3339()
+                ),
+            ));
+        }
         Err(e) => {
             error!("Failed to export EEG data: {}", e);
             return Err((
@@ -801,25 +833,57 @@ async fn get_eeg_data(
 }
 
 // Handler for POST /api/sessions/{session_id}/eeg_data/import
+//
+// Accepts the raw CSV as the request body (max MAX_IMPORT_BYTES). Format rules are
+// enforced in `shared_logic::db::parse_eeg_csv` and documented in docs/eeg-csv-format.md.
+// Invalid files return 400 with {"message", "errors": [{line, column, value, problem}],
+// "total_errors"} so the UI can point at the exact row/column.
 async fn import_eeg_data(
     State(app_state): State<AppState>,
     Path(session_id): Path<i32>,
     AuthUser(user_id): AuthUser,
-    // we expect the CSV data to be sent as raw text in the body of the request
     body: Bytes,
-) -> Result<Json<Value>, (StatusCode, String)> {
-    ensure_session_owner(&app_state.db_client, session_id, user_id).await?;
-
-    shared_logic::db::import_eeg_data_from_csv(&app_state.db_client, session_id, &body)
+) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
+    ensure_session_owner(&app_state.db_client, session_id, user_id)
         .await
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to import EEG data: {}", e),
-            )
-        })?;
+        .map_err(|(status, message)| (status, Json(json!({ "message": message }))))?;
 
-    Ok(Json(json!({"status": "success"})))
+    match shared_logic::db::import_eeg_data_from_csv(&app_state.db_client, session_id, &body).await
+    {
+        Ok(summary) => Ok(Json(json!({
+            "status": "success",
+            "rows_read": summary.rows_read,
+            "rows_inserted": summary.rows_inserted,
+        }))),
+        Err(e @ EegImportError::InvalidCsv { .. }) => {
+            let message = e.summary();
+            let EegImportError::InvalidCsv {
+                errors,
+                total_errors,
+            } = e
+            else {
+                unreachable!()
+            };
+            Err((
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "message": message,
+                    "errors": errors,
+                    "total_errors": total_errors,
+                })),
+            ))
+        }
+        Err(e @ EegImportError::Database(_)) => {
+            error!(
+                "Failed to import EEG data for session {}: {}",
+                session_id, e
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"message": e.summary()})),
+            ))
+        }
+    }
 }
 
 async fn run_python_script_handler() -> Result<Json<Value>, (StatusCode, String)> {
@@ -939,7 +1003,7 @@ async fn main() {
         )
         .route(
             "/api/sessions/:session_id/eeg_data/import",
-            post(import_eeg_data),
+            post(import_eeg_data).layer(DefaultBodyLimit::max(MAX_IMPORT_BYTES)),
         )
         // Share application state with all handlers
         .with_state(app_state);

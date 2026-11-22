@@ -188,9 +188,33 @@ export default function ExportDialog({
                         </p>
                     )}
 
-                    <p className="text-sm text-gray-400 font-medium mb-3">
-                        Data will be exported as CSV format.
-                    </p>
+                    <div className="text-xs text-gray-500 mb-3 space-y-1">
+                        <p className="font-semibold text-gray-700">
+                            Export format
+                        </p>
+                        <ul className="list-disc pl-4 space-y-0.5">
+                            <li>
+                                CSV (UTF-8, comma-separated), oldest row first.
+                            </li>
+                            <li>
+                                Header:{' '}
+                                <code className="font-mono">
+                                    time,channel1,channel2,channel3,channel4
+                                </code>
+                            </li>
+                            <li>
+                                <b>time</b> is UTC in RFC 3339, e.g.{' '}
+                                <code className="font-mono">
+                                    2024-01-15T13:45:00+00:00
+                                </code>
+                                ; channels are whole numbers.
+                            </li>
+                            <li>
+                                The file can be re-imported as-is. If the chosen
+                                range has no data, nothing is exported.
+                            </li>
+                        </ul>
+                    </div>
 
                     <Button
                         onClick={handleExport}
