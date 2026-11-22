@@ -175,9 +175,9 @@ change, `buildPipelinePayload`:
    `target_hz`.
 
 `validatePipeline` runs first and blocks sending on structural errors (no source
-node, no window node, ML not preceded by a filter node, cycles, etc.) — see the
-function for the full rule set — and only warns (doesn't block) on ordering
-issues like a filter node wired directly to source.
+node, no window node, ML not preceded by a filter node, cycles, etc.). Every
+connection rule it applies is the same one the editor applies while you drag —
+see [Pipeline connection rules](#pipeline-connection-rules).
 
 **Known mismatch with the backend contract** (also called out in
 `pipeline-nodes.md`): `filter-node.tsx`'s `FilterConfig` interface and every
@@ -188,6 +188,54 @@ defaulted — so the init message fails to parse and the session never starts
 whenever a filter node is in the graph. Fixing this needs both this file and
 `DEFAULT_PROCESSING` updated, and a decision for what `apply_quality_check`
 should default to in the UI.
+
+## Pipeline connection rules
+
+When a connection is blocked, or a node can't run because of what it's connected
+to, the user should see **one sentence saying what to do**. All the rules live
+in `lib/pipeline-validation.ts`, and everything else calls them:
+
+| Caller                                                 | What it uses                                            | What the user sees                                              |
+| ------------------------------------------------------ | ------------------------------------------------------- | --------------------------------------------------------------- |
+| `isValidConnection` / `onConnect` in `react-flow-view` | `checkNodeConnection`                                   | The drag snaps back.                                            |
+| `onConnectEnd` in `react-flow-view`                    | `checkNodeConnection` (same result, its `message`)      | The message in the amber alert.                                 |
+| `validatePipeline` (when Start is pressed)             | `checkConnection` for every edge, plus board-wide rules | The error list, and a red outline plus the message on the node. |
+| Node cards (`useNodeConnection`)                       | `getNodeConnectionStatus`                               | Black/grey circles, and a dismissable hint under grey nodes.    |
+
+`checkConnection(sourceType, targetType, sourceHasOtherOutgoing)` returns
+`{ allowed: true }` or `{ allowed: false, rule, message, blame }`. `blame` says
+which end of the connection to highlight when the problem is found at Start.
+
+| Rule                                                     | Message / where it is shown                                                                   |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Nothing connects _into_ Source                           | `INTO_SOURCE_MESSAGE` (drag, Start)                                                           |
+| Source has only one outgoing connection                  | `SOURCE_SINGLE_OUTPUT_MESSAGE` (drag, Start)                                                  |
+| Source only connects to Window                           | `SOURCE_FEEDS_WINDOW_MESSAGE` (drag, Start)                                                   |
+| Only Source feeds Window                                 | `WINDOW_AFTER_SOURCE_MESSAGE` (drag, Start)                                                   |
+| ML and Chart are endpoints                               | `OUTPUT_ENDPOINT_MESSAGE` (drag, Start)                                                       |
+| ML needs a Filter directly before it                     | `ML_NEEDS_FILTER_MESSAGE` (drag, Start); in-card text on the ML node                          |
+| Exactly one Source and one Window                        | Start errors, both nodes highlighted                                                          |
+| No cycles                                                | Start error, nodes on the cycle highlighted                                                   |
+| Filter/Resampling/Chart/Label need a path back to Source | `NOT_CONNECTED_MESSAGE`, a hint under the node (`components/ui-react-flow/node-feedback.tsx`) |
+| Disabled or unknown node types                           | Start error, node highlighted                                                                 |
+
+Because Source has exactly one outgoing connection, Window is required, and
+Window must come straight after Source, every valid pipeline starts **Source →
+Window**. Dragging Source to anything else is blocked, which is why there are no
+longer "Filter should come after Window" or "Outputs should come after
+preprocessing" warnings: those layouts can't be built.
+
+### Adding a rule or a node
+
+1. Add a message constant next to the others in `lib/pipeline-validation.ts` and
+   a branch in `checkConnection` (or, for a rule about a node's own state, in
+   `getNodeConnectionStatus`). Never re-implement the check in a component.
+2. Add a test in `lib/pipeline-validation.test.ts`: the blocked message, plus
+   the Start-time error and which node it lands on.
+3. For a new node type, call `useNodeConnection(id)` for its connected state,
+   and add its type to `HINTED_NODE_TYPES` in `node-feedback.tsx` if it should
+   show the "connect this node" hint. New node types are wrapped with
+   `withNodeFeedback` in `react-flow-view.tsx` automatically.
 
 ## Saving/restoring the canvas
 
@@ -200,3 +248,35 @@ column — the backend doesn't know or care about its shape.
 `isFrontendWorkspaceState` guards the import path against malformed data
 (missing `id`/`type`/`data` on a node, missing `id`/`source`/`target` on an
 edge) before it's applied back onto the canvas.
+
+## Artifact node feature flag
+
+Artifact Node is disabled by default. Its implementation is retained, but it is
+hidden from the menu and excluded from editor node registration. This flag only
+enables the UI; artifact removal is still not integrated with backend
+processing.
+
+For Docker Compose, the frontend service explicitly sets
+`NEXT_PUBLIC_ENABLE_ARTIFACT_NODE: "false"` in `docker-compose.yml`. To enable
+the node, change that value to `"true"`. After changing it, run this from the
+repository root and refresh the browser:
+
+```sh
+docker compose up -d --force-recreate frontend
+```
+
+Restarting Docker Desktop is unnecessary, and `docker compose restart` alone
+does not apply changed environment variables. The current container runs the
+Next.js development server, so this flag change does not require an image
+rebuild.
+
+For local development outside Docker, set
+`NEXT_PUBLIC_ENABLE_ARTIFACT_NODE=true` in `frontend/.env.local` and restart the
+dev server. Only the exact value `true` enables the node; an unset variable or
+`false` disables it. A production Next.js build must be rebuilt after changing
+this public build-time variable.
+
+Starting a pipeline requires every node to have a recognized, enabled editor
+type. Saved/imported pipelines containing disabled or unknown types remain
+editable but cannot start until those nodes are removed. No automatic rewiring
+occurs.

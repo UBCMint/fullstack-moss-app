@@ -144,6 +144,8 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
         }
     };
 
+    // KNOWN GAP: no check that the caller owns this session — see "Known
+    // gap: no session-ownership check" in docs/websocket-protocol.md.
     let session_id = init_message.session_id.parse::<i32>().unwrap_or(0);
     let pipeline = Pipeline {
         nodes: init_message.nodes,

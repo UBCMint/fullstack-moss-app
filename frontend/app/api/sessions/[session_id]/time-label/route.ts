@@ -13,6 +13,7 @@ export async function GET(
     const response = await forwardToBackend({
         method: 'GET',
         path: `/api/sessions/${params.session_id}/time-label${search}`,
+        cookie: req.headers.get('cookie'),
     });
 
     return passthroughJsonResponse(response);
@@ -31,6 +32,7 @@ export async function POST(
         method: 'POST',
         path: `/api/sessions/${params.session_id}/time-label`,
         body,
+        cookie: req.headers.get('cookie'),
     });
 
     return passthroughJsonResponse(response);

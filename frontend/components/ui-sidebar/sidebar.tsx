@@ -1,4 +1,5 @@
 'use client';
+import { isNodeTypeEnabled } from '@/lib/node-availability';
 import { Card } from '@/components/ui/card';
 import {
     ResizableHandle,
@@ -108,7 +109,10 @@ export default function Sidebar() {
                 },
             ],
         },
-    ];
+    ].map((group) => ({
+        ...group,
+        nodes: group.nodes.filter((node) => isNodeTypeEnabled(node.id)),
+    }));
 
     const allNodes = NodeCategories.flatMap((c) => c.nodes);
 

@@ -2,6 +2,7 @@
 import { useGlobalContext } from '@/context/GlobalContext';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
+import { useNodeConnection } from '../use-node-connection';
 import ResamplingComboBox, { ResampleRate } from './resampling-combo-box';
 
 interface ResamplingNodeData {
@@ -24,7 +25,7 @@ export default function ResamplingNode({
     const [customRate, setCustomRate] = React.useState<number>(
         data?.customRate ?? 256
     );
-    const [isConnected, setIsConnected] = React.useState(false);
+    const { connected: isConnected } = useNodeConnection(id);
 
     const reactFlowInstance = useReactFlow();
     const { dataStreaming } = useGlobalContext();
@@ -49,46 +50,6 @@ export default function ResamplingNode({
             })
         );
     }, [rate, customRate]);
-
-    const checkConnectionStatus = React.useCallback(() => {
-        try {
-            const edges = reactFlowInstance.getEdges();
-            const nodes = reactFlowInstance.getNodes();
-            const reachesSource = (
-                nodeId: string,
-                visited: Set<string> = new Set()
-            ): boolean => {
-                if (visited.has(nodeId)) return false;
-                visited.add(nodeId);
-                for (const edge of edges.filter((e) => e.target === nodeId)) {
-                    const src = nodes.find((n) => n.id === edge.source);
-                    if (!src) continue;
-                    if (src.type === 'source-node') return true;
-                    if (reachesSource(src.id, visited)) return true;
-                }
-                return false;
-            };
-            setIsConnected(id ? reachesSource(id) : false);
-        } catch {
-            setIsConnected(false);
-        }
-    }, [id, reactFlowInstance]);
-
-    React.useEffect(() => {
-        checkConnectionStatus();
-        window.addEventListener(
-            'reactflow-edges-changed',
-            checkConnectionStatus
-        );
-        const interval = setInterval(checkConnectionStatus, 1000);
-        return () => {
-            window.removeEventListener(
-                'reactflow-edges-changed',
-                checkConnectionStatus
-            );
-            clearInterval(interval);
-        };
-    }, [checkConnectionStatus]);
 
     return (
         <fieldset disabled={dataStreaming} className="relative">

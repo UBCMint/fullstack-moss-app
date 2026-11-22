@@ -10,8 +10,10 @@ use dotenvy::dotenv;
 use log::{error, info, warn};
 use once_cell::sync::OnceCell;
 use rand_core::OsRng;
+use serde::Serialize;
 use serde_json::Value;
 use sqlx::{postgres::PgPoolOptions, Error, PgPool};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::time::{self, Duration};
 
@@ -85,7 +87,7 @@ pub async fn add_user(
     info!("Adding user: {} ({})", new_user.username, new_user.email);
     let user = sqlx::query_as!(
         User,
-        "INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, password_hash",
+        "INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, password_hash, created_at",
         new_user.username,
         new_user.email,
         password_hash
@@ -96,23 +98,88 @@ pub async fn add_user(
     Ok(user)
 }
 
-pub async fn get_users(client: &DbClient) -> Result<Vec<User>, Error> {
-    info!("Retrieving users...");
-    let users = sqlx::query_as!(User, "SELECT id, username, email, password_hash FROM users")
-        .fetch_all(&**client)
-        .await?;
-    info!("Retrieved {} users.", users.len());
-    Ok(users)
-}
-
 pub async fn get_user_by_email(client: &DbClient, email: &str) -> Result<User, Error> {
     sqlx::query_as!(
         User,
-        "SELECT id, username, email, password_hash FROM users WHERE email = $1",
+        "SELECT id, username, email, password_hash, created_at FROM users WHERE email = $1",
         email
     )
     .fetch_one(&**client)
     .await
+}
+
+pub async fn get_user_by_id(client: &DbClient, user_id: i32) -> Result<User, Error> {
+    sqlx::query_as!(
+        User,
+        "SELECT id, username, email, password_hash, created_at FROM users WHERE id = $1",
+        user_id
+    )
+    .fetch_one(&**client)
+    .await
+}
+
+/// Updates a user's password hash directly (the caller is responsible for
+/// verifying the current password first — see `change_password` in
+/// api-server). Only the password changes; everything else is untouched.
+pub async fn update_password(
+    client: &DbClient,
+    user_id: i32,
+    new_password_hash: String,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "UPDATE users SET password_hash = $1 WHERE id = $2",
+        new_password_hash,
+        user_id
+    )
+    .execute(&**client)
+    .await?;
+    Ok(())
+}
+
+/// Create a session row for a logged-in user. Only the SHA-256 hash of the
+/// session token is stored — the raw token is never persisted.
+pub async fn create_auth_session(
+    client: &DbClient,
+    user_id: i32,
+    token_hash: &str,
+    expires_at: DateTime<Utc>,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
+        token_hash,
+        user_id,
+        expires_at
+    )
+    .execute(&**client)
+    .await?;
+    Ok(())
+}
+
+/// Returns the user id for a non-expired session, or `None` if the token is
+/// unknown or has expired.
+pub async fn get_auth_session_user_id(
+    client: &DbClient,
+    token_hash: &str,
+) -> Result<Option<i32>, Error> {
+    let row = sqlx::query!(
+        "SELECT user_id FROM auth_sessions WHERE token_hash = $1 AND expires_at > now()",
+        token_hash
+    )
+    .fetch_optional(&**client)
+    .await?;
+    Ok(row.map(|r| r.user_id))
+}
+
+/// Delete a session row (logout). Not finding a matching row is not an
+/// error — the session may already be expired or already logged out.
+pub async fn delete_auth_session(client: &DbClient, token_hash: &str) -> Result<(), Error> {
+    sqlx::query!(
+        "DELETE FROM auth_sessions WHERE token_hash = $1",
+        token_hash
+    )
+    .execute(&**client)
+    .await?;
+    Ok(())
 }
 
 /// Insert a new record into testtime_series using chrono's DateTime<Utc>.
@@ -155,12 +222,27 @@ pub async fn insert_batch_eeg(
     session_id: i32,
     packet: &EEGDataPacket,
 ) -> Result<(), sqlx::Error> {
+    insert_eeg_rows(&**client, session_id, packet).await?;
+    Ok(())
+}
+
+/// Runs the batch INSERT on any executor (the pool, or a transaction) and
+/// returns how many rows were actually inserted. Rows whose
+/// (session_id, time) already exists are skipped.
+async fn insert_eeg_rows<'e, E>(
+    executor: E,
+    session_id: i32,
+    packet: &EEGDataPacket,
+) -> Result<u64, sqlx::Error>
+where
+    E: sqlx::PgExecutor<'e>,
+{
     let n_samples = packet.timestamps.len();
 
     // Add validation to prevent empty inserts
     if n_samples == 0 {
         info!("Skipping insert - packet has no samples");
-        return Ok(());
+        return Ok(0);
     }
 
     // Construct a single SQL insert statement
@@ -192,12 +274,13 @@ pub async fn insert_batch_eeg(
     );
 
     query_builder.push(" ON CONFLICT (session_id, time) DO NOTHING");
-    query_builder.build().execute(&**client).await?;
+    let result = query_builder.build().execute(executor).await?;
     info!(
-        "EEG packet inserted successfully - {} data",
-        packet.timestamps.len()
+        "EEG packet inserted successfully - {} of {} samples were new",
+        result.rows_affected(),
+        n_samples
     );
-    Ok(())
+    Ok(result.rows_affected())
 }
 
 /// Update a user by id.
@@ -232,7 +315,7 @@ pub async fn update_user(
         (Some(username), Some(email), Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, email = $2, password_hash = $3 WHERE id = $4 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1, email = $2, password_hash = $3 WHERE id = $4 RETURNING id, username, email, password_hash, created_at",
                 username,
                 email,
                 password_hash,
@@ -244,7 +327,7 @@ pub async fn update_user(
         (Some(username), Some(email), None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email, password_hash, created_at",
                 username,
                 email,
                 user_id
@@ -255,7 +338,7 @@ pub async fn update_user(
         (Some(username), None, Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash, created_at",
                 username,
                 password_hash,
                 user_id
@@ -266,7 +349,7 @@ pub async fn update_user(
         (None, Some(email), Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET email = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                "UPDATE users SET email = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash, created_at",
                 email,
                 password_hash,
                 user_id
@@ -277,7 +360,7 @@ pub async fn update_user(
         (Some(username), None, None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email, password_hash, created_at",
                 username,
                 user_id
             )
@@ -287,7 +370,7 @@ pub async fn update_user(
         (None, Some(email), None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                "UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email, password_hash, created_at",
                 email,
                 user_id
             )
@@ -297,7 +380,7 @@ pub async fn update_user(
         (None, None, Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username, email, password_hash, created_at",
                 password_hash,
                 user_id
             )
@@ -335,15 +418,20 @@ pub async fn delete_user(client: &DbClient, user_id: i32) -> Result<(), Error> {
     Ok(())
 }
 
-/// Create a new session
+/// Create a new session owned by the given user.
 //
 /// Returns the created Session on success.
-pub async fn create_session(client: &DbClient, name: String) -> Result<Session, Error> {
-    info!("Creating session: {}", name);
+pub async fn create_session(
+    client: &DbClient,
+    name: String,
+    user_id: i32,
+) -> Result<Session, Error> {
+    info!("Creating session: {} for user {}", name, user_id);
     let session = sqlx::query_as!(
         Session,
-        "INSERT INTO sessions (name) VALUES ($1) RETURNING id, name",
+        "INSERT INTO sessions (name, user_id) VALUES ($1, $2) RETURNING id, name, user_id",
         name,
+        user_id,
     )
     .fetch_one(&**client)
     .await?;
@@ -352,17 +440,49 @@ pub async fn create_session(client: &DbClient, name: String) -> Result<Session, 
     Ok(session)
 }
 
-/// Get all sessions
+/// Get all sessions owned by the given user.
 //
 /// Returns a vector of Sessions on success.
-pub async fn get_sessions(client: &DbClient) -> Result<Vec<Session>, Error> {
-    info!("Retrieving sessions...");
-    let sessions = sqlx::query_as!(Session, "SELECT id, name FROM sessions")
-        .fetch_all(&**client)
-        .await?;
+pub async fn get_sessions(client: &DbClient, user_id: i32) -> Result<Vec<Session>, Error> {
+    info!("Retrieving sessions for user {}...", user_id);
+    let sessions = sqlx::query_as!(
+        Session,
+        "SELECT id, name, user_id FROM sessions WHERE user_id = $1",
+        user_id
+    )
+    .fetch_all(&**client)
+    .await?;
     info!("Retrieved {} sessions.", sessions.len());
 
     Ok(sessions)
+}
+
+/// Checks that `session_id` exists and is owned by `user_id`. Every
+/// `/api/sessions/:session_id/...` handler calls this before touching the
+/// session's data, so ownership is enforced in one place instead of being
+/// repeated per handler.
+///
+/// Returns `Err(Error::RowNotFound)` both when the session doesn't exist and
+/// when it belongs to someone else — callers map that to a 404, never a
+/// 403, so a caller can't use the response to tell the two cases apart and
+/// enumerate other users' session ids.
+pub async fn require_session_owner(
+    client: &DbClient,
+    session_id: i32,
+    user_id: i32,
+) -> Result<(), Error> {
+    let found = sqlx::query!(
+        "SELECT id FROM sessions WHERE id = $1 AND user_id = $2",
+        session_id,
+        user_id
+    )
+    .fetch_optional(&**client)
+    .await?;
+
+    match found {
+        Some(_) => Ok(()),
+        None => Err(Error::RowNotFound),
+    }
 }
 
 /// Delete a session by id.
@@ -530,14 +650,19 @@ pub async fn get_time_labels_by_range(
 
 /// Export the EEG data for a given session ID and time range as a CSV string.
 ///
-/// Returns the CSV data on success.
+/// Output format (documented in docs/eeg-csv-format.md): UTF-8, comma-separated,
+/// optional header `time,channel1,channel2,channel3,channel4`, `time` as RFC 3339,
+/// channels as whole numbers, rows sorted by time ascending. The output can be
+/// re-imported as-is.
+///
+/// Returns `Ok(None)` when the session has no data in the requested range.
 pub async fn export_eeg_data_as_csv(
     client: &DbClient,
     session_id: i32,
     start_time: DateTime<Utc>,
     end_time: DateTime<Utc>,
     include_header: bool,
-) -> Result<String, Error> {
+) -> Result<Option<String>, Error> {
     info!(
         "Exporting EEG data for session id {} from {} to {}",
         session_id, start_time, end_time
@@ -554,6 +679,10 @@ pub async fn export_eeg_data_as_csv(
     )
     .fetch_all(&**client)
     .await?;
+
+    if data.is_empty() {
+        return Ok(None);
+    }
 
     // build the CSV using the csv crate
 
@@ -588,86 +717,471 @@ pub async fn export_eeg_data_as_csv(
     // now, we convert the CSV data to a string and return it
     let csv_data = String::from_utf8(byte_stream).map_err(|e| Error::Protocol(e.to_string()))?;
 
-    Ok(csv_data)
+    Ok(Some(csv_data))
 }
 
-/// Import EEG data from a CSV byte stream for a given session ID. The CSV is expected
-/// to have columns: "time", "channel1", "channel2", "channel3", "channel4".
+// ---------------------------------------------------------------------------
+// CSV import
+//
+// The accepted file format is documented in docs/eeg-csv-format.md and shown to
+// users in the import dialog. If you change a rule here, update both.
+// ---------------------------------------------------------------------------
+
+/// Largest CSV file accepted by the import endpoint, in bytes.
+pub const MAX_IMPORT_BYTES: usize = 50 * 1024 * 1024;
+
+/// Columns every imported CSV must have, in this exact order (names are
+/// case-insensitive; surrounding spaces are ignored).
+pub const EEG_CSV_COLUMNS: [&str; 5] = ["time", "channel1", "channel2", "channel3", "channel4"];
+
+/// At most this many problems are reported back for a single file.
+const MAX_REPORTED_ERRORS: usize = 10;
+
+/// Rows per INSERT. Postgres allows 65,535 bind parameters per statement and
+/// each row binds 6, so a single statement cannot hold more than ~10,900 rows.
+const INSERT_CHUNK_ROWS: usize = 5_000;
+
+/// One problem found in an uploaded CSV, located as precisely as possible.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct CsvRowError {
+    /// 1-based line number in the file (the header is line 1).
+    pub line: Option<u64>,
+    /// Column name, when the problem is in a specific column.
+    pub column: Option<String>,
+    /// The offending value exactly as it appears in the file (truncated).
+    pub value: Option<String>,
+    /// Human-readable explanation of what is wrong and what is accepted.
+    pub problem: String,
+}
+
+impl CsvRowError {
+    fn new(
+        line: Option<u64>,
+        column: Option<&str>,
+        value: Option<&str>,
+        problem: impl Into<String>,
+    ) -> Self {
+        Self {
+            line,
+            column: column.map(str::to_string),
+            value: value.map(truncate_for_display),
+            problem: problem.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for CsvRowError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(line) = self.line {
+            write!(f, "line {}", line)?;
+        }
+        if let Some(column) = &self.column {
+            write!(f, ", column '{}'", column)?;
+        }
+        if let Some(value) = &self.value {
+            write!(f, ", value \"{}\"", value)?;
+        }
+        write!(f, ": {}", self.problem)
+    }
+}
+
+/// Why an import failed.
+#[derive(Debug)]
+pub enum EegImportError {
+    /// The file does not meet the CSV format rules. Safe to show to the user.
+    InvalidCsv {
+        /// The first problems found (at most `MAX_REPORTED_ERRORS`).
+        errors: Vec<CsvRowError>,
+        /// Total number of problems found, including the ones not listed.
+        total_errors: usize,
+    },
+    /// The file was fine but saving it failed.
+    Database(Error),
+}
+
+impl EegImportError {
+    fn single(problem: impl Into<String>) -> Self {
+        Self::InvalidCsv {
+            errors: vec![CsvRowError::new(None, None, None, problem)],
+            total_errors: 1,
+        }
+    }
+
+    /// One-sentence summary suitable for a toast or error message.
+    pub fn summary(&self) -> String {
+        match self {
+            Self::InvalidCsv {
+                errors,
+                total_errors,
+            } => match errors.as_slice() {
+                [only] if *total_errors == 1 && only.line.is_none() => only.problem.clone(),
+                _ => format!(
+                    "The CSV file has {} problem{}; nothing was imported. Fix the rows below and try again.",
+                    total_errors,
+                    if *total_errors == 1 { "" } else { "s" }
+                ),
+            },
+            Self::Database(_) => {
+                "The file is valid but could not be saved to the database. Please try again."
+                    .to_string()
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for EegImportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidCsv {
+                errors,
+                total_errors,
+            } => {
+                write!(f, "{}", self.summary())?;
+                for e in errors {
+                    write!(f, "\n  - {}", e)?;
+                }
+                if total_errors > &errors.len() {
+                    write!(f, "\n  - ...and {} more", total_errors - errors.len())?;
+                }
+                Ok(())
+            }
+            Self::Database(e) => write!(f, "database error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for EegImportError {}
+
+impl From<Error> for EegImportError {
+    fn from(e: Error) -> Self {
+        Self::Database(e)
+    }
+}
+
+#[derive(Default)]
+struct ErrorCollector {
+    errors: Vec<CsvRowError>,
+    total: usize,
+}
+
+impl ErrorCollector {
+    fn report(&mut self, err: CsvRowError) {
+        self.total += 1;
+        if self.errors.len() < MAX_REPORTED_ERRORS {
+            self.errors.push(err);
+        }
+    }
+}
+
+fn truncate_for_display(s: &str) -> String {
+    const MAX_CHARS: usize = 40;
+    if s.chars().count() > MAX_CHARS {
+        let head: String = s.chars().take(MAX_CHARS).collect();
+        format!("{}…", head)
+    } else {
+        s.to_string()
+    }
+}
+
+/// Explain why `raw` is not an acceptable channel value.
+fn describe_bad_channel_value(raw: &str) -> String {
+    if raw.is_empty() {
+        return "value is empty; every row needs a whole number in this column".to_string();
+    }
+    match raw.parse::<f64>() {
+        Ok(n) if n.is_finite() => {
+            if n.abs() > i32::MAX as f64 {
+                format!(
+                    "value is out of range; must be between {} and {}",
+                    i32::MIN,
+                    i32::MAX
+                )
+            } else if n.fract() != 0.0 {
+                "decimals are not allowed; use a whole number (e.g. 42, not 42.5)".to_string()
+            } else {
+                "write it as a plain whole number (e.g. 1000, not 1e3 or 1000.0)".to_string()
+            }
+        }
+        _ => "not a number; only digits with an optional leading '-' are allowed \
+              (no letters, units, spaces, thousands separators, or NaN/inf)"
+            .to_string(),
+    }
+}
+
+/// Parse and fully validate an EEG CSV. Never touches the database, so every
+/// problem in the file is found before anything is written.
 ///
-/// Returns Ok(()) on success.
+/// Rules (keep in sync with docs/eeg-csv-format.md):
+/// - UTF-8 text (a leading BOM is fine), comma-separated, optional "quotes".
+/// - First line is a header: `time,channel1,channel2,channel3,channel4`
+///   (any letter case, in that order, exactly 5 columns).
+/// - At least one data row; every row has exactly 5 values; blank lines are ignored.
+/// - `time`: RFC 3339 timestamp with a UTC offset, e.g. `2024-01-15T13:45:00Z`.
+/// - `channel1..4`: whole numbers between -2,147,483,648 and 2,147,483,647.
+/// - No two rows may share the same `time`.
+pub fn parse_eeg_csv(csv_bytes: &[u8]) -> Result<EEGDataPacket, EegImportError> {
+    let csv_bytes = csv_bytes
+        .strip_prefix(&[0xEF, 0xBB, 0xBF][..])
+        .unwrap_or(csv_bytes);
+
+    if csv_bytes.iter().all(|b| b.is_ascii_whitespace()) {
+        return Err(EegImportError::single(
+            "The file is empty. Expected a header line followed by data rows.",
+        ));
+    }
+
+    if let Err(e) = std::str::from_utf8(csv_bytes) {
+        let line = csv_bytes[..e.valid_up_to()]
+            .iter()
+            .filter(|b| **b == b'\n')
+            .count() as u64
+            + 1;
+        return Err(EegImportError::InvalidCsv {
+            errors: vec![CsvRowError::new(
+                Some(line),
+                None,
+                None,
+                "the file contains characters that are not valid UTF-8. \
+                 Re-save it as \"CSV UTF-8\" (or plain text) and try again.",
+            )],
+            total_errors: 1,
+        });
+    }
+
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(false) // we validate the header ourselves for better messages
+        .flexible(true) // we check field counts ourselves for better messages
+        .from_reader(csv_bytes);
+
+    let mut found = ErrorCollector::default();
+
+    let mut timestamps: Vec<DateTime<Utc>> = Vec::new();
+    let mut channels: [Vec<i32>; 4] = Default::default();
+    let mut seen_times: HashMap<DateTime<Utc>, u64> = HashMap::new();
+    let mut saw_header = false;
+
+    for result in reader.records() {
+        let record = match result {
+            Ok(r) => r,
+            Err(e) => {
+                let line = e.position().map(|p| p.line());
+                found.report(CsvRowError::new(
+                    line,
+                    None,
+                    None,
+                    format!("could not read this line as CSV ({}).", e),
+                ));
+                continue;
+            }
+        };
+        let line = record.position().map(|p| p.line());
+
+        if !saw_header {
+            saw_header = true;
+            if record.len() != EEG_CSV_COLUMNS.len() {
+                found.report(CsvRowError::new(
+                    line,
+                    None,
+                    None,
+                    format!(
+                        "the header has {} column{} but exactly {} are required, in this order: {}",
+                        record.len(),
+                        if record.len() == 1 { "" } else { "s" },
+                        EEG_CSV_COLUMNS.len(),
+                        EEG_CSV_COLUMNS.join(",")
+                    ),
+                ));
+            } else {
+                for (i, expected) in EEG_CSV_COLUMNS.iter().enumerate() {
+                    let actual = record.get(i).unwrap_or("");
+                    if !actual.trim().eq_ignore_ascii_case(expected) {
+                        found.report(CsvRowError::new(
+                            line,
+                            Some(format!("column {}", i + 1).as_str()),
+                            Some(actual),
+                            format!(
+                                "the header's column {} must be \"{}\" (any letter case). \
+                                 Required header: {}",
+                                i + 1,
+                                expected,
+                                EEG_CSV_COLUMNS.join(",")
+                            ),
+                        ));
+                    }
+                }
+            }
+            if found.total > 0 {
+                // Rows can't be interpreted reliably with a wrong header.
+                break;
+            }
+            continue;
+        }
+
+        if record.len() != EEG_CSV_COLUMNS.len() {
+            found.report(CsvRowError::new(
+                line,
+                None,
+                None,
+                format!(
+                    "this row has {} value{} but exactly {} are required ({}). \
+                     Check for missing or extra commas.",
+                    record.len(),
+                    if record.len() == 1 { "" } else { "s" },
+                    EEG_CSV_COLUMNS.len(),
+                    EEG_CSV_COLUMNS.join(",")
+                ),
+            ));
+            continue;
+        }
+
+        let mut row_ok = true;
+
+        let time_raw = record.get(0).unwrap_or("").trim();
+        let time = match DateTime::parse_from_rfc3339(time_raw) {
+            Ok(t) => Some(t.with_timezone(&Utc)),
+            Err(_) => {
+                row_ok = false;
+                let problem = if time_raw.is_empty() {
+                    "value is empty; every row needs a timestamp".to_string()
+                } else {
+                    "not a valid RFC 3339 timestamp. Use the form 2024-01-15T13:45:00Z \
+                     (or 2024-01-15T13:45:00.250-08:00); a date, a time zone offset \
+                     (Z or ±hh:mm), and a 'T' between date and time are all required"
+                        .to_string()
+                };
+                found.report(CsvRowError::new(
+                    line,
+                    Some("time"),
+                    Some(time_raw),
+                    problem,
+                ));
+                None
+            }
+        };
+
+        let mut values = [0i32; 4];
+        for (ch, slot) in values.iter_mut().enumerate() {
+            let raw = record.get(ch + 1).unwrap_or("").trim();
+            match raw.parse::<i32>() {
+                Ok(v) => *slot = v,
+                Err(_) => {
+                    row_ok = false;
+                    found.report(CsvRowError::new(
+                        line,
+                        Some(EEG_CSV_COLUMNS[ch + 1]),
+                        Some(raw),
+                        describe_bad_channel_value(raw),
+                    ));
+                }
+            }
+        }
+
+        if let Some(t) = time {
+            if let Some(first_line) = seen_times.get(&t).copied() {
+                row_ok = false;
+                found.report(CsvRowError::new(
+                    line,
+                    Some("time"),
+                    Some(time_raw),
+                    format!(
+                        "duplicate timestamp; the same time already appears on line {}. \
+                         Each row must have a unique time.",
+                        first_line
+                    ),
+                ));
+            } else if let Some(l) = line {
+                seen_times.insert(t, l);
+            }
+        }
+
+        if row_ok {
+            if let Some(t) = time {
+                timestamps.push(t);
+                for (ch, v) in values.iter().enumerate() {
+                    channels[ch].push(*v);
+                }
+            }
+        }
+    }
+
+    if found.total == 0 && timestamps.is_empty() {
+        found.report(CsvRowError::new(
+            None,
+            None,
+            None,
+            "the file has a header but no data rows.",
+        ));
+    }
+
+    if found.total > 0 {
+        return Err(EegImportError::InvalidCsv {
+            errors: found.errors,
+            total_errors: found.total,
+        });
+    }
+
+    let [c1, c2, c3, c4] = channels;
+    Ok(EEGDataPacket {
+        timestamps,
+        signals: vec![
+            c1.into_iter().map(f64::from).collect(),
+            c2.into_iter().map(f64::from).collect(),
+            c3.into_iter().map(f64::from).collect(),
+            c4.into_iter().map(f64::from).collect(),
+        ],
+        ml_result: None,
+    })
+}
+
+/// Outcome of a successful import.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ImportSummary {
+    /// Data rows read from the file.
+    pub rows_read: usize,
+    /// Rows actually written; the rest already existed in the session.
+    pub rows_inserted: u64,
+}
+
+/// Validate and import an EEG CSV for `session_id`. See `parse_eeg_csv` for the
+/// accepted format. The file is validated completely before anything is
+/// written, and all inserts run in one transaction, so a file is either
+/// imported in full or not at all.
+///
+/// Rows whose `time` already exists in the session are skipped (existing data
+/// is never overwritten); `ImportSummary` reports how many were skipped.
 pub async fn import_eeg_data_from_csv(
     client: &DbClient,
     session_id: i32,
     csv_bytes: &[u8],
-) -> Result<(), Error> {
+) -> Result<ImportSummary, EegImportError> {
     info!("Importing EEG data for session id {} from CSV", session_id);
 
-    // we use the csv crate to read the CSV data, converting them to the struct we made for CSV rows
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(true) // we expect the CSV to have headers, should probably make this clear somewhere
-        .from_reader(csv_bytes);
+    let packet = parse_eeg_csv(csv_bytes)?;
+    let n_rows = packet.timestamps.len();
 
-    // set up our vectors to hold the parsed EEG data rows, so we can batch insert them later
-    let mut timestamps: Vec<DateTime<Utc>> = Vec::new();
-    let mut channel1_data: Vec<f64> = Vec::new();
-    let mut channel2_data: Vec<f64> = Vec::new();
-    let mut channel3_data: Vec<f64> = Vec::new();
-    let mut channel4_data: Vec<f64> = Vec::new();
-
-    // we iterate through the CSV records, parsing each row and converting it to the format we need for insertion
-    for result in reader.records() {
-        // unwrap the record, if there's an error we return it
-        let record = result.map_err(|e| Error::Protocol(e.to_string()))?;
-
-        // now we parse the fields, converting time to DateTime<Utc> and channels to i32
-        let time_str = record
-            .get(0)
-            .ok_or_else(|| Error::Protocol("Missing time field".to_string()))?;
-
-        // we assume the time is in RFC3339 format
-        let time = DateTime::parse_from_rfc3339(time_str)
-            .map_err(|e| Error::Protocol(format!("Invalid time format: {}", e)))?
-            .with_timezone(&Utc);
-
-        let channel1 = record
-            .get(1)
-            .ok_or_else(|| Error::Protocol("Missing channel1 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel1 value: {}", e)))?;
-        let channel2 = record
-            .get(2)
-            .ok_or_else(|| Error::Protocol("Missing channel2 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel2 value: {}", e)))?;
-        let channel3 = record
-            .get(3)
-            .ok_or_else(|| Error::Protocol("Missing channel3 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel3 value: {}", e)))?;
-        let channel4 = record
-            .get(4)
-            .ok_or_else(|| Error::Protocol("Missing channel4 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel4 value: {}", e)))?;
-
-        // now we construct the tuple and add it to our vectors
-        timestamps.push(time);
-        channel1_data.push(channel1);
-        channel2_data.push(channel2);
-        channel3_data.push(channel3);
-        channel4_data.push(channel4);
+    // Insert in chunks to stay under Postgres' bind-parameter limit. The
+    // transaction rolls back automatically if any chunk fails (or on drop).
+    let mut tx = client.begin().await?;
+    let mut rows_inserted = 0;
+    for start in (0..n_rows).step_by(INSERT_CHUNK_ROWS) {
+        let end = (start + INSERT_CHUNK_ROWS).min(n_rows);
+        let chunk = EEGDataPacket {
+            timestamps: packet.timestamps[start..end].to_vec(),
+            signals: packet
+                .signals
+                .iter()
+                .map(|c| c[start..end].to_vec())
+                .collect(),
+            ml_result: None,
+        };
+        rows_inserted += insert_eeg_rows(&mut *tx, session_id, &chunk).await?;
     }
+    tx.commit().await?;
 
-    // now we use our existing batch insert function to insert the data into the database
-    let eeg_rows = EEGDataPacket {
-        timestamps,
-        signals: vec![channel1_data, channel2_data, channel3_data, channel4_data],
-        ml_result: None,
-    };
-
-    insert_batch_eeg(client, session_id, &eeg_rows).await?;
-
-    Ok(())
+    Ok(ImportSummary {
+        rows_read: n_rows,
+        rows_inserted,
+    })
 }
 
 /// Helper function for eeg data to find the earliest timestamp for a given session
@@ -685,4 +1199,109 @@ pub async fn get_earliest_eeg_timestamp(
     .await?;
 
     Ok(row.earliest_time)
+}
+
+#[cfg(test)]
+mod csv_import_tests {
+    use super::*;
+
+    fn errs(csv: &str) -> (Vec<CsvRowError>, usize) {
+        match parse_eeg_csv(csv.as_bytes()) {
+            Err(EegImportError::InvalidCsv {
+                errors,
+                total_errors,
+            }) => (errors, total_errors),
+            other => panic!(
+                "expected InvalidCsv, got {:?}",
+                other.map(|p| p.timestamps.len())
+            ),
+        }
+    }
+
+    #[test]
+    fn accepts_valid_file_any_header_case_bom_and_crlf() {
+        let csv = "\u{feff}Time, Channel1,CHANNEL2,channel3,channel4\r\n\
+                   2024-01-15T13:45:00Z,1,-2,3,4\r\n\
+                   \r\n\
+                   2024-01-15T13:45:01.5-08:00,5,6,7,8\r\n";
+        let p = parse_eeg_csv(csv.as_bytes()).unwrap();
+        assert_eq!(p.timestamps.len(), 2);
+        assert_eq!(p.signals[1], vec![-2.0, 6.0]);
+    }
+
+    #[test]
+    fn exported_format_round_trips() {
+        let csv = "time,channel1,channel2,channel3,channel4\n\
+                   2024-01-15T13:45:00+00:00,1,2,3,4\n";
+        assert!(parse_eeg_csv(csv.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn empty_and_header_only_files() {
+        assert_eq!(errs("  \n").1, 1);
+        let (e, _) = errs("time,channel1,channel2,channel3,channel4\n");
+        assert!(e[0].problem.contains("no data rows"));
+    }
+
+    #[test]
+    fn wrong_header_is_reported_by_column() {
+        let (e, _) = errs("time,ch1,channel2,channel3,channel4\n2024-01-15T13:45:00Z,1,2,3,4\n");
+        assert_eq!(e.len(), 1);
+        assert_eq!(e[0].line, Some(1));
+        assert_eq!(e[0].column.as_deref(), Some("column 2"));
+        assert_eq!(e[0].value.as_deref(), Some("ch1"));
+    }
+
+    #[test]
+    fn bad_values_report_line_column_and_value() {
+        let csv = "time,channel1,channel2,channel3,channel4\n\
+                   2024-01-15T13:45:00Z,1,2,3,4\n\
+                   2024-01-15 13:45:01,1,12.5,abc,99999999999\n";
+        let (e, total) = errs(csv);
+        assert_eq!(total, 4);
+        assert!(e.iter().all(|x| x.line == Some(3)));
+        let cols: Vec<_> = e.iter().map(|x| x.column.clone().unwrap()).collect();
+        assert_eq!(cols, ["time", "channel2", "channel3", "channel4"]);
+        assert!(e[1].problem.contains("decimals"));
+        assert!(e[2].problem.contains("not a number"));
+        assert!(e[3].problem.contains("out of range"));
+    }
+
+    #[test]
+    fn wrong_column_count_and_duplicates() {
+        let csv = "time,channel1,channel2,channel3,channel4\n\
+                   2024-01-15T13:45:00Z,1,2,3\n\
+                   2024-01-15T13:45:01Z,1,2,3,4\n\
+                   2024-01-15T13:45:01Z,1,2,3,4\n";
+        let (e, total) = errs(csv);
+        assert_eq!(total, 2);
+        assert_eq!(e[0].line, Some(2));
+        assert!(e[0].problem.contains("4 values"));
+        assert_eq!(e[1].line, Some(4));
+        assert!(e[1].problem.contains("line 3"));
+    }
+
+    #[test]
+    fn invalid_utf8_reports_line() {
+        let mut bytes = b"time,channel1,channel2,channel3,channel4\n".to_vec();
+        bytes.extend_from_slice(&[0xFF, 0xFE, b'\n']);
+        match parse_eeg_csv(&bytes) {
+            Err(EegImportError::InvalidCsv { errors, .. }) => {
+                assert_eq!(errors[0].line, Some(2));
+                assert!(errors[0].problem.contains("UTF-8"));
+            }
+            _ => panic!("expected InvalidCsv"),
+        }
+    }
+
+    #[test]
+    fn caps_reported_errors_but_counts_all() {
+        let mut csv = String::from("time,channel1,channel2,channel3,channel4\n");
+        for i in 0..25 {
+            csv.push_str(&format!("2024-01-15T13:45:{:02}Z,x,2,3,4\n", i));
+        }
+        let (e, total) = errs(&csv);
+        assert_eq!(e.len(), MAX_REPORTED_ERRORS);
+        assert_eq!(total, 25);
+    }
 }

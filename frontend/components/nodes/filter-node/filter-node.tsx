@@ -3,6 +3,7 @@ import { useGlobalContext } from '@/context/GlobalContext';
 
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import React from 'react';
+import { useNodeConnection } from '../use-node-connection';
 import ComboBox from './combo-box';
 
 interface FilterConfig {
@@ -31,7 +32,7 @@ export default function FilterNode({ id, data, selected }: FilterNodeProps) {
     const [selectedFilter, setSelectedFilter] = React.useState(
         data?._selectedFilter ?? 'lowpass'
     );
-    const [isConnected, setIsConnected] = React.useState(false);
+    const { connected: isConnected } = useNodeConnection(id);
     const [lowCutoff, setLowCutoff] = React.useState(data?._lowCutoff ?? 1);
     const [highCutoff, setHighCutoff] = React.useState(data?._highCutoff ?? 50);
 
@@ -127,77 +128,6 @@ export default function FilterNode({ id, data, selected }: FilterNodeProps) {
         lowCutoff,
         selectedFilter,
     ]);
-
-    // Check connection status and update state
-    const checkConnectionStatus = React.useCallback(() => {
-        try {
-            const edges = reactFlowInstance.getEdges();
-            const nodes = reactFlowInstance.getNodes();
-
-            // Check if this node is connected to source node or any activated node
-            const isConnectedToActivatedNode = (
-                nodeId: string,
-                visited: Set<string> = new Set()
-            ): boolean => {
-                if (visited.has(nodeId)) return false; // Prevent infinite loops
-                visited.add(nodeId);
-
-                // Find incoming edges to this node
-                const incomingEdges = edges.filter(
-                    (edge) => edge.target === nodeId
-                );
-
-                for (const edge of incomingEdges) {
-                    const sourceNode = nodes.find((n) => n.id === edge.source);
-                    if (!sourceNode) continue;
-
-                    // If source is a source-node, we're activated
-                    if (sourceNode.type === 'source-node') {
-                        return true;
-                    }
-
-                    // If source is another node, check if it's activated
-                    if (
-                        sourceNode.id &&
-                        isConnectedToActivatedNode(sourceNode.id, visited)
-                    ) {
-                        return true;
-                    }
-                }
-
-                return false;
-            };
-
-            const isActivated = id ? isConnectedToActivatedNode(id) : false;
-            setIsConnected(isActivated);
-        } catch (error) {
-            console.error('Error checking connection:', error);
-            setIsConnected(false);
-        }
-    }, [id, reactFlowInstance]);
-
-    // Check connection status on mount and when edges might change
-    React.useEffect(() => {
-        checkConnectionStatus();
-
-        // Listen for custom edge change events
-        const handleEdgeChange = () => {
-            checkConnectionStatus();
-        };
-
-        window.addEventListener('reactflow-edges-changed', handleEdgeChange);
-
-        // Also set up periodic check as backup
-        const interval = setInterval(checkConnectionStatus, 1000);
-
-        return () => {
-            window.removeEventListener(
-                'reactflow-edges-changed',
-                handleEdgeChange
-            );
-            clearInterval(interval);
-        };
-    }, [checkConnectionStatus]);
 
     // Push config to node data and dispatch processing config when relevant state changes
     React.useEffect(() => {

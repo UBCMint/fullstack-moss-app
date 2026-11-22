@@ -9,15 +9,16 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { useNotifications } from '@/components/notifications';
-import { importEEGData } from '@/lib/eeg-api';
+import {
+    importEEGData,
+    ImportValidationError,
+    CsvProblem,
+    MAX_IMPORT_BYTES,
+} from '@/lib/eeg-api';
+import CsvFormatSummary from '@/components/ui/eeg-csv-format';
 import { getUserFacingErrorMessage } from '@/lib/errors';
 import { Folder } from 'lucide-react';
-import { EnterIcon, InfoCircledIcon } from '@radix-ui/react-icons';
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from '@/components/ui/popover';
+import { EnterIcon } from '@radix-ui/react-icons';
 
 type ImportDialogProps = {
     open: boolean;
@@ -37,9 +38,16 @@ export default function ImportDialog({
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [problems, setProblems] = useState<{
+        fileName: string;
+        summary: string;
+        items: CsvProblem[];
+        total: number;
+    } | null>(null);
 
     const handleClose = () => {
         if (!isImporting) {
+            setProblems(null);
             if (fileInputRef.current) fileInputRef.current.value = '';
             onOpenChange(false);
         }
@@ -54,10 +62,28 @@ export default function ImportDialog({
             return;
         }
 
-        if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+        setProblems(null);
+
+        if (!file.name.toLowerCase().endsWith('.csv')) {
             notifications.error({
                 title: 'Invalid file type',
-                description: 'Please select a CSV file.',
+                description: `"${file.name}" is not a .csv file. Export your data as CSV (comma-separated) and try again.`,
+            });
+            return;
+        }
+
+        if (file.size === 0) {
+            notifications.error({
+                title: 'Empty file',
+                description: `"${file.name}" is empty. It needs a header line followed by data rows.`,
+            });
+            return;
+        }
+
+        if (file.size > MAX_IMPORT_BYTES) {
+            notifications.error({
+                title: 'File too large',
+                description: `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB. The maximum is ${MAX_IMPORT_BYTES / 1024 / 1024} MB; split it into smaller files.`,
             });
             return;
         }
@@ -65,14 +91,28 @@ export default function ImportDialog({
         setIsImporting(true);
         try {
             const csvText = await file.text();
-            await importEEGData(sessionId, csvText);
+            const { rowsRead, rowsInserted } = await importEEGData(
+                sessionId,
+                csvText
+            );
+            const skipped = rowsRead - rowsInserted;
             notifications.success({
                 title: 'EEG data imported successfully',
-                description: `${file.name} has been loaded into session ${sessionId}.`,
+                description: `${rowsInserted.toLocaleString()} rows from ${file.name} loaded into session ${sessionId}.${skipped > 0 ? ` ${skipped.toLocaleString()} rows were skipped because their time already exists in the session.` : ''}`,
             });
             onImportSuccess?.();
             onOpenChange(false);
         } catch (error) {
+            if (error instanceof ImportValidationError) {
+                console.error(error);
+                setProblems({
+                    fileName: file.name,
+                    summary: error.message,
+                    items: error.problems,
+                    total: error.totalProblems,
+                });
+                return;
+            }
             notifications.error({
                 title: 'Import failed',
                 description: getUserFacingErrorMessage(error),
@@ -115,57 +155,68 @@ export default function ImportDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-[425px] p-8">
+            <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-y-auto p-8">
                 <DialogHeader className="mb-4 text-left">
                     <DialogTitle className="flex items-center text-2xl font-bold mb-2">
                         <EnterIcon className="mr-2" width={24} height={24} />
                         Import Data
                     </DialogTitle>
-                    <DialogDescription className="text-gray-500 text-sm flex items-center gap-1.5">
-                        Only CSV files are accepted.
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <button
-                                    type="button"
-                                    className="inline-flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-                                >
-                                    <InfoCircledIcon width={14} height={14} />
-                                </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                                className="w-90 text-sm"
-                                side="bottom"
-                                align="start"
-                            >
-                                <p className="font-semibold mb-2">
-                                    Expected CSV format
-                                </p>
-                                <p className="text-gray-500 mb-2">
-                                    The file must have a header row followed by
-                                    data rows in this shape:
-                                </p>
-                                <code className="block bg-gray-100 rounded px-2 py-1.5 text-xs font-mono mb-2">
-                                    Time,Channel1,Channel2,Channel3,Channel4
-                                </code>
-                                <p className="text-gray-500">
-                                    The{' '}
-                                    <span className="font-medium text-gray-700">
-                                        Time
-                                    </span>{' '}
-                                    column must be in{' '}
-                                    <span className="font-medium text-gray-700">
-                                        RFC 3339
-                                    </span>{' '}
-                                    format (e.g.{' '}
-                                    <code className="text-xs font-mono">
-                                        2024-01-15T13:45:00Z
-                                    </code>
-                                    ).
-                                </p>
-                            </PopoverContent>
-                        </Popover>
+                    <DialogDescription className="text-gray-500 text-sm">
+                        Import a CSV file into the active session.
                     </DialogDescription>
                 </DialogHeader>
+
+                <CsvFormatSummary mode="import" />
+
+                {problems && (
+                    <div
+                        role="alert"
+                        className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800"
+                    >
+                        <p className="font-semibold mb-1">
+                            Import failed: {problems.fileName}
+                        </p>
+                        <p className="mb-2">{problems.summary}</p>
+                        <ul className="space-y-1 max-h-40 overflow-y-auto">
+                            {problems.items.map((p, i) => (
+                                <li key={i}>
+                                    <span className="font-semibold">
+                                        {[
+                                            p.line !== null
+                                                ? `Line ${p.line}`
+                                                : null,
+                                            p.column
+                                                ? `column "${p.column}"`
+                                                : null,
+                                        ]
+                                            .filter(Boolean)
+                                            .join(', ')}
+                                        {p.line !== null || p.column
+                                            ? ': '
+                                            : ''}
+                                    </span>
+                                    {p.value !== null && p.value !== '' && (
+                                        <>
+                                            value{' '}
+                                            <code className="font-mono">
+                                                &quot;{p.value}&quot;
+                                            </code>{' '}
+                                            &mdash;{' '}
+                                        </>
+                                    )}
+                                    {p.problem}
+                                </li>
+                            ))}
+                        </ul>
+                        {problems.total > problems.items.length && (
+                            <p className="mt-2">
+                                &hellip;and{' '}
+                                {problems.total - problems.items.length} more.
+                                Fix these and re-upload to see the rest.
+                            </p>
+                        )}
+                    </div>
+                )}
 
                 <div className="py-2">
                     {/* Drag and drop zone */}
