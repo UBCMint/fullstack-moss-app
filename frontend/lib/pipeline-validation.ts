@@ -73,117 +73,312 @@ const topoSort = (nodes: Node[], edges: Edge[]) => {
     return ordered.map((id) => nodes.find((n) => n.id === id)!).filter(Boolean);
 };
 
+// ---------------------------------------------------------------------------
+// Connection rules: the single source of truth.
+//
+// Every rule about which nodes may connect lives here and returns the sentence
+// the user should see. The editor (drag-time), `validatePipeline` (Start-time)
+// and the node cards all call these, so a rule can't be enforced in one place
+// and silently missing in another. To add a rule: add a message, add a branch
+// to `checkConnection`, and add a test in pipeline-validation.test.ts. See
+// "Pipeline connection rules" in frontend/README.md.
+// ---------------------------------------------------------------------------
+
+export const INTO_SOURCE_MESSAGE =
+    'The source node is always the start of a pipeline. Nothing can connect into it.';
+export const SOURCE_SINGLE_OUTPUT_MESSAGE =
+    'The source node can only connect to one node. Connect it to the Window node, then build from there.';
+export const SOURCE_FEEDS_WINDOW_MESSAGE =
+    'The source node has to connect to the Window node first. Connect it to the Window node, then build from there.';
+export const WINDOW_AFTER_SOURCE_MESSAGE =
+    'The window node has to come straight after the source.';
+export const OUTPUT_ENDPOINT_MESSAGE =
+    'The ML and Chart nodes are endpoints. Nothing can come after them.';
+export const ML_NEEDS_FILTER_MESSAGE =
+    'The ML node needs a Filter node directly before it. Connect a Filter node to its input.';
+export const ML_NO_INPUT_MESSAGE =
+    "Connect a Filter node to this node's input.";
+export const ML_FILTER_UNCONNECTED_MESSAGE =
+    'Connect the Filter node to the pipeline. It needs a path back to the Source node.';
+export const NOT_CONNECTED_MESSAGE =
+    'Connect this node to the pipeline. It needs a path back to the Source node.';
+
+/** Nodes that produce an end result; nothing may follow them. */
+const OUTPUT_NODE_TYPES = new Set([
+    'signal-graph-node',
+    'machine-learning-node',
+]);
+
+export type ConnectionRule =
+    | 'into-source'
+    | 'output-endpoint'
+    | 'source-single-output'
+    | 'source-feeds-window'
+    | 'window-input'
+    | 'ml-needs-filter';
+
+export type ConnectionCheck =
+    | { allowed: true }
+    | {
+          allowed: false;
+          rule: ConnectionRule;
+          /** One sentence telling the user what to do. */
+          message: string;
+          /** Which end of the connection to highlight when this is found at Start. */
+          blame: 'source' | 'target';
+      };
+
+const blocked = (
+    rule: ConnectionRule,
+    message: string,
+    blame: 'source' | 'target'
+): ConnectionCheck => ({ allowed: false, rule, message, blame });
+
+// Only the source node may feed the window node's input. Anything may follow the window.
+export function isWindowInputAllowed(
+    sourceType: string | undefined,
+    targetType: string | undefined
+) {
+    return targetType !== 'window-node' || sourceType === 'source-node';
+}
+
+/**
+ * Decide whether `sourceType -> targetType` is an allowed connection.
+ * `sourceHasOtherOutgoing` is true when the source node already has another
+ * outgoing connection. Rules are checked in the order users are most likely to
+ * need them explained.
+ */
+export function checkConnection(
+    sourceType: string | undefined,
+    targetType: string | undefined,
+    sourceHasOtherOutgoing: boolean
+): ConnectionCheck {
+    if (targetType === 'source-node') {
+        return blocked('into-source', INTO_SOURCE_MESSAGE, 'target');
+    }
+    if (sourceType && OUTPUT_NODE_TYPES.has(sourceType)) {
+        return blocked('output-endpoint', OUTPUT_ENDPOINT_MESSAGE, 'source');
+    }
+    if (sourceType === 'source-node') {
+        if (sourceHasOtherOutgoing) {
+            return blocked(
+                'source-single-output',
+                SOURCE_SINGLE_OUTPUT_MESSAGE,
+                'source'
+            );
+        }
+        if (targetType !== 'window-node') {
+            return blocked(
+                'source-feeds-window',
+                SOURCE_FEEDS_WINDOW_MESSAGE,
+                'target'
+            );
+        }
+    }
+    if (!isWindowInputAllowed(sourceType, targetType)) {
+        return blocked('window-input', WINDOW_AFTER_SOURCE_MESSAGE, 'target');
+    }
+    if (
+        targetType === 'machine-learning-node' &&
+        sourceType !== 'filter-node'
+    ) {
+        return blocked('ml-needs-filter', ML_NEEDS_FILTER_MESSAGE, 'target');
+    }
+    return { allowed: true };
+}
+
+/** `checkConnection` for a pair of nodes on a board (a connection being dragged). */
+export function checkNodeConnection(
+    sourceNode: Pick<Node, 'id' | 'type'>,
+    targetNode: Pick<Node, 'id' | 'type'>,
+    edges: Edge[]
+): ConnectionCheck {
+    return checkConnection(
+        sourceNode.type,
+        targetNode.type,
+        edges.some((e) => e.source === sourceNode.id)
+    );
+}
+
+/** True when `nodeId` has an upstream path back to a Source node. */
+const reachesSource = (nodeId: string, nodes: Node[], edges: Edge[]) => {
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const visited = new Set<string>();
+    const stack = [nodeId];
+    while (stack.length > 0) {
+        const current = stack.pop()!;
+        if (visited.has(current)) continue;
+        visited.add(current);
+        for (const edge of edges) {
+            if (edge.target !== current) continue;
+            const upstream = byId.get(edge.source);
+            if (!upstream) continue;
+            if (upstream.type === 'source-node') return true;
+            stack.push(upstream.id);
+        }
+    }
+    return false;
+};
+
+/**
+ * Whether a node is "connected" (the black vs. grey circles) and, if not, the
+ * one sentence explaining what to do. The ML node needs more than a path to
+ * Source: a Filter node directly before it.
+ */
+export function getNodeConnectionStatus(
+    nodeId: string,
+    nodes: Node[],
+    edges: Edge[]
+): { connected: boolean; hint: string | null } {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return { connected: false, hint: null };
+
+    if (node.type === 'machine-learning-node') {
+        const byId = new Map(nodes.map((n) => [n.id, n]));
+        const upstream = edges
+            .filter((e) => e.target === nodeId)
+            .map((e) => byId.get(e.source))
+            .filter((n): n is Node => Boolean(n));
+        if (upstream.length === 0) {
+            return { connected: false, hint: ML_NO_INPUT_MESSAGE };
+        }
+        const filters = upstream.filter((n) => n.type === 'filter-node');
+        if (filters.length === 0) {
+            return { connected: false, hint: ML_NEEDS_FILTER_MESSAGE };
+        }
+        if (filters.some((f) => reachesSource(f.id, nodes, edges))) {
+            return { connected: true, hint: null };
+        }
+        return { connected: false, hint: ML_FILTER_UNCONNECTED_MESSAGE };
+    }
+
+    if (reachesSource(nodeId, nodes, edges)) {
+        return { connected: true, hint: null };
+    }
+    return { connected: false, hint: NOT_CONNECTED_MESSAGE };
+}
+
+/** Ids of nodes that sit on a cycle (empty when the graph is acyclic). */
+const findCycleNodeIds = (nodes: Node[], edges: Edge[]): string[] => {
+    const ids = new Set(nodes.map((n) => n.id));
+    const live = edges.filter((e) => ids.has(e.source) && ids.has(e.target));
+    const remaining = new Set(ids);
+    // Peel off nodes with no incoming edge, then nodes with no outgoing edge;
+    // whatever is left is on (or between) cycles.
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const id of [...remaining]) {
+            const hasIn = live.some(
+                (e) => e.target === id && remaining.has(e.source)
+            );
+            const hasOut = live.some(
+                (e) => e.source === id && remaining.has(e.target)
+            );
+            if (!hasIn || !hasOut) {
+                remaining.delete(id);
+                changed = true;
+            }
+        }
+    }
+    return [...remaining];
+};
+
 export const validatePipeline = (nodes: Node[], edges: Edge[]) => {
     const errors: string[] = [];
+    // Always empty now: the old "Filter should come after Window" and "Outputs
+    // should come after preprocessing" warnings can't happen, because the
+    // connection rules force every pipeline to start Source -> Window. The
+    // field stays so callers don't need to change.
     const warnings: string[] = [];
+    // Node id -> the sentence to show on that node (first problem wins).
+    const nodeIssues: Record<string, string> = {};
+    const addError = (message: string, nodeIds: string[] = []) => {
+        if (!errors.includes(message)) errors.push(message);
+        nodeIds.forEach((id) => {
+            if (!(id in nodeIssues)) nodeIssues[id] = message;
+        });
+    };
 
     nodes.forEach((node) => {
         if (!isNodeTypeEnabled(node.type)) {
-            errors.push(
-                `Node "${node.id}" has an unavailable type (${node.type || 'missing type'}). Remove it before starting.`
+            addError(
+                `Node "${node.id}" has an unavailable type (${node.type || 'missing type'}). Remove it before starting.`,
+                [node.id]
             );
         }
     });
 
-    // maps to track nodes and their connections
     const byId = new Map(nodes.map((n) => [n.id, n]));
     const incoming = new Map<string, string[]>();
-    const outgoing = new Map<string, string[]>();
-
-    nodes.forEach((n) => {
-        incoming.set(n.id, []);
-        outgoing.set(n.id, []);
-    });
-
-    // Build connection maps
+    nodes.forEach((n) => incoming.set(n.id, []));
     edges.forEach((e) => {
-        if (!incoming.has(e.target) || !outgoing.has(e.source)) return;
+        if (!incoming.has(e.target) || !byId.has(e.source)) return;
         incoming.get(e.target)!.push(e.source);
-        outgoing.get(e.source)!.push(e.target);
     });
 
     // Require 1 source node
     const sourceNodes = nodes.filter((n) => n.type === 'source-node');
     if (sourceNodes.length === 0)
-        errors.push('Add a Source node before starting.');
+        addError('Add a Source node before starting.');
     if (sourceNodes.length > 1)
-        errors.push('Multiple Source nodes are not allowed.');
+        addError(
+            'Multiple Source nodes are not allowed.',
+            sourceNodes.map((n) => n.id)
+        );
 
     // Require 1 window node
     const windowNodes = nodes.filter((n) => n.type === 'window-node');
     if (windowNodes.length === 0)
-        errors.push('Add a Window node before starting.');
+        addError('Add a Window node before starting.');
     if (windowNodes.length > 1)
-        errors.push('Multiple Window nodes are not allowed.');
+        addError(
+            'Multiple Window nodes are not allowed.',
+            windowNodes.map((n) => n.id)
+        );
 
-    // Require window node must connect directly to source
+    // A window with nothing connected into it
     windowNodes.forEach((win) => {
-        const ins = incoming.get(win.id) ?? [];
-        if (
-            ins.length === 0 ||
-            ins.some((id) => byId.get(id)?.type !== 'source-node')
-        ) {
-            errors.push('Connect Window directly to Source before starting.');
+        if ((incoming.get(win.id) ?? []).length === 0) {
+            addError('Connect Window directly to Source before starting.', [
+                win.id,
+            ]);
         }
     });
 
     // If ML node exists, window is required for the ML pipeline
     const mlNodes = nodes.filter((n) => n.type === 'machine-learning-node');
     if (mlNodes.length > 0 && windowNodes.length === 0) {
-        errors.push('A Window node is required for ML pipelines.');
+        addError('A Window node is required for ML pipelines.');
     }
 
-    // Require that output nodes are terminal
-    const outputTypes = new Set(['signal-graph-node', 'machine-learning-node']);
-    nodes.forEach((n) => {
-        if (outputTypes.has(n.type ?? '')) {
-            const outs = outgoing.get(n.id) ?? [];
-            if (outs.length > 0) errors.push('Output nodes must be terminal.');
+    // Every existing connection must obey the same rules as dragging one
+    edges.forEach((edge) => {
+        const from = byId.get(edge.source);
+        const to = byId.get(edge.target);
+        if (!from || !to) return;
+        const check = checkConnection(
+            from.type,
+            to.type,
+            edges.some((e) => e !== edge && e.source === edge.source)
+        );
+        if (!check.allowed) {
+            addError(check.message, [
+                check.blame === 'source' ? from.id : to.id,
+            ]);
         }
     });
 
-    // Require that ML node doesnt connect directly to source
-    nodes
-        .filter((n) => n.type === 'machine-learning-node')
-        .forEach((ml) => {
-            const ins = incoming.get(ml.id) ?? [];
-            if (ins.some((id) => byId.get(id)?.type === 'source-node')) {
-                errors.push('ML nodes cannot connect directly to Source.');
-            }
-        });
-
-    // Warn if filter node appears before window when window exists
-    const filterNodes = nodes.filter((n) => n.type === 'filter-node');
-    const filterDirectFromSource = filterNodes.some((fn) => {
-        const ins = incoming.get(fn.id) ?? [];
-        return ins.some((id) => byId.get(id)?.type === 'source-node');
-    });
-    if (windowNodes.length > 0 && filterDirectFromSource) {
-        warnings.push(
-            'Filter nodes should come after Window nodes when Window nodes are present.'
+    // Cycles
+    const cycleIds = findCycleNodeIds(nodes, edges);
+    if (cycleIds.length > 0) {
+        addError(
+            'Pipeline contains a cycle. Remove a connection to break it.',
+            [...cycleIds]
         );
     }
 
-    // Warn if output nodes are connected directly to Source while preprocessing exists
-    const hasPreprocessing = filterNodes.length > 0 || windowNodes.length > 0;
-    const outputDirectFromSource = nodes.some((n) => {
-        if (!outputTypes.has(n.type ?? '')) return false;
-        const ins = incoming.get(n.id) ?? [];
-        return ins.some((id) => byId.get(id)?.type === 'source-node');
-    });
-    if (hasPreprocessing && outputDirectFromSource) {
-        warnings.push(
-            'Outputs should come after preprocessing when preprocessing exists.'
-        );
-    }
-
-    // Cycle detection: if topoSort doesn't include all nodes
-    const ordered = topoSort(nodes, edges);
-    if (ordered.length !== nodes.length) {
-        errors.push('Pipeline contains a cycle.');
-    }
-
-    return { errors, warnings };
+    return { errors, warnings, nodeIssues };
 };
 
 // Converts React Flow state to backend pipeline format
@@ -229,27 +424,17 @@ export function preparePipelineStart(
     edges: Edge[],
     sessionId: number | null
 ) {
-    const { errors, warnings } = validatePipeline(nodes, edges);
+    const { errors, warnings, nodeIssues } = validatePipeline(nodes, edges);
     if (sessionId === null) {
         errors.push('Wait for a session to be ready before starting.');
     }
     return {
         errors,
         warnings,
+        nodeIssues,
         payload:
             errors.length === 0 && sessionId !== null
                 ? buildPipelinePayload(nodes, edges, String(sessionId))
                 : null,
     };
-}
-
-export const WINDOW_AFTER_SOURCE_MESSAGE =
-    'The window node has to come straight after the source.';
-
-// Only the source node may feed the window node's input. Anything may follow the window.
-export function isWindowInputAllowed(
-    sourceType: string | undefined,
-    targetType: string | undefined
-) {
-    return targetType !== 'window-node' || sourceType === 'source-node';
 }
