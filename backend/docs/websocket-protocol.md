@@ -7,6 +7,20 @@ The pipeline node configs carried in the init message are specified separately i
 
 Out of scope: the REST API (`api-server`), frontend components, and the Python ML internals.
 
+## Known gap: no session-ownership check
+
+The REST API (`api-server`) enforces that a session belongs to the logged-in user on every
+`/api/sessions/:session_id/...` route (see `ensure_session_owner` in `api-server/src/main.rs`).
+This server has no such check: it accepts whatever `session_id` the client sends in the init
+message and writes EEG data to it regardless of who's logged in — it doesn't even know who's
+logged in, since it has no cookie/auth handling at all (see "Subprotocol / auth" below). A user
+who can reach this port and knows (or guesses) another user's session id can currently stream
+data into that session. This server binds to `127.0.0.1` only, so the practical exposure today
+is local-machine processes, not the network — but it's an open item, not something this task
+closed. Fixing it needs this server to authenticate the init message the same way `api-server`
+does and look up ownership before calling `start_broadcast`; tracked as a backlog item (see also
+the WebSocket-auth backlog note from the session-auth task).
+
 ## Connection
 
 | | |

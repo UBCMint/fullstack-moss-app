@@ -13,6 +13,7 @@ export async function GET(
     const response = await forwardToBackend({
         method: 'GET',
         path: `/api/sessions/${params.session_id}/eeg-data${search}`,
+        cookie: req.headers.get('cookie'),
     });
 
     return passthroughJsonResponse(response);

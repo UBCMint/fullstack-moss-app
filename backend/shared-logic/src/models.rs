@@ -10,12 +10,16 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub password_hash: String, // store hashed password
+    pub created_at: DateTime<Utc>,
 }
 
 // Struct for creating a user (used for data coming INTO the API)
 // Because User derived Deserialize, the serde library (which Axum used to process incoming JSON request body)
 // expected all fields in User struct to be present in JSON you sent (id was not part of payload)
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+//
+// Deliberately does NOT derive Debug: it holds the user's raw password, and a
+// stray `{:?}` would put a plain-text password into the server logs.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NewUser {
     pub username: String,
     pub email: String,
@@ -37,11 +41,19 @@ pub struct UpdateUser {
     pub password: Option<String>, // new field for updating password
 }
 
+// Deliberately does NOT derive Debug: both fields are raw passwords.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+}
+
 // Struct for session data
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Session {
     pub id: i32,
     pub name: String,
+    pub user_id: i32,
 }
 
 // Struct for frontend state associated with a session
