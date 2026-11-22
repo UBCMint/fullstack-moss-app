@@ -52,7 +52,8 @@ export default function SignalGraphView({
     const maxIndex = Math.max(0, data.length - 1);
     const activeBrushStart = Math.min(brushRange?.start ?? 0, maxIndex);
     const activeBrushEnd = Math.min(brushRange?.end ?? maxIndex, maxIndex);
-    const visibleCount = activeBrushEnd - activeBrushStart + 1;
+    const visibleCount =
+        data.length > 0 ? activeBrushEnd - activeBrushStart + 1 : 0;
 
     const timeStart = data.length > 0 ? data[0].time : null;
     const timeEnd = data.length > 0 ? data[data.length - 1].time : null;
@@ -125,7 +126,7 @@ export default function SignalGraphView({
                             width={70}
                             tick={{ fontSize: 15, fill: '#666' }}
                             label={{
-                                value: 'Frequency (Hz)',
+                                value: 'Signal value',
                                 angle: -90,
                                 position: 'insideLeft',
                                 dy: 60,
@@ -239,16 +240,19 @@ export default function SignalGraphView({
                 </span>
                 {data.length > 0 && (
                     <span>
-                        <span className="font-semibold">Full time range:</span>{' '}
+                        <span className="font-semibold">
+                            Buffered time range:
+                        </span>{' '}
                         {timeStart} to {timeEnd}
                     </span>
                 )}
                 <span>
                     <span className="font-semibold">Y-axis:</span> auto-scaled
-                    to actual frequency (Hz)
+                    to signal values
                 </span>
                 <span>
-                    <span className="font-semibold">Channels:</span> 4 (EEG)
+                    <span className="font-semibold">Channels:</span> 8 EEG + 4
+                    EMG
                 </span>
             </div>
 

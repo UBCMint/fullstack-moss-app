@@ -7,10 +7,21 @@ edition = "2021"
 [dependencies]
 # Web Framework built on Tokio and Tower
 axum = { version = "0.7", features = ["macros"] }
+# axum-extra's cookie jar for reading/writing the session cookie
+axum-extra = { version = "0.9", features = ["cookie"] }
 # Tower for HTTP services (used by Axum)
 tower-http = { version = "0.5", features = ["cors"] } # For CORS, logging, etc.
 argon2 = "0.4"
 rand_core = "0.6"
+# For generating random session tokens
+rand = "0.8"
+# For hashing session tokens before storing them (never store the raw token)
+sha2 = "0.10"
+hex = "0.4"
+# Cookie Max-Age uses time::Duration, not chrono's
+time = "0.3"
+# For matching on database error kinds (e.g. unique constraint violations) by name
+sqlx = { version = "0.7", features = ["postgres"] }
 
 
 # Serialization/Deserialization for JSON
