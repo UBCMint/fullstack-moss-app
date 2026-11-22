@@ -1184,6 +1184,23 @@ pub async fn import_eeg_data_from_csv(
     })
 }
 
+/// Helper function for eeg data to find the earliest timestamp for a given session
+///
+/// Returns the earliest timestamp on success.
+pub async fn get_earliest_eeg_timestamp(
+    client: &DbClient,
+    session_id: i32,
+) -> Result<Option<DateTime<Utc>>, Error> {
+    let row = sqlx::query!(
+        "SELECT MIN(time) as earliest_time FROM eeg_data WHERE session_id = $1",
+        session_id
+    )
+    .fetch_one(&**client)
+    .await?;
+
+    Ok(row.earliest_time)
+}
+
 #[cfg(test)]
 mod csv_import_tests {
     use super::*;
@@ -1287,21 +1304,4 @@ mod csv_import_tests {
         assert_eq!(e.len(), MAX_REPORTED_ERRORS);
         assert_eq!(total, 25);
     }
-}
-
-/// Helper function for eeg data to find the earliest timestamp for a given session
-///
-/// Returns the earliest timestamp on success.
-pub async fn get_earliest_eeg_timestamp(
-    client: &DbClient,
-    session_id: i32,
-) -> Result<Option<DateTime<Utc>>, Error> {
-    let row = sqlx::query!(
-        "SELECT MIN(time) as earliest_time FROM eeg_data WHERE session_id = $1",
-        session_id
-    )
-    .fetch_one(&**client)
-    .await?;
-
-    Ok(row.earliest_time)
 }
