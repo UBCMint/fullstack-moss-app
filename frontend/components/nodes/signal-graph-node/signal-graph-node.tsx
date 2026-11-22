@@ -15,83 +15,35 @@ import {
 } from '@/components/ui/dialog';
 import SignalGraphView from './signal-graph-full';
 import { exportEEGData } from '@/lib/eeg-api';
+import { parseEegCsv, type ParsedEegCsv } from '@/lib/eeg-csv';
+import { useWebSocketContext } from '@/context/WebSocketContext';
+import {
+    availableGroups,
+    genericLayout,
+    isChannelGroupView,
+    resolveLayout,
+    type ChannelGroupView,
+} from '@/lib/channels';
+import { cn } from '@/lib/utils';
 
 // Temporary task 24 flag. Restoration instructions are above SignalGraphNode below.
 const CHART_PREVIEW_HISTORY_ENABLED =
     process.env.NEXT_PUBLIC_ENABLE_CHART_PREVIEW_HISTORY === 'true';
 const PREVIEW_HISTORY_KEY = 'mossChartPreview';
 
-interface SignalDataPoint {
-    time: string;
-    rawTime?: string;
-    signal1: number;
-    signal2: number;
-    signal3: number;
-    signal4: number;
-}
+const NO_SEED_DATA: ParsedEegCsv = { layout: genericLayout(0, 0), points: [] };
 
-function formatTimestamp(raw: string): string {
-    if (raw.includes('T')) return raw.slice(11, 23);
-    const spaceIdx = raw.indexOf(' ');
-    if (spaceIdx !== -1) return raw.slice(spaceIdx + 1, spaceIdx + 13);
-    return raw;
-}
-
-function parseEEG(csvContent: string): SignalDataPoint[] {
-    try {
-        const lines = csvContent.trim().split('\n');
-        if (lines.length < 2) return [];
-
-        const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
-        // find time column
-        const timeColIdx = header.findIndex(
-            (h) => h.includes('time') || h === 'timestamp'
-        );
-        if (timeColIdx == -1) return [];
-
-        // find signal columns by exact channel number patterns
-        const signalIndices = [0, 1, 2, 3].map((chNum) => {
-            const patterns = [
-                `ch${chNum + 1}`,
-                `channel${chNum + 1}`,
-                `signal${chNum + 1}`,
-                `signal_${chNum + 1}`,
-            ];
-            return header.findIndex((h) => patterns.includes(h));
-        });
-
-        if (signalIndices.includes(-1)) return [];
-
-        const data: SignalDataPoint[] = [];
-        for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i]
-                .trim()
-                .split(',')
-                .map((c) => c.trim());
-            if (!cols[timeColIdx]) continue;
-
-            const vals = signalIndices.map((idx) => parseFloat(cols[idx]));
-            if (vals.every((v) => !isNaN(v))) {
-                data.push({
-                    time: formatTimestamp(cols[timeColIdx]),
-                    rawTime: cols[timeColIdx],
-                    signal1: vals[0],
-                    signal2: vals[1],
-                    signal3: vals[2],
-                    signal4: vals[3],
-                });
-            }
-        }
-        return data;
-    } catch (error) {
-        console.error('Failed to parse EEG CSV:', error);
-        return [];
-    }
-}
+const GROUP_PICKER_OPTIONS: { value: ChannelGroupView; label: string }[] = [
+    { value: 'eeg', label: 'EEG' },
+    { value: 'emg', label: 'EMG' },
+    { value: 'both', label: 'Both' },
+];
 
 type SignalGraphNodeProps = {
     id?: string;
     selected?: boolean;
+    // React Flow node data. `channelGroup` is which group(s) the Preview shows.
+    data?: Record<string, unknown>;
 };
 
 /*
@@ -188,6 +140,7 @@ function HistorySignalGraphNode(props: SignalGraphNodeProps) {
 function OriginalSignalGraphNode({
     id,
     selected,
+    data: nodeData,
     dialogProps,
 }: SignalGraphNodeProps & {
     dialogProps?: Pick<
@@ -196,10 +149,25 @@ function OriginalSignalGraphNode({
     >;
 }) {
     const { dataStreaming, activeSessionId } = useGlobalContext();
+    const { channelLayout } = useWebSocketContext();
     const { renderData } = useNodeData(500, 10);
     const reactFlowInstance = useReactFlow();
     const [isConnected, setIsConnected] = React.useState(false);
-    const [seedData, setSeedData] = React.useState<SignalDataPoint[]>([]);
+    const [seed, setSeed] = React.useState<ParsedEegCsv>(NO_SEED_DATA);
+
+    // Live data uses the server's layout; saved data uses what the CSV holds
+    const isLive = renderData.length > 0;
+    const chartData = isLive ? renderData : seed.points;
+    const layout = isLive
+        ? resolveLayout(renderData, channelLayout)
+        : seed.points.length > 0
+          ? seed.layout
+          : (channelLayout ?? genericLayout(0, 0));
+    const hasBothGroups = availableGroups(layout).length > 1;
+    const storedGroup = nodeData?.channelGroup;
+    const channelGroup: ChannelGroupView = isChannelGroupView(storedGroup)
+        ? storedGroup
+        : 'both';
 
     // Determine if this Chart View node has an upstream path from a Source
     const checkConnectionStatus = React.useCallback(() => {
@@ -267,32 +235,29 @@ function OriginalSignalGraphNode({
                     start_time: timeframeStart,
                     end_time: timeframeEnd,
                 });
-                setSeedData(parseEEG(csvContent));
+                setSeed(parseEegCsv(csvContent));
             } catch (error) {
                 console.debug('export failed', error);
-                setSeedData([]);
+                setSeed(NO_SEED_DATA);
             }
         })();
     }, [id, activeSessionId, reactFlowInstance]);
 
-    // Save timeframe in node data
-    const handleTimeframeChange = (start: string, end: string) => {
+    // Merge fields into this node's data so they're saved with the pipeline
+    const updateNodeData = (patch: Record<string, unknown>) => {
         if (!id) return;
         reactFlowInstance.setNodes((prevNodes) =>
             prevNodes.map((n) =>
-                n.id === id
-                    ? {
-                          ...n,
-                          data: {
-                              ...n.data,
-                              timeframeStart: start,
-                              timeframeEnd: end,
-                          },
-                      }
-                    : n
+                n.id === id ? { ...n, data: { ...n.data, ...patch } } : n
             )
         );
     };
+
+    const handleTimeframeChange = (start: string, end: string) =>
+        updateNodeData({ timeframeStart: start, timeframeEnd: end });
+
+    const handleChannelGroupChange = (group: ChannelGroupView) =>
+        updateNodeData({ channelGroup: group });
 
     return (
         <Dialog {...dialogProps}>
@@ -337,15 +302,51 @@ function OriginalSignalGraphNode({
                             Chart View
                         </span>
                         {isConnected && (
-                            <DialogTrigger asChild>
-                                <Button
-                                    variant="nodeAction"
-                                    size="node"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    Preview
-                                </Button>
-                            </DialogTrigger>
+                            <div className="flex items-center gap-2">
+                                <DialogTrigger asChild>
+                                    <Button
+                                        variant="nodeAction"
+                                        size="node"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        Preview
+                                    </Button>
+                                </DialogTrigger>
+                                {hasBothGroups && (
+                                    <div
+                                        role="radiogroup"
+                                        aria-label="Signal group to show"
+                                        className="nodrag flex rounded-full border border-[#2E7B75] overflow-hidden text-[12px]"
+                                    >
+                                        {GROUP_PICKER_OPTIONS.map((option) => (
+                                            <button
+                                                key={option.value}
+                                                type="button"
+                                                role="radio"
+                                                aria-checked={
+                                                    channelGroup ===
+                                                    option.value
+                                                }
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleChannelGroupChange(
+                                                        option.value
+                                                    );
+                                                }}
+                                                className={cn(
+                                                    'px-2 py-0.5 transition-colors',
+                                                    channelGroup ===
+                                                        option.value
+                                                        ? 'bg-[#2E7B75] text-white'
+                                                        : 'bg-white text-[#2E7B75] hover:bg-[#EAF1F0]'
+                                                )}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         )}
                     </div>
                     {/* Right decorative circle only (no output handle for end of pipeline) */}
@@ -368,7 +369,10 @@ function OriginalSignalGraphNode({
                     </DialogHeader>
                     <div className="w-[85vw] h-[90vh]">
                         <SignalGraphView
-                            data={renderData.length > 0 ? renderData : seedData}
+                            data={chartData}
+                            layout={layout}
+                            view={channelGroup}
+                            onViewChange={handleChannelGroupChange}
                             onTimeframeChange={handleTimeframeChange}
                         />
                     </div>
