@@ -2,7 +2,7 @@
 //!
 //! [`start_broadcast`] is the runtime core of one websocket connection. It spawns:
 //!
-//! - the mock EEG generator ([`generate_mock_data`]), always on for now; comment it out to
+//! - the mock EEG + EMG generator ([`generate_mock_data`]), always on for now; comment it out to
 //!   use a real headset,
 //! - the acquisition loop ([`receive_eeg`]), which batches samples, runs ML and publishes
 //!   [`EEGDataPacket`]s on a `tokio::broadcast` channel (capacity 1000),
@@ -16,9 +16,11 @@
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Receiver;
 
+use crate::channels::{ChannelLabels, ChannelLayout};
 use crate::db::{get_db_client, insert_batch_eeg};
 use crate::lsl::{receive_eeg, EEGDataPacket};
 use crate::mockeeg::generate_mock_data;
+use crate::packet::StreamMetadata;
 use crate::pipeline::Pipeline;
 use futures_util::stream::SplitSink;
 use futures_util::SinkExt;
@@ -37,6 +39,27 @@ pub async fn start_broadcast(
     pipeline: Pipeline,
     session_id: i32,
 ) {
+    // One layout for the whole session, shared by the mock source and the acquisition loop
+    let (layout, labels) = match ChannelLayout::from_env()
+        .and_then(|layout| Ok((layout, ChannelLabels::from_env(&layout)?)))
+    {
+        Ok(pair) => pair,
+        Err(e) => {
+            error!("Invalid channel layout, not starting the session: {}", e);
+            return;
+        }
+    };
+
+    // Tell the client the layout before any batch. Sent before the websocket writer task
+    // exists, so it is always the first message.
+    if let Err(e) = send_metadata(&write, StreamMetadata { channels: labels }).await {
+        error!(
+            "Failed to send stream metadata, not starting the session: {}",
+            e
+        );
+        return;
+    }
+
     let (tx, _rx) = broadcast::channel::<Arc<EEGDataPacket>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
     let rx_ws = tx.subscribe();
     let rx_db = tx.subscribe();
@@ -44,7 +67,7 @@ pub async fn start_broadcast(
 
     ////// spawn the mock data generator, comment out when connecting to the muse headset.
     tokio::spawn(async move {
-        if let Err(e) = generate_mock_data(generator_token).await {
+        if let Err(e) = generate_mock_data(layout, generator_token).await {
             error!("Mock data generation failed: {}", e);
         }
     });
@@ -54,7 +77,7 @@ pub async fn start_broadcast(
     let tx_clone = tx.clone();
     let sender_token = cancel_token.clone();
     let sender = tokio::spawn(async move {
-        receive_eeg(tx_clone, sender_token, pipeline).await;
+        receive_eeg(tx_clone, sender_token, pipeline, layout).await;
     });
 
     // Subscribe for websocket Receiver
@@ -75,6 +98,17 @@ pub async fn start_broadcast(
     }
 }
 
+// Serializes the stream metadata and sends it as one text frame.
+async fn send_metadata(
+    write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,
+    metadata: StreamMetadata,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let msg = serde_json::to_string(&metadata)?;
+    info!("Sending stream metadata: {}", msg);
+    write.lock().await.send(Message::Text(msg)).await?;
+    Ok(())
+}
+
 // ws_broadcast_receiver takes a EEGDataPacket  struct from the broadcast sender, and converts it to JSON, then send it to the connected websocket client.
 pub async fn ws_receiver(
     write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,
@@ -93,7 +127,7 @@ pub async fn ws_receiver(
                 match serde_json::to_string(&eeg_packet) {
                     Ok(msg) => {
                         // info!("websocket got: {}", msg);  // debug purposes
-                        let num_samples = eeg_packet.signals[0].len();
+                        let num_samples = eeg_packet.len();
                         info!("websocket got packet with {} samples", num_samples);
                         packet_count += 1; // for debug purposes
                         sample_count += num_samples;
@@ -137,7 +171,7 @@ pub async fn db_receiver(mut rx_db: Receiver<Arc<EEGDataPacket>>, session_id: i3
     loop {
         match rx_db.recv().await {
             Ok(eeg_packet) => {
-                let num_samples = eeg_packet.signals[0].len();
+                let num_samples = eeg_packet.len();
                 info!("Database got packet with {} samples", num_samples); // debug purposes
                 packet_count += 1; // for debug purposes
                 sample_count += num_samples; // for debug purposes

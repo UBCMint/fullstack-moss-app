@@ -5,39 +5,47 @@ exported file can be imported again unchanged.
 
 ## File
 
-| Property  | Requirement                                                             |
-| --------- | ----------------------------------------------------------------------- |
-| Type      | Plain-text CSV, file name ending in `.csv`                              |
-| Encoding  | UTF-8 (a byte-order mark is fine)                                       |
-| Separator | Comma (`,`). Semicolons or tabs are not accepted.                       |
-| Size      | Up to 50 MB per import (`MAX_IMPORT_BYTES` in `shared-logic/src/db.rs`) |
-| Blank lines | Ignored                                                               |
+| Property    | Requirement                                                             |
+| ----------- | ----------------------------------------------------------------------- |
+| Type        | Plain-text CSV, file name ending in `.csv`                              |
+| Encoding    | UTF-8 (a byte-order mark is fine)                                       |
+| Separator   | Comma (`,`). Semicolons or tabs are not accepted.                       |
+| Size        | Up to 50 MB per import (`MAX_IMPORT_BYTES` in `shared-logic/src/db.rs`) |
+| Blank lines | Ignored                                                                 |
 
 ## Columns
 
-The first line is a header with exactly these five columns, in this order
-(letter case and surrounding spaces don't matter):
+The first line is a header. Columns are matched **by name** (letter case and
+surrounding spaces don't matter) and can be in any order. Exports always write
+all of them, in this order:
 
 ```
-time,channel1,channel2,channel3,channel4
+time,eeg1,eeg2,eeg3,eeg4,eeg5,eeg6,eeg7,eeg8,emg1,emg2,emg3,emg4
 ```
 
-| Column                  | Accepted values                                                                                                                 | Examples                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `time`                  | RFC 3339 timestamp **with** a time zone (`Z` or `±hh:mm`) and a `T` between date and time. Fractional seconds are allowed.      | `2024-01-15T13:45:00Z`, `2024-01-15T13:45:00.25-08:00` |
-| `channel1` – `channel4` | Whole numbers from -2,147,483,648 to 2,147,483,647. No decimals, scientific notation (`1e3`), units, blanks, or thousands separators. | `120`, `-45`                                       |
+| Column                        | Accepted values                                                                                                            | Examples                                               |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `time` (required)             | RFC 3339 timestamp **with** a time zone (`Z` or `±hh:mm`) and a `T` between date and time. Fractional seconds are allowed. | `2024-01-15T13:45:00Z`, `2024-01-15T13:45:00.25-08:00` |
+| `eeg1` – `eeg8`, `emg1` – `emg4` | Numbers in µV; decimals are allowed. No units, thousands separators, `NaN` or `inf`. An empty cell means the channel wasn't recorded. | `12.5`, `-45`, (empty)                                  |
 
-Every row must have exactly 5 values, and each `time` must be unique within the
-file. At least one data row is required.
+- At least one channel column is required; include only the channels your
+  device has. Missing columns and empty cells are stored as `NULL`.
+- Unknown or repeated column names are rejected, so a typo can't silently drop
+  a channel.
+- Legacy 4-channel files with `channel1` – `channel4` are still accepted and
+  read as `eeg1` – `eeg4`.
+- Every row must have one value per header column, and each `time` must be
+  unique within the file. At least one data row is required.
 
 ```csv
-time,channel1,channel2,channel3,channel4
-2024-01-15T13:45:00Z,120,-45,310,8
-2024-01-15T13:45:00.004Z,118,-47,305,10
+time,eeg1,eeg2,eeg3,eeg4,eeg5,eeg6,eeg7,eeg8,emg1,emg2,emg3,emg4
+2024-01-15T13:45:00Z,12.5,-4.1,8,3.3,0.7,-2,5.9,1.2,40.1,-12,7.5,
+2024-01-15T13:45:00.004Z,11.8,-4.7,7.6,3.1,0.9,-1.8,6.2,1.1,38.4,-10.9,7.1,
 ```
 
-Channel values are whole numbers because the `eeg_data` table stores them as
-`INTEGER`.
+Channels are `DOUBLE PRECISION` columns in the `eeg_data` table; the channel
+count a session streams is configured with `EEG_CHANNEL_COUNT` /
+`EMG_CHANNEL_COUNT` (see `backend/docs/websocket-protocol.md`).
 
 ## Import behaviour
 
@@ -53,8 +61,9 @@ Channel values are whole numbers because the `eeg_data` table stores them as
 
 ## Export behaviour
 
-- Output is exactly the format above, ordered by `time` ascending, with `time`
-  in UTC (`+00:00`).
+- Output is exactly the format above, with every channel column, ordered by
+  `time` ascending, with `time` in UTC (`+00:00`). Channels the device didn't
+  record are empty cells.
 - `format` must be `"csv"` (the only supported format).
 - `include_header` (default `true`) controls the header row.
 - `start_time` / `end_time` (RFC 3339, optional): `end_time` defaults to now,
@@ -65,7 +74,8 @@ Channel values are whole numbers because the `eeg_data` table stores them as
 
 ## Where this is enforced
 
-- Backend parser/validator: `parse_eeg_csv` in `backend/shared-logic/src/db.rs`
+- Backend parser/validator: `parse_eeg_csv` in `backend/shared-logic/src/db.rs`;
+  column names come from `CHANNEL_COLUMNS` in `backend/shared-logic/src/channels.rs`
 - Import/export endpoints: `backend/api-server/src/main.rs`
 - User-facing rules, shown up front in the Import and Export dialogs (with a
   downloadable example file): `frontend/components/ui/eeg-csv-format.tsx`, using

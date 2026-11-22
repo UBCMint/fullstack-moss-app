@@ -150,7 +150,7 @@ struct ExportEEGRequest {
 pub struct ExportOptions {
     /// Only "csv" is supported.
     format: String,
-    /// Write the `time,channel1,...` header row. Defaults to true.
+    /// Write the `time,eeg1,...,emg4` header row. Defaults to true.
     #[serde(default = "default_true", alias = "includeHeader")]
     include_header: bool,
     start_time: Option<DateTime<Utc>>,

@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use serde_json::Value;
 
+use crate::channels::CHANNEL_COLUMN_COUNT;
+
 // Existing User struct (used for data coming OUT of the DB)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
@@ -85,14 +87,56 @@ pub struct NewTimeLabel {
     pub color: String,
 }
 
-// Struct for a row of EEG data coming OUT of the DB
-#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+// One sample row of `eeg_data` (in and out of the DB). A `None` channel is one the recording
+// device doesn't have. Field order matches `channels::CHANNEL_COLUMNS`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, sqlx::FromRow)]
 pub struct EegDataRow {
     pub time: DateTime<Utc>,
-    pub channel1: i32,
-    pub channel2: i32,
-    pub channel3: i32,
-    pub channel4: i32,
+    pub eeg1: Option<f64>,
+    pub eeg2: Option<f64>,
+    pub eeg3: Option<f64>,
+    pub eeg4: Option<f64>,
+    pub eeg5: Option<f64>,
+    pub eeg6: Option<f64>,
+    pub eeg7: Option<f64>,
+    pub eeg8: Option<f64>,
+    pub emg1: Option<f64>,
+    pub emg2: Option<f64>,
+    pub emg3: Option<f64>,
+    pub emg4: Option<f64>,
+}
+
+impl EegDataRow {
+    /// Channel values in `CHANNEL_COLUMNS` order.
+    pub fn channel_values(&self) -> [Option<f64>; CHANNEL_COLUMN_COUNT] {
+        [
+            self.eeg1, self.eeg2, self.eeg3, self.eeg4, self.eeg5, self.eeg6, self.eeg7, self.eeg8,
+            self.emg1, self.emg2, self.emg3, self.emg4,
+        ]
+    }
+
+    /// Inverse of [`channel_values`](Self::channel_values).
+    pub fn from_channel_values(
+        time: DateTime<Utc>,
+        values: [Option<f64>; CHANNEL_COLUMN_COUNT],
+    ) -> Self {
+        let [eeg1, eeg2, eeg3, eeg4, eeg5, eeg6, eeg7, eeg8, emg1, emg2, emg3, emg4] = values;
+        Self {
+            time,
+            eeg1,
+            eeg2,
+            eeg3,
+            eeg4,
+            eeg5,
+            eeg6,
+            eeg7,
+            eeg8,
+            emg1,
+            emg2,
+            emg3,
+            emg4,
+        }
+    }
 }
 
 // Struct for the query parameters on GET /api/sessions/{session_id}/eeg-data

@@ -39,12 +39,18 @@ Rules for how the backend reads the array:
 ## How the stages fit together
 
 ```
-LSL samples (4 ch) ──► window ──► batch of N samples ──┬──► websocket client (raw signals + ml_result)
-                                                       ├──► TimescaleDB (raw signals)
-                                                       └──► Python manager(preprocessing config, batch) ──► ml_result
+LSL samples (8 EEG + 4 EMG) ──► window ──► batch of N samples ──┬──► websocket client (raw eeg + emg + ml_result)
+                                                                ├──► TimescaleDB (raw eeg + emg)
+                                                                └──► Python manager(preprocessing config,
+                                                                     4-channel EEG subset of the batch) ──► ml_result
 ```
 
-Preprocessing and ML only affect `ml_result`. The `signals` sent to the client and stored
+The channel layout comes from `EEG_CHANNEL_COUNT` / `EMG_CHANNEL_COUNT` on the server, not
+from any node (see [Channel layout](websocket-protocol.md#channel-layout)). The Python
+models still take 4 Muse channels, so only the `ML_EEG_CHANNELS` subset of `eeg` (default
+the first four) reaches the preprocessing and ML stages. EMG is never sent to Python yet.
+
+Preprocessing and ML only affect `ml_result`. The `eeg`/`emg` sent to the client and stored
 in the DB are **always raw**. The Python pipeline returns `processed_eeg`, but
 `pipeline_gateway.rs` doesn't use it.
 
@@ -93,7 +99,7 @@ batch before classifying it. It does **not** filter the streamed or stored data.
 | `h_freq` | number \| null | no | `50.0` | yes | High cutoff in Hz. `null` or missing becomes **50.0**. |
 | `downsample_factor` | integer \| null | no | `null` | **no** | Not used. Downsampling was removed with the old `SignalProcessor` path. |
 | `sfreq` | number | yes | `256.0` | yes | Sample rate in Hz that the Python filters and quality check assume. It is **not** measured from the stream, so it has to match the source (256 for Muse). |
-| `n_channels` | integer | yes | `4` | **no** | Not used. The backend always uses 4 channels. |
+| `n_channels` | integer | yes | `4` | **no** | Not used. The streamed channel count comes from `EEG_CHANNEL_COUNT`/`EMG_CHANNEL_COUNT`, and the ML stage always gets `MODEL_CHANNEL_COUNT` (4) EEG channels picked by `ML_EEG_CHANNELS`. |
 
 What gets sent to the Python manager (`build_python_pipeline_dict` in `pipeline_gateway.rs`):
 

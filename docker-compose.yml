@@ -56,6 +56,16 @@ services:
       DATABASE_URL: postgres://postgres:my_secure_password_123@db:5432/postgres
       WS_HOST: 0.0.0.0 
       WS_PORT: 8080
+      # Device channel layout (EEG first, then EMG, in each LSL sample).
+      # For a 4-channel Muse use EEG_CHANNEL_COUNT: 4 and EMG_CHANNEL_COUNT: 0.
+      EEG_CHANNEL_COUNT: 8
+      EMG_CHANNEL_COUNT: 4
+      # Optional channel names sent to the client (one per channel, defaults to "EEG 1", ...).
+      # Muse: EEG_CHANNEL_LABELS: "TP9,AF7,AF8,TP10" and EMG_CHANNEL_LABELS: ""
+      # EEG_CHANNEL_LABELS: "Fp1,Fp2,C3,C4,P3,P4,O1,O2"
+      # EMG_CHANNEL_LABELS: "EMG 1,EMG 2,EMG 3,EMG 4"
+      # EEG channels (0-based) fed to the 4-channel ML models
+      ML_EEG_CHANNELS: "0,1,2,3"
     command: ["./websocket-server"]
     depends_on:
       db:
