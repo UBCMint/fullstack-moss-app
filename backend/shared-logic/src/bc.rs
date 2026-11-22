@@ -2,7 +2,7 @@
 //!
 //! [`start_broadcast`] is the runtime core of one websocket connection. It spawns:
 //!
-//! - the mock EEG generator ([`generate_mock_data`]), always on for now; comment it out to
+//! - the mock EEG + EMG generator ([`generate_mock_data`]), always on for now; comment it out to
 //!   use a real headset,
 //! - the acquisition loop ([`receive_eeg`]), which batches samples, runs ML and publishes
 //!   [`EEGDataPacket`]s on a `tokio::broadcast` channel (capacity 1000),
@@ -16,6 +16,7 @@
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Receiver;
 
+use crate::channels::ChannelLayout;
 use crate::db::{get_db_client, insert_batch_eeg};
 use crate::lsl::{receive_eeg, EEGDataPacket};
 use crate::mockeeg::generate_mock_data;
@@ -37,6 +38,15 @@ pub async fn start_broadcast(
     pipeline: Pipeline,
     session_id: i32,
 ) {
+    // One layout for the whole session, shared by the mock source and the acquisition loop
+    let layout = match ChannelLayout::from_env() {
+        Ok(layout) => layout,
+        Err(e) => {
+            error!("Invalid channel layout, not starting the session: {}", e);
+            return;
+        }
+    };
+
     let (tx, _rx) = broadcast::channel::<Arc<EEGDataPacket>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
     let rx_ws = tx.subscribe();
     let rx_db = tx.subscribe();
@@ -54,7 +64,7 @@ pub async fn start_broadcast(
     let tx_clone = tx.clone();
     let sender_token = cancel_token.clone();
     let sender = tokio::spawn(async move {
-        receive_eeg(tx_clone, sender_token, pipeline).await;
+        receive_eeg(tx_clone, sender_token, pipeline, layout).await;
     });
 
     // Subscribe for websocket Receiver
@@ -93,7 +103,7 @@ pub async fn ws_receiver(
                 match serde_json::to_string(&eeg_packet) {
                     Ok(msg) => {
                         // info!("websocket got: {}", msg);  // debug purposes
-                        let num_samples = eeg_packet.signals[0].len();
+                        let num_samples = eeg_packet.len();
                         info!("websocket got packet with {} samples", num_samples);
                         packet_count += 1; // for debug purposes
                         sample_count += num_samples;
@@ -137,7 +147,7 @@ pub async fn db_receiver(mut rx_db: Receiver<Arc<EEGDataPacket>>, session_id: i3
     loop {
         match rx_db.recv().await {
             Ok(eeg_packet) => {
-                let num_samples = eeg_packet.signals[0].len();
+                let num_samples = eeg_packet.len();
                 info!("Database got packet with {} samples", num_samples); // debug purposes
                 packet_count += 1; // for debug purposes
                 sample_count += num_samples; // for debug purposes

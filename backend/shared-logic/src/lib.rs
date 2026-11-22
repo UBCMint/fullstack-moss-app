@@ -5,6 +5,7 @@ pub mod db;
 pub mod lsl;
 pub mod mockeeg;
 pub mod models;
+pub mod packet;
 pub use models::{NewUser, TimeSeriesData, User};
 pub mod pipeline;
 pub mod signal_processing;

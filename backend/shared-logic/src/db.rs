@@ -2,7 +2,8 @@ use super::models::{
     EegDataRow, FrontendState, NewTimeLabel, NewUser, Session, TimeLabel, TimeSeriesData,
     UpdateUser, User,
 };
-use crate::lsl::EEGDataPacket;
+use crate::channels::{CHANNEL_COLUMNS, CHANNEL_COLUMN_COUNT};
+use crate::packet::EEGDataPacket;
 use argon2::password_hash::SaltString;
 use argon2::{password_hash::PasswordHasher, Argon2};
 use chrono::{DateTime, Utc};
@@ -18,16 +19,6 @@ use tokio::time::{self, Duration};
 pub static DB_POOL: OnceCell<Arc<PgPool>> = OnceCell::new();
 
 pub type DbClient = Arc<PgPool>;
-
-// struct for EEG rows to convert to CSV
-#[derive(serde::Serialize)]
-struct EEGCsvRow {
-    time: String,
-    channel1: i32,
-    channel2: i32,
-    channel3: i32,
-    channel4: i32,
-}
 
 pub async fn initialize_connection() -> Result<DbClient, Error> {
     dotenv().ok();
@@ -149,54 +140,63 @@ pub async fn get_testtime_series_data(client: &DbClient) -> Result<Vec<TimeSerie
     Ok(data)
 }
 
-/// Insert a batch of records into eeg_data.
+/// Postgres caps one statement at 65,535 bind parameters.
+const MAX_BIND_PARAMS: usize = u16::MAX as usize;
+/// Binds per `eeg_data` row: session_id + time + every channel column.
+const EEG_BINDS_PER_ROW: usize = 2 + CHANNEL_COLUMN_COUNT;
+/// Rows per INSERT statement so a large import stays under [`MAX_BIND_PARAMS`].
+const EEG_ROWS_PER_INSERT: usize = MAX_BIND_PARAMS / EEG_BINDS_PER_ROW;
+// Fails the build if a future column change makes one row exceed the limit.
+const _: () = assert!(EEG_ROWS_PER_INSERT > 0);
+
+/// `time, eeg1, ..., emg4`, the column list shared by every eeg_data SELECT and INSERT.
+fn eeg_columns_sql() -> String {
+    std::iter::once("time")
+        .chain(CHANNEL_COLUMNS)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Insert one live packet into eeg_data. Channels the packet doesn't carry are stored as NULL.
 pub async fn insert_batch_eeg(
     client: &DbClient,
     session_id: i32,
     packet: &EEGDataPacket,
 ) -> Result<(), sqlx::Error> {
-    let n_samples = packet.timestamps.len();
+    insert_eeg_rows(client, session_id, &packet.to_rows()).await
+}
 
+/// Insert sample rows into eeg_data, skipping any `(session_id, time)` that already exists.
+/// Large inputs are split into several statements (to respect the bind-parameter limit) that
+/// run in one transaction.
+pub async fn insert_eeg_rows(
+    client: &DbClient,
+    session_id: i32,
+    rows: &[EegDataRow],
+) -> Result<(), sqlx::Error> {
     // Add validation to prevent empty inserts
-    if n_samples == 0 {
-        info!("Skipping insert - packet has no samples");
+    if rows.is_empty() {
+        info!("Skipping insert - no samples");
         return Ok(());
     }
 
-    // Construct a single SQL insert statement
-    let mut query_builder = sqlx::QueryBuilder::new(
-        "INSERT INTO eeg_data (session_id, time, channel1, channel2, channel3, channel4) ",
-    );
+    let insert_sql = format!("INSERT INTO eeg_data (session_id, {}) ", eeg_columns_sql());
+    // One transaction, so a multi-statement import is all-or-nothing
+    let mut tx = client.begin().await?;
+    for chunk in rows.chunks(EEG_ROWS_PER_INSERT) {
+        let mut query_builder = sqlx::QueryBuilder::new(&insert_sql);
+        query_builder.push_values(chunk, |mut b, row| {
+            b.push_bind(session_id).push_bind(row.time);
+            for value in row.channel_values() {
+                b.push_bind(value);
+            }
+        });
+        query_builder.push(" ON CONFLICT (session_id, time) DO NOTHING");
+        query_builder.build().execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
 
-    // Iterate through all data in the packet, pairing timestamp to the signal, and insert them
-
-    query_builder.push_values(
-        (0..n_samples).map(|sample_idx| {
-            (
-                session_id,
-                &packet.timestamps[sample_idx],
-                packet.signals[0][sample_idx], // Channel 0
-                packet.signals[1][sample_idx], // Channel 1
-                packet.signals[2][sample_idx], // Channel 2
-                packet.signals[3][sample_idx], // Channel 3
-            )
-        }),
-        |mut b, (session_id, timestamp, ch0, ch1, ch2, ch3)| {
-            b.push_bind(session_id)
-                .push_bind(timestamp)
-                .push_bind(ch0)
-                .push_bind(ch1)
-                .push_bind(ch2)
-                .push_bind(ch3);
-        },
-    );
-
-    query_builder.push(" ON CONFLICT (session_id, time) DO NOTHING");
-    query_builder.build().execute(&**client).await?;
-    info!(
-        "EEG packet inserted successfully - {} data",
-        packet.timestamps.len()
-    );
+    info!("EEG rows inserted successfully - {} samples", rows.len());
     Ok(())
 }
 
@@ -485,15 +485,17 @@ pub async fn get_eeg_data_by_range(
         session_id, start, end
     );
 
-    let data = sqlx::query_as!(
-        EegDataRow,
-        "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data WHERE session_id = $1 AND time >= $2 AND time <= $3 ORDER BY time",
-        session_id,
-        start,
-        end,
-    )
-    .fetch_all(&**client)
-    .await?;
+    // Runtime query (not `query_as!`) because the column list comes from `CHANNEL_COLUMNS`.
+    let sql = format!(
+        "SELECT {} FROM eeg_data WHERE session_id = $1 AND time >= $2 AND time <= $3 ORDER BY time",
+        eeg_columns_sql()
+    );
+    let data = sqlx::query_as::<_, EegDataRow>(&sql)
+        .bind(session_id)
+        .bind(start)
+        .bind(end)
+        .fetch_all(&**client)
+        .await?;
 
     info!("Retrieved {} EEG data rows.", data.len());
     Ok(data)
@@ -543,131 +545,131 @@ pub async fn export_eeg_data_as_csv(
         session_id, start_time, end_time
     );
 
-    // get the data from the database
-    let data = sqlx::query!(
-        "SELECT time, channel1, channel2, channel3, channel4 FROM eeg_data
-        WHERE session_id = $1 AND time >= $2 AND time <= $3
-        ORDER BY time ASC",
-        session_id,
-        start_time,
-        end_time
-    )
-    .fetch_all(&**client)
-    .await?;
+    let data = get_eeg_data_by_range(client, session_id, start_time, end_time).await?;
+    eeg_rows_to_csv(&data, include_header).map_err(|e| Error::Protocol(e.to_string()))
+}
 
-    // build the CSV using the csv crate
-
+/// Serializes rows as CSV: `time` (RFC 3339) then every column in `CHANNEL_COLUMNS`.
+/// Channels the device didn't record (`None`) are written as empty cells.
+pub fn eeg_rows_to_csv(rows: &[EegDataRow], include_header: bool) -> Result<String, csv::Error> {
     let mut writer = csv::WriterBuilder::new()
         .has_headers(false)
         .from_writer(vec![]);
 
-    // write the header based on include_header flag
     if include_header {
-        writer
-            .write_record(["time", "channel1", "channel2", "channel3", "channel4"])
-            .map_err(|e| Error::Protocol(e.to_string()))?;
+        writer.write_record(std::iter::once("time").chain(CHANNEL_COLUMNS))?;
     }
 
-    // now, iterate through the data and write each row
-    for row in data {
-        writer
-            .serialize(EEGCsvRow {
-                time: row.time.to_rfc3339(),
-                channel1: row.channel1,
-                channel2: row.channel2,
-                channel3: row.channel3,
-                channel4: row.channel4,
-            })
-            .map_err(|e| Error::Protocol(e.to_string()))?;
+    for row in rows {
+        let values = row
+            .channel_values()
+            .map(|value| value.map(|v| v.to_string()).unwrap_or_default());
+        writer.write_record(std::iter::once(row.time.to_rfc3339()).chain(values))?;
     }
 
-    let byte_stream = writer
+    let bytes = writer
         .into_inner()
-        .map_err(|e| Error::Protocol(e.to_string()))?;
-
-    // now, we convert the CSV data to a string and return it
-    let csv_data = String::from_utf8(byte_stream).map_err(|e| Error::Protocol(e.to_string()))?;
-
-    Ok(csv_data)
+        .map_err(|e| csv::Error::from(e.into_error()))?;
+    Ok(String::from_utf8(bytes).expect("csv writer only emits UTF-8 from UTF-8 input"))
 }
 
-/// Import EEG data from a CSV byte stream for a given session ID. The CSV is expected
-/// to have columns: "time", "channel1", "channel2", "channel3", "channel4".
+/// Import EEG data from a CSV byte stream for a given session ID.
 ///
-/// Returns Ok(()) on success.
+/// The first row must be a header. See [`parse_eeg_csv`] for the accepted columns.
 pub async fn import_eeg_data_from_csv(
     client: &DbClient,
     session_id: i32,
     csv_bytes: &[u8],
 ) -> Result<(), Error> {
     info!("Importing EEG data for session id {} from CSV", session_id);
+    let rows = parse_eeg_csv(csv_bytes).map_err(Error::Protocol)?;
+    insert_eeg_rows(client, session_id, &rows).await
+}
 
-    // we use the csv crate to read the CSV data, converting them to the struct we made for CSV rows
+/// Legacy 4-channel exports used `channel1..channel4`; they were the Muse EEG channels.
+const LEGACY_CHANNEL_ALIASES: [(&str, &str); 4] = [
+    ("channel1", "eeg1"),
+    ("channel2", "eeg2"),
+    ("channel3", "eeg3"),
+    ("channel4", "eeg4"),
+];
+
+/// Parses an EEG CSV into rows. Columns are matched **by header name** (case-insensitive,
+/// any order):
+///
+/// - `time` (required): RFC 3339 timestamp,
+/// - any subset of `eeg1..eeg8`, `emg1..emg4` (at least one),
+/// - legacy `channel1..channel4`, read as `eeg1..eeg4`.
+///
+/// Missing columns and empty cells become `NULL`. Unknown or duplicate columns are an error,
+/// so a typo can't silently drop a channel. Nothing is returned if any row is invalid.
+pub fn parse_eeg_csv(csv_bytes: &[u8]) -> Result<Vec<EegDataRow>, String> {
     let mut reader = csv::ReaderBuilder::new()
-        .has_headers(true) // we expect the CSV to have headers, should probably make this clear somewhere
+        .has_headers(true)
+        .trim(csv::Trim::All)
         .from_reader(csv_bytes);
 
-    // set up our vectors to hold the parsed EEG data rows, so we can batch insert them later
-    let mut timestamps: Vec<DateTime<Utc>> = Vec::new();
-    let mut channel1_data: Vec<f64> = Vec::new();
-    let mut channel2_data: Vec<f64> = Vec::new();
-    let mut channel3_data: Vec<f64> = Vec::new();
-    let mut channel4_data: Vec<f64> = Vec::new();
-
-    // we iterate through the CSV records, parsing each row and converting it to the format we need for insertion
-    for result in reader.records() {
-        // unwrap the record, if there's an error we return it
-        let record = result.map_err(|e| Error::Protocol(e.to_string()))?;
-
-        // now we parse the fields, converting time to DateTime<Utc> and channels to i32
-        let time_str = record
-            .get(0)
-            .ok_or_else(|| Error::Protocol("Missing time field".to_string()))?;
-
-        // we assume the time is in RFC3339 format
-        let time = DateTime::parse_from_rfc3339(time_str)
-            .map_err(|e| Error::Protocol(format!("Invalid time format: {}", e)))?
-            .with_timezone(&Utc);
-
-        let channel1 = record
-            .get(1)
-            .ok_or_else(|| Error::Protocol("Missing channel1 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel1 value: {}", e)))?;
-        let channel2 = record
-            .get(2)
-            .ok_or_else(|| Error::Protocol("Missing channel2 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel2 value: {}", e)))?;
-        let channel3 = record
-            .get(3)
-            .ok_or_else(|| Error::Protocol("Missing channel3 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel3 value: {}", e)))?;
-        let channel4 = record
-            .get(4)
-            .ok_or_else(|| Error::Protocol("Missing channel4 field".to_string()))?
-            .parse::<f64>()
-            .map_err(|e| Error::Protocol(format!("Invalid channel4 value: {}", e)))?;
-
-        // now we construct the tuple and add it to our vectors
-        timestamps.push(time);
-        channel1_data.push(channel1);
-        channel2_data.push(channel2);
-        channel3_data.push(channel3);
-        channel4_data.push(channel4);
+    // Map each CSV column to `None` (time) or `Some(channel column index)`
+    let headers = reader.headers().map_err(|e| e.to_string())?.clone();
+    let mut time_col = None;
+    let mut channel_cols: Vec<(usize, usize)> = Vec::new(); // (csv index, CHANNEL_COLUMNS index)
+    for (csv_idx, raw_name) in headers.iter().enumerate() {
+        let name = raw_name.to_ascii_lowercase();
+        if name == "time" {
+            if time_col.replace(csv_idx).is_some() {
+                return Err("Duplicate time column".to_string());
+            }
+            continue;
+        }
+        let canonical = LEGACY_CHANNEL_ALIASES
+            .iter()
+            .find(|(alias, _)| *alias == name)
+            .map_or(name.as_str(), |(_, canonical)| canonical);
+        let Some(column) = CHANNEL_COLUMNS.iter().position(|c| *c == canonical) else {
+            return Err(format!(
+                "Unknown column {:?}; expected time, {} (or legacy channel1..channel4)",
+                raw_name,
+                CHANNEL_COLUMNS.join(", ")
+            ));
+        };
+        if channel_cols.iter().any(|&(_, c)| c == column) {
+            return Err(format!("Duplicate column for {}", CHANNEL_COLUMNS[column]));
+        }
+        channel_cols.push((csv_idx, column));
+    }
+    let time_col = time_col.ok_or("Missing time column")?;
+    if channel_cols.is_empty() {
+        return Err("CSV has no channel columns".to_string());
     }
 
-    // now we use our existing batch insert function to insert the data into the database
-    let eeg_rows = EEGDataPacket {
-        timestamps,
-        signals: vec![channel1_data, channel2_data, channel3_data, channel4_data],
-        ml_result: None,
-    };
+    let mut rows = Vec::new();
+    for (line, result) in reader.records().enumerate() {
+        let record = result.map_err(|e| e.to_string())?;
+        let row_number = line + 2; // 1-based, after the header
+        let time_str = record
+            .get(time_col)
+            .ok_or_else(|| format!("Row {}: missing time field", row_number))?;
+        let time = DateTime::parse_from_rfc3339(time_str)
+            .map_err(|e| format!("Row {}: invalid time {:?}: {}", row_number, time_str, e))?
+            .with_timezone(&Utc);
 
-    insert_batch_eeg(client, session_id, &eeg_rows).await?;
-
-    Ok(())
+        let mut values = [None; CHANNEL_COLUMN_COUNT];
+        for &(csv_idx, column) in &channel_cols {
+            let cell = record.get(csv_idx).unwrap_or("");
+            if cell.is_empty() {
+                continue;
+            }
+            let value = cell.parse::<f64>().map_err(|e| {
+                format!(
+                    "Row {}: invalid {} value {:?}: {}",
+                    row_number, CHANNEL_COLUMNS[column], cell, e
+                )
+            })?;
+            values[column] = Some(value);
+        }
+        rows.push(EegDataRow::from_channel_values(time, values));
+    }
+    Ok(rows)
 }
 
 /// Helper function for eeg data to find the earliest timestamp for a given session
@@ -685,4 +687,70 @@ pub async fn get_earliest_eeg_timestamp(
     .await?;
 
     Ok(row.earliest_time)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FULL_HEADER: &str = "time,eeg1,eeg2,eeg3,eeg4,eeg5,eeg6,eeg7,eeg8,emg1,emg2,emg3,emg4";
+
+    #[test]
+    fn eeg_columns_sql_lists_all_columns() {
+        assert_eq!(eeg_columns_sql(), FULL_HEADER.replace(',', ", "));
+    }
+
+    #[test]
+    fn csv_round_trip_full_layout() {
+        let csv = format!(
+            "{}\n2026-03-01T12:00:00+00:00,1.5,2,3,4,5,6,7,8,-9.25,10,11,12\n",
+            FULL_HEADER
+        );
+        let rows = parse_eeg_csv(csv.as_bytes()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].eeg1, Some(1.5));
+        assert_eq!(rows[0].emg1, Some(-9.25));
+        assert_eq!(rows[0].emg4, Some(12.0));
+        assert_eq!(eeg_rows_to_csv(&rows, true).unwrap(), csv);
+    }
+
+    #[test]
+    fn csv_missing_channels_are_empty_and_null() {
+        let rows = parse_eeg_csv(b"time,eeg1,emg2\n2026-03-01T12:00:00Z,1,\n").unwrap();
+        assert_eq!(rows[0].eeg1, Some(1.0));
+        assert_eq!(rows[0].emg2, None);
+        assert_eq!(rows[0].eeg2, None);
+
+        let csv = eeg_rows_to_csv(&rows, false).unwrap();
+        assert_eq!(csv, "2026-03-01T12:00:00+00:00,1,,,,,,,,,,,\n");
+    }
+
+    #[test]
+    fn csv_accepts_legacy_four_channel_headers_in_any_order() {
+        let rows = parse_eeg_csv(
+            b"channel4,Time,channel1,channel2,channel3\n4,2026-03-01T12:00:00Z,1,2,3\n",
+        )
+        .unwrap();
+        assert_eq!(
+            (rows[0].eeg1, rows[0].eeg2, rows[0].eeg3, rows[0].eeg4),
+            (Some(1.0), Some(2.0), Some(3.0), Some(4.0))
+        );
+        assert_eq!(rows[0].eeg5, None);
+    }
+
+    #[test]
+    fn csv_rejects_bad_input() {
+        // unknown column
+        assert!(parse_eeg_csv(b"time,eeg9\n2026-03-01T12:00:00Z,1\n").is_err());
+        // eeg1 given twice (once via legacy alias)
+        assert!(parse_eeg_csv(b"time,eeg1,channel1\n2026-03-01T12:00:00Z,1,1\n").is_err());
+        // no time column
+        assert!(parse_eeg_csv(b"eeg1\n1\n").is_err());
+        // no channel columns
+        assert!(parse_eeg_csv(b"time\n2026-03-01T12:00:00Z\n").is_err());
+        // bad timestamp
+        assert!(parse_eeg_csv(b"time,eeg1\nyesterday,1\n").is_err());
+        // non-numeric value
+        assert!(parse_eeg_csv(b"time,eeg1\n2026-03-01T12:00:00Z,abc\n").is_err());
+    }
 }

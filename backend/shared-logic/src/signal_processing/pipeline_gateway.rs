@@ -3,13 +3,103 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyModule};
 use serde::{Deserialize, Serialize};
 
+use crate::channels::ChannelLayout;
 use crate::lsl::ProcessingConfig;
+
+/// Env var holding the comma-separated, 0-based EEG channel indices fed to the ML models,
+/// e.g. `ML_EEG_CHANNELS=0,1,2,3`.
+pub const ML_EEG_CHANNELS_ENV: &str = "ML_EEG_CHANNELS";
+
+/// Channels the current Python models were trained on (4-channel Muse: TP9, AF7, AF8, TP10).
+/// Change this (and [`DEFAULT_ML_EEG_CHANNELS`]) when the 8-channel models land.
+pub const MODEL_CHANNEL_COUNT: usize = 4;
+
+/// Default EEG subset passed to the models: the first [`MODEL_CHANNEL_COUNT`] EEG channels.
+pub const DEFAULT_ML_EEG_CHANNELS: [usize; MODEL_CHANNEL_COUNT] = [0, 1, 2, 3];
+
+/// The EEG channels (indices into `EEGDataPacket::eeg`) that are passed to the models, in
+/// the order the models expect them. Always exactly [`MODEL_CHANNEL_COUNT`] distinct indices
+/// that exist in the session's [`ChannelLayout`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MlChannelSelection(Vec<usize>);
+
+impl MlChannelSelection {
+    pub fn new(indices: Vec<usize>, layout: &ChannelLayout) -> Result<Self, String> {
+        if indices.len() != MODEL_CHANNEL_COUNT {
+            return Err(format!(
+                "the ML models take exactly {} EEG channels, got {:?}",
+                MODEL_CHANNEL_COUNT, indices
+            ));
+        }
+        if let Some(&bad) = indices.iter().find(|&&i| i >= layout.eeg()) {
+            return Err(format!(
+                "EEG channel index {} is out of range: the layout has {} EEG channels",
+                bad,
+                layout.eeg()
+            ));
+        }
+        let mut sorted = indices.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        if sorted.len() != indices.len() {
+            return Err(format!("duplicate EEG channel in {:?}", indices));
+        }
+        Ok(Self(indices))
+    }
+
+    /// Reads `ML_EEG_CHANNELS`, using [`DEFAULT_ML_EEG_CHANNELS`] when it is unset.
+    pub fn from_env(layout: &ChannelLayout) -> Result<Self, String> {
+        Self::from_lookup(layout, |key| std::env::var(key).ok())
+    }
+
+    /// Like [`from_env`](Self::from_env), with an injectable lookup (for tests).
+    pub fn from_lookup(
+        layout: &ChannelLayout,
+        lookup: impl Fn(&str) -> Option<String>,
+    ) -> Result<Self, String> {
+        let indices = match lookup(ML_EEG_CHANNELS_ENV) {
+            None => DEFAULT_ML_EEG_CHANNELS.to_vec(),
+            Some(value) => value
+                .split(',')
+                .map(|part| part.trim().parse::<usize>())
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| {
+                    format!(
+                        "{}={:?} is not a comma-separated list of channel indices",
+                        ML_EEG_CHANNELS_ENV, value
+                    )
+                })?,
+        };
+        Self::new(indices, layout)
+    }
+
+    pub fn indices(&self) -> &[usize] {
+        &self.0
+    }
+
+    /// Borrows the selected channels out of `eeg`, in selection order.
+    pub fn select<'a>(&self, eeg: &'a [Vec<f64>]) -> Result<Vec<&'a [f64]>, String> {
+        self.0
+            .iter()
+            .map(|&i| {
+                eeg.get(i).map(Vec::as_slice).ok_or_else(|| {
+                    format!(
+                        "EEG channel {} requested but the packet has {}",
+                        i,
+                        eeg.len()
+                    )
+                })
+            })
+            .collect()
+    }
+}
 
 pub struct PipelineGateway {
     manager_module: Py<PyModule>,
+    ml_channels: MlChannelSelection,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PipelineOutput {
     pub overall_label: String,
     pub confidence: f64,
@@ -17,7 +107,7 @@ pub struct PipelineOutput {
 }
 
 impl PipelineGateway {
-    pub fn new(manager_script_path: &str) -> Result<Self, String> {
+    pub fn new(manager_script_path: &str, ml_channels: MlChannelSelection) -> Result<Self, String> {
         Python::with_gil(|py| {
             let code = std::fs::read_to_string(manager_script_path)
                 .map_err(|e| format!("Failed to read manager script: {}", e))?;
@@ -27,23 +117,28 @@ impl PipelineGateway {
 
             Ok(Self {
                 manager_module: module.into(),
+                ml_channels,
             })
         })
     }
 
+    /// Runs the Python pipeline on one window. `eeg` is every EEG channel of the packet; only
+    /// the [`MlChannelSelection`] subset is passed to Python.
     pub fn call_pipeline(
         &self,
         config: &ProcessingConfig,
-        signals: &[Vec<f64>],
+        eeg: &[Vec<f64>],
     ) -> Result<Option<PipelineOutput>, String> {
+        let model_input = self.ml_channels.select(eeg)?;
         Python::with_gil(|py| {
             let module = self.manager_module.as_ref(py);
 
             // Translate ProcessingConfig into the dict format manager.py expects
             let pipeline_dict = build_python_pipeline_dict(py, config)?;
 
-            // Transpose signals from (4, n_samples) → (n_samples, 4) as manager.py expects
-            let transposed = transpose_signals(signals);
+            // Transpose from (MODEL_CHANNEL_COUNT, n_samples) to (n_samples, MODEL_CHANNEL_COUNT)
+            // as manager.py expects
+            let transposed = transpose_signals(&model_input);
             let np_array = PyArray2::from_vec2(py, &transposed)
                 .map_err(|e| format!("Failed to create numpy array: {}", e))?;
 
@@ -166,15 +261,15 @@ fn build_python_pipeline_dict<'py>(
 }
 
 // Transposes EEG signals from (n_channels, n_samples) to (n_samples, n_channels).
-pub fn transpose_signals(signals: &[Vec<f64>]) -> Vec<Vec<f64>> {
-    if signals.is_empty() || signals[0].is_empty() {
+pub fn transpose_signals<S: AsRef<[f64]>>(signals: &[S]) -> Vec<Vec<f64>> {
+    let Some(first) = signals.first() else {
         return Vec::new();
-    }
+    };
     let n_channels = signals.len();
-    let n_samples = signals[0].len();
+    let n_samples = first.as_ref().len();
     let mut transposed = vec![vec![0.0_f64; n_channels]; n_samples];
     for (ch, channel) in signals.iter().enumerate() {
-        for (s, &val) in channel.iter().enumerate() {
+        for (s, &val) in channel.as_ref().iter().enumerate() {
             transposed[s][ch] = val;
         }
     }
@@ -183,7 +278,7 @@ pub fn transpose_signals(signals: &[Vec<f64>]) -> Vec<Vec<f64>> {
 
 #[cfg(test)]
 mod tests {
-    use super::transpose_signals;
+    use super::*;
 
     #[test]
     fn test_transpose_four_channels() {
@@ -201,7 +296,62 @@ mod tests {
 
     #[test]
     fn test_transpose_empty() {
-        let result = transpose_signals(&[]);
+        let result = transpose_signals::<Vec<f64>>(&[]);
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_transpose_borrowed_subset() {
+        let a = [1.0_f64, 2.0];
+        let b = [3.0_f64, 4.0];
+        let result = transpose_signals(&[&a[..], &b[..]]);
+        assert_eq!(result, vec![vec![1.0, 3.0], vec![2.0, 4.0]]);
+    }
+
+    fn eeg_8ch() -> Vec<Vec<f64>> {
+        (0..8).map(|c| vec![c as f64; 3]).collect()
+    }
+
+    #[test]
+    fn ml_selection_defaults_to_first_four_eeg_channels() {
+        let selection =
+            MlChannelSelection::from_lookup(&ChannelLayout::default(), |_| None).unwrap();
+        assert_eq!(selection.indices(), &DEFAULT_ML_EEG_CHANNELS);
+        let eeg = eeg_8ch();
+        let picked = selection.select(&eeg).unwrap();
+        assert_eq!(picked.len(), MODEL_CHANNEL_COUNT);
+        assert_eq!(picked[3], &[3.0, 3.0, 3.0][..]);
+    }
+
+    #[test]
+    fn ml_selection_reads_env_override_in_order() {
+        let selection = MlChannelSelection::from_lookup(&ChannelLayout::default(), |_| {
+            Some("7, 2,5,0".to_string())
+        })
+        .unwrap();
+        let eeg = eeg_8ch();
+        let first_values: Vec<f64> = selection
+            .select(&eeg)
+            .unwrap()
+            .iter()
+            .map(|ch| ch[0])
+            .collect();
+        assert_eq!(first_values, vec![7.0, 2.0, 5.0, 0.0]);
+    }
+
+    #[test]
+    fn ml_selection_rejects_bad_indices() {
+        let layout = ChannelLayout::default();
+        // wrong count
+        assert!(MlChannelSelection::new(vec![0, 1, 2], &layout).is_err());
+        // out of range for 8 EEG channels
+        assert!(MlChannelSelection::new(vec![0, 1, 2, 8], &layout).is_err());
+        // duplicate
+        assert!(MlChannelSelection::new(vec![0, 1, 1, 2], &layout).is_err());
+        // a 2-EEG-channel device can't feed a 4-channel model
+        let small = ChannelLayout::new(2, 4).unwrap();
+        assert!(MlChannelSelection::from_lookup(&small, |_| None).is_err());
+        // unparsable env value
+        assert!(MlChannelSelection::from_lookup(&layout, |_| Some("a,b".into())).is_err());
     }
 }
