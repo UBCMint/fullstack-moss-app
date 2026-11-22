@@ -198,7 +198,7 @@ PostgreSQL with the TimescaleDB extension. The schema is defined entirely by the
 | Column | Type | Constraints |
 |---|---|---|
 | `time` | `TIMESTAMPTZ` | not null |
-| `channel1` to `channel4` | `INTEGER` | not null |
+| `eeg1` to `eeg8`, `emg1` to `emg4` | `DOUBLE PRECISION` | nullable (a channel the device doesn't have is `NULL`) |
 | `session_id` | `INTEGER` | not null, references `sessions(id)` on delete cascade |
 
 **`test_time_series`**: a hypertable created by the first migration for testing. Columns are

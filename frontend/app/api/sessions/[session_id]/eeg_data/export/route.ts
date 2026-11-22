@@ -13,6 +13,7 @@ export async function POST(
         path: `/api/sessions/${session_id}/eeg_data/export`,
         body,
         contentType: 'application/json',
+        cookie: req.headers.get('cookie'),
     });
 
     // Return the CSV as plain text

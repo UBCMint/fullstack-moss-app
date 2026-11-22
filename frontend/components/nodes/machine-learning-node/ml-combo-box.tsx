@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ML_NO_INPUT_MESSAGE } from '@/lib/pipeline-validation';
 import { AlertCircle } from 'lucide-react';
 
 const mlPredictions = [
@@ -22,6 +23,8 @@ interface MLComboBoxProps {
     value?: string;
     onValueChange?: (value: string) => void;
     isConnected?: boolean;
+    /** One sentence saying what to connect, shown while not connected. */
+    connectionHint?: string | null;
     isDataStreamOn?: boolean;
 }
 
@@ -29,6 +32,7 @@ export default function MLComboBox({
     value = 'Stress',
     onValueChange,
     isConnected = false,
+    connectionHint = null,
     isDataStreamOn = false,
 }: MLComboBoxProps) {
     const [isExpanded, setIsExpanded] = React.useState(false);
@@ -169,12 +173,7 @@ export default function MLComboBox({
                             </div>
                             <div className="flex-1 text-left">
                                 <div className="text-[18px] font-semibold text-gray-900 leading-6">
-                                    Error: Expected filtered input but received
-                                    raw input.
-                                </div>
-                                <div className="text-[16px] text-gray-800 mt-2">
-                                    Please attach the prediction node to a
-                                    filter node.
+                                    {connectionHint ?? ML_NO_INPUT_MESSAGE}
                                 </div>
                                 <div className="-ml-6 mt-4 flex justify-center">
                                     <button
