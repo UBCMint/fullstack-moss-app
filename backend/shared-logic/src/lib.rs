@@ -1,5 +1,6 @@
 // import as `shared_logic::db`, `share_logic::models`.
 pub mod bc;
+pub mod channels;
 pub mod db;
 pub mod lsl;
 pub mod mockeeg;
