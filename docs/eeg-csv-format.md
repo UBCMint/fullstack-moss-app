@@ -67,7 +67,8 @@ Channel values are whole numbers because the `eeg_data` table stores them as
 
 - Backend parser/validator: `parse_eeg_csv` in `backend/shared-logic/src/db.rs`
 - Import/export endpoints: `backend/api-server/src/main.rs`
-- User-facing rules: `frontend/components/ui/import-dialog.tsx`,
-  `frontend/components/ui/export-dialog.tsx`, `frontend/lib/eeg-api.ts`
+- User-facing rules, shown up front in the Import and Export dialogs (with a
+  downloadable example file): `frontend/components/ui/eeg-csv-format.tsx`, using
+  the constants in `frontend/lib/eeg-api.ts`
 
 If you change a rule, update all three places and this file.

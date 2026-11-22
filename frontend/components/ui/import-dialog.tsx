@@ -13,9 +13,9 @@ import {
     importEEGData,
     ImportValidationError,
     CsvProblem,
-    EEG_CSV_EXAMPLE,
     MAX_IMPORT_BYTES,
 } from '@/lib/eeg-api';
+import CsvFormatSummary from '@/components/ui/eeg-csv-format';
 import { getUserFacingErrorMessage } from '@/lib/errors';
 import { Folder } from 'lucide-react';
 import { EnterIcon } from '@radix-ui/react-icons';
@@ -166,50 +166,7 @@ export default function ImportDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="mb-4 rounded-lg bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600">
-                    <p className="font-semibold text-gray-800 mb-1">
-                        File requirements
-                    </p>
-                    <ul className="list-disc pl-4 space-y-0.5 mb-2">
-                        <li>
-                            A <b>.csv</b> text file (UTF-8, comma-separated), up
-                            to {MAX_IMPORT_BYTES / 1024 / 1024} MB.
-                        </li>
-                        <li>
-                            First line is the header, exactly:{' '}
-                            <code className="font-mono">
-                                time,channel1,channel2,channel3,channel4
-                            </code>{' '}
-                            (any letter case, this order).
-                        </li>
-                        <li>
-                            Every row has exactly 5 values and a unique{' '}
-                            <b>time</b>.
-                        </li>
-                        <li>
-                            <b>time</b>: RFC 3339 with a time zone, e.g.{' '}
-                            <code className="font-mono">
-                                2024-01-15T13:45:00Z
-                            </code>
-                            . Not accepted: 2024-01-15 13:45:00, 01/15/2024.
-                        </li>
-                        <li>
-                            <b>channel1&ndash;channel4</b>: whole numbers only
-                            (e.g. 120 or -45), between -2,147,483,648 and
-                            2,147,483,647. No decimals, units, blanks, or
-                            thousands separators.
-                        </li>
-                        <li>
-                            The whole file is checked first; if anything is
-                            wrong, nothing is imported. Rows whose time already
-                            exists in the session are skipped.
-                        </li>
-                    </ul>
-                    <p className="font-semibold text-gray-800 mb-1">Example</p>
-                    <pre className="bg-white border border-gray-200 rounded px-2 py-1.5 font-mono overflow-x-auto">
-                        {EEG_CSV_EXAMPLE}
-                    </pre>
-                </div>
+                <CsvFormatSummary mode="import" />
 
                 {problems && (
                     <div

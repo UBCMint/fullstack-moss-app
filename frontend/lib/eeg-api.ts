@@ -12,9 +12,11 @@ export const EEG_CSV_COLUMNS = [
     'channel3',
     'channel4',
 ] as const;
+export const EEG_CSV_HEADER = EEG_CSV_COLUMNS.join(',');
+export const EEG_CSV_TIME_EXAMPLE = '2024-01-15T13:45:00Z';
 export const EEG_CSV_EXAMPLE = [
-    EEG_CSV_COLUMNS.join(','),
-    '2024-01-15T13:45:00Z,120,-45,310,8',
+    EEG_CSV_HEADER,
+    `${EEG_CSV_TIME_EXAMPLE},120,-45,310,8`,
     '2024-01-15T13:45:00.004Z,118,-47,305,10',
 ].join('\n');
 /** Must match MAX_IMPORT_BYTES in the backend. */
@@ -97,8 +99,15 @@ export async function exportEEGData(
  */
 export function downloadCSV(csvContent: string, sessionId: number): void {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `session_${sessionId}_${timestamp}.csv`;
+    saveCsvFile(csvContent, `session_${sessionId}_${timestamp}.csv`);
+}
 
+/** Download a small valid sample file for users to start from when importing. */
+export function downloadExampleCSV(): void {
+    saveCsvFile(`${EEG_CSV_EXAMPLE}\n`, 'moss-eeg-example.csv');
+}
+
+function saveCsvFile(csvContent: string, filename: string): void {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 
