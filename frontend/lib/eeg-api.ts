@@ -1,3 +1,5 @@
+import { apiFetch as fetch } from '@/lib/api-client';
+
 export type ExportOptions = {
     format?: 'csv';
     includeHeader?: boolean;
