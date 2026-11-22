@@ -1,5 +1,6 @@
 'use client';
 import React from 'react';
+import { useNodeConnection } from '../use-node-connection';
 import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import MLComboBox from './ml-combo-box';
@@ -16,7 +17,7 @@ export default function MachineLearningNode({
 }: MachineLearningNodeProps) {
     const [selectedPrediction, setSelectedPrediction] =
         React.useState('Stress');
-    const [isConnected, setIsConnected] = React.useState(false);
+    const { connected: isConnected, hint } = useNodeConnection(id);
 
     // Get React Flow instance
     const reactFlowInstance = useReactFlow();
@@ -38,81 +39,6 @@ export default function MachineLearningNode({
     React.useEffect(() => {
         pushConfigToNodeData();
     }, [pushConfigToNodeData]);
-
-    // Check connection status and update state
-    const checkConnectionStatus = React.useCallback(() => {
-        try {
-            const edges = reactFlowInstance.getEdges();
-            const nodes = reactFlowInstance.getNodes();
-
-            const findNodeById = (nodeId: string | undefined) =>
-                nodes.find((n) => n.id === nodeId);
-
-            // Determine if ML node has immediate Filter predecessor which itself reaches a Source
-            const mlHasValidUpstream = (mlNodeId: string): boolean => {
-                // Incoming edges into ML
-                const incomingToMl = edges.filter((e) => e.target === mlNodeId);
-                if (incomingToMl.length === 0) return false;
-
-                // Any incoming from a Filter node?
-                for (const edge of incomingToMl) {
-                    const sourceNode = findNodeById(edge.source);
-                    if (!sourceNode) continue;
-                    if (sourceNode.type !== 'filter-node') continue;
-
-                    // For this filter node, check it ultimately connects to a Source
-                    const visited = new Set<string>();
-                    const reachesSource = (nodeId: string): boolean => {
-                        if (visited.has(nodeId)) return false;
-                        visited.add(nodeId);
-                        const incoming = edges.filter(
-                            (e) => e.target === nodeId
-                        );
-                        for (const inEdge of incoming) {
-                            const upNode = findNodeById(inEdge.source);
-                            if (!upNode) continue;
-                            if (upNode.type === 'source-node') return true;
-                            if (reachesSource(upNode.id)) return true;
-                        }
-                        return false;
-                    };
-
-                    if (reachesSource(sourceNode.id)) return true;
-                }
-
-                return false;
-            };
-
-            const isActivated = id ? mlHasValidUpstream(id) : false;
-            setIsConnected(isActivated);
-        } catch (error) {
-            console.error('Error checking connection:', error);
-            setIsConnected(false);
-        }
-    }, [id, reactFlowInstance]);
-
-    // Check connection status on mount and when edges might change
-    React.useEffect(() => {
-        checkConnectionStatus();
-
-        // Listen for custom edge change events
-        const handleEdgeChange = () => {
-            checkConnectionStatus();
-        };
-
-        window.addEventListener('reactflow-edges-changed', handleEdgeChange);
-
-        // Also set up periodic check as backup
-        const interval = setInterval(checkConnectionStatus, 1000);
-
-        return () => {
-            window.removeEventListener(
-                'reactflow-edges-changed',
-                handleEdgeChange
-            );
-            clearInterval(interval);
-        };
-    }, [checkConnectionStatus]);
 
     return (
         <fieldset
@@ -170,6 +96,7 @@ export default function MachineLearningNode({
                 value={selectedPrediction}
                 onValueChange={setSelectedPrediction}
                 isConnected={isConnected}
+                connectionHint={hint}
                 isDataStreamOn={dataStreaming}
             />
         </fieldset>

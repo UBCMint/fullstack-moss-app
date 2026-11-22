@@ -4,6 +4,7 @@ import { Handle, Position, useReactFlow } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
 import React from 'react';
+import { useNodeConnection } from '../use-node-connection';
 
 import {
     Dialog,
@@ -198,54 +199,8 @@ function OriginalSignalGraphNode({
     const { dataStreaming, activeSessionId } = useGlobalContext();
     const { renderData } = useNodeData(500, 10);
     const reactFlowInstance = useReactFlow();
-    const [isConnected, setIsConnected] = React.useState(false);
+    const { connected: isConnected } = useNodeConnection(id);
     const [seedData, setSeedData] = React.useState<SignalDataPoint[]>([]);
-
-    // Determine if this Chart View node has an upstream path from a Source
-    const checkConnectionStatus = React.useCallback(() => {
-        try {
-            const edges = reactFlowInstance.getEdges();
-            const nodes = reactFlowInstance.getNodes();
-
-            const findNodeById = (nodeId: string | undefined) =>
-                nodes.find((n) => n.id === nodeId);
-
-            const reachesSource = (
-                nodeId: string,
-                visited: Set<string> = new Set()
-            ): boolean => {
-                if (visited.has(nodeId)) return false;
-                visited.add(nodeId);
-                const incoming = edges.filter((e) => e.target === nodeId);
-                for (const inEdge of incoming) {
-                    const upNode = findNodeById(inEdge.source);
-                    if (!upNode) continue;
-                    if (upNode.type === 'source-node') return true;
-                    if (reachesSource(upNode.id, visited)) return true;
-                }
-                return false;
-            };
-
-            const activated = id ? reachesSource(id) : false;
-            setIsConnected(activated);
-        } catch {
-            setIsConnected(false);
-        }
-    }, [id, reactFlowInstance]);
-
-    React.useEffect(() => {
-        checkConnectionStatus();
-        const handleEdgeChange = () => checkConnectionStatus();
-        window.addEventListener('reactflow-edges-changed', handleEdgeChange);
-        const interval = setInterval(checkConnectionStatus, 1000);
-        return () => {
-            window.removeEventListener(
-                'reactflow-edges-changed',
-                handleEdgeChange
-            );
-            clearInterval(interval);
-        };
-    }, [checkConnectionStatus]);
 
     // Fetch EEG data on load
     React.useEffect(() => {
