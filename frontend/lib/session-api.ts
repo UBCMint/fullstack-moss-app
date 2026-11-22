@@ -102,12 +102,22 @@ export type TimeLabel = {
     color: string;
 };
 
+// One row of GET /api/sessions/:id/eeg-data. A null channel is one the
+// recording device doesn't have (e.g. eeg5..eeg8 and emg* for a 4-channel Muse).
 export type EegDataRow = {
     time: string;
-    channel1: number;
-    channel2: number;
-    channel3: number;
-    channel4: number;
+    eeg1: number | null;
+    eeg2: number | null;
+    eeg3: number | null;
+    eeg4: number | null;
+    eeg5: number | null;
+    eeg6: number | null;
+    eeg7: number | null;
+    eeg8: number | null;
+    emg1: number | null;
+    emg2: number | null;
+    emg3: number | null;
+    emg4: number | null;
 };
 
 export async function saveTimeLabels(

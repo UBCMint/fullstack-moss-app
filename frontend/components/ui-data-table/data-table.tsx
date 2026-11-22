@@ -7,84 +7,86 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
-
-interface SignalData {
-    time: string;
-    signal1: number;
-    signal2: number;
-    signal3: number;
-    signal4: number;
-}
+import {
+    GROUP_INFO,
+    type ChannelGroup,
+    type ChannelLayout,
+    type DataPoint,
+} from '@/lib/channels';
 
 interface DataTableProps {
     rowCount?: number;
-    data?: SignalData[];
+    data?: DataPoint[];
+    layout: ChannelLayout;
+    /** Channel groups to show as columns, in order. */
+    groups: ChannelGroup[];
 }
 
-const DataTable: React.FC<DataTableProps> = ({ rowCount = 8, data = [] }) => {
-    const rows = Array(rowCount)
-        .fill(null)
-        .map((_, index) => {
-            return (
-                data[data.length - 1 - index] || {
-                    time: '--:--:-- --',
-                    signal1: 0,
-                    signal2: 0,
-                    signal3: 0,
-                    signal4: 0,
-                }
-            );
-        });
+const headClass = 'text-center font-medium text-[#0D585F] whitespace-nowrap';
+const cellClass = 'text-center text-[#0D585F] tabular-nums';
+
+// Newest samples first. Rows beyond the data are shown as placeholders so the
+// table keeps its height before streaming starts.
+const DataTable: React.FC<DataTableProps> = ({
+    rowCount = 8,
+    data = [],
+    layout,
+    groups,
+}) => {
+    const columns = groups.flatMap((group) =>
+        layout[group].map((label, index) => ({ group, index, label }))
+    );
 
     return (
-        <div className="w-full overflow-hidden">
+        <div className="w-full overflow-x-auto">
             <Table>
                 <TableHeader>
                     <TableRow className="bg-[#ABD4C7] border-[#2C7778]">
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Time
-                        </TableHead>
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Channel 1
-                        </TableHead>
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Channel 2
-                        </TableHead>
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Channel 3
-                        </TableHead>
-                        <TableHead className="text-center font-medium text-[#0D585F]">
-                            Channel 4
-                        </TableHead>
+                        <TableHead className={headClass}>Time</TableHead>
+                        {columns.map(({ group, index, label }) => (
+                            <TableHead
+                                key={`${group}-${index}`}
+                                className={headClass}
+                            >
+                                {label}
+                                <span className="ml-1 text-[10px] font-normal opacity-70">
+                                    {GROUP_INFO[group].unit}
+                                </span>
+                            </TableHead>
+                        ))}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {rows.map((row, index) => (
-                        <TableRow
-                            key={index}
-                            className={
-                                index % 2 === 0
-                                    ? 'bg-white border-[#2C7778]'
-                                    : 'bg-[#ABD4C7] border-[#2C7778]'
-                            }
-                        >
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.time}
-                            </TableCell>
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.signal1}
-                            </TableCell>
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.signal2}
-                            </TableCell>
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.signal3}
-                            </TableCell>
-                            <TableCell className="text-center text-[#0D585F]">
-                                {row.signal4}
-                            </TableCell>
-                        </TableRow>
-                    ))}
+                    {Array.from({ length: rowCount }, (_, rowIdx) => {
+                        const row = data[data.length - 1 - rowIdx];
+                        return (
+                            <TableRow
+                                key={rowIdx}
+                                className={
+                                    rowIdx % 2 === 0
+                                        ? 'bg-white border-[#2C7778]'
+                                        : 'bg-[#ABD4C7] border-[#2C7778]'
+                                }
+                            >
+                                <TableCell className={cellClass}>
+                                    {row?.time ?? '--:--:-- --'}
+                                </TableCell>
+                                {columns.map(({ group, index }) => {
+                                    const value = row?.[group][index];
+                                    return (
+                                        <TableCell
+                                            key={`${group}-${index}`}
+                                            className={cellClass}
+                                        >
+                                            {value === undefined
+                                                ? '–'
+                                                : value.toFixed(2)}
+                                        </TableCell>
+                                    );
+                                })}
+                            </TableRow>
+                        );
+                    })}
                 </TableBody>
             </Table>
         </div>

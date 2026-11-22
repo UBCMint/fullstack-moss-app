@@ -43,12 +43,19 @@ export default function CsvFormatSummary({
                     {isImport
                         ? 'First line is the header, exactly: '
                         : 'Header: '}
-                    <code className="font-mono">{EEG_CSV_HEADER}</code>
-                    {isImport && ' (any letter case, this order)'}.
+                    <code className="font-mono break-all">
+                        {EEG_CSV_HEADER}
+                    </code>
+                    {isImport &&
+                        ' (columns matched by name, any letter case or order)'}
+                    .
                 </li>
                 {isImport && (
                     <li>
-                        Every row has exactly 5 values and a unique <b>time</b>.
+                        Include <b>time</b> and only the channels you have.
+                        Every row has one value per header column and a unique{' '}
+                        <b>time</b>. Older <code>channel1&ndash;channel4</code>{' '}
+                        files are read as eeg1&ndash;eeg4.
                     </li>
                 )}
                 <li>
@@ -66,9 +73,9 @@ export default function CsvFormatSummary({
                     .
                 </li>
                 <li>
-                    <b>channel1&ndash;channel4</b>: whole numbers only (e.g. 120
-                    or -45), between -2,147,483,648 and 2,147,483,647. No
-                    decimals, units, blanks, or thousands separators.
+                    <b>eeg1&ndash;eeg8, emg1&ndash;emg4</b>: numbers in µV (e.g.
+                    12.5 or -45). No units or thousands separators. An empty
+                    cell means the channel wasn&apos;t recorded.
                 </li>
                 {isImport ? (
                     <li>
@@ -84,9 +91,13 @@ export default function CsvFormatSummary({
                 )}
             </ul>
             <p className="font-semibold text-gray-800 mb-1">Example</p>
-            <pre className="bg-white border border-gray-200 rounded px-2 py-1.5 font-mono overflow-x-auto">
-                {example}
-            </pre>
+            {/* w-0 min-w-full: the long 12-channel rows scroll inside the box
+                instead of widening the dialog. */}
+            <div className="w-0 min-w-full">
+                <pre className="bg-white border border-gray-200 rounded px-2 py-1.5 font-mono overflow-x-auto">
+                    {example}
+                </pre>
+            </div>
             {isImport && (
                 <Button
                     type="button"

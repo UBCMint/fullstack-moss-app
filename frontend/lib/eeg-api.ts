@@ -5,19 +5,17 @@ import { UserFacingError } from '@/lib/errors';
  * The CSV format accepted by import and produced by export. Keep in sync with
  * backend `parse_eeg_csv` (shared-logic/src/db.rs) and docs/eeg-csv-format.md.
  */
-export const EEG_CSV_COLUMNS = [
-    'time',
-    'channel1',
-    'channel2',
-    'channel3',
-    'channel4',
-] as const;
+const EEG_CSV_CHANNEL_COLUMNS = [
+    ...Array.from({ length: 8 }, (_, i) => `eeg${i + 1}`),
+    ...Array.from({ length: 4 }, (_, i) => `emg${i + 1}`),
+];
+export const EEG_CSV_COLUMNS = ['time', ...EEG_CSV_CHANNEL_COLUMNS];
 export const EEG_CSV_HEADER = EEG_CSV_COLUMNS.join(',');
 export const EEG_CSV_TIME_EXAMPLE = '2024-01-15T13:45:00Z';
 export const EEG_CSV_EXAMPLE = [
     EEG_CSV_HEADER,
-    `${EEG_CSV_TIME_EXAMPLE},120,-45,310,8`,
-    '2024-01-15T13:45:00.004Z,118,-47,305,10',
+    `${EEG_CSV_TIME_EXAMPLE},12.5,-4.1,8,3.3,0.7,-2,5.9,1.2,40.1,-12,7.5,`,
+    '2024-01-15T13:45:00.004Z,11.8,-4.7,7.6,3.1,0.9,-1.8,6.2,1.1,38.4,-10.9,7.1,',
 ].join('\n');
 /** Must match MAX_IMPORT_BYTES in the backend. */
 export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;

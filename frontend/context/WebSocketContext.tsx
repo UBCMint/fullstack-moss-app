@@ -6,54 +6,54 @@ import React, {
     useEffect,
     useRef,
     useCallback,
+    useState,
     ReactNode,
 } from 'react';
 import { useGlobalContext } from './GlobalContext';
 import { PipelinePayload } from '@/lib/pipeline';
+import {
+    formatTimestamp,
+    isStreamMetadataMessage,
+    type ChannelLayout,
+    type DataPoint,
+} from '@/lib/channels';
 
-export type DataPoint = {
-    time: string;
-    rawTime: string;
-    signal1: number;
-    signal2: number;
-    signal3: number;
-    signal4: number;
-};
+export type { DataPoint } from '@/lib/channels';
 
 type Subscriber = (points: DataPoint[]) => void;
 
 type WebSocketContextType = {
     subscribe: (fn: Subscriber) => () => void;
     startPipeline: (payload: PipelinePayload) => void;
+    /**
+     * Layout from the server's metadata message for the current (or last)
+     * connection; null until the first one arrives.
+     */
+    channelLayout: ChannelLayout | null;
 };
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(
     undefined
 );
 
-function formatTimestamp(raw: unknown): string {
-    const s = String(raw);
-    // ISO 8601 with T: "2026-03-11T03:55:22.715574979Z"
-    if (s.includes('T')) return s.slice(11, 23);
-    // Space-separated: "2025-07-17 21:13:42.408185+00"
-    const spaceIdx = s.indexOf(' ');
-    if (spaceIdx !== -1) return s.slice(spaceIdx + 1, spaceIdx + 13);
-    return s;
-}
-
+// Channel-major batch: eeg[c][i] / emg[c][i] is channel c at timestamps[i].
 interface WebSocketBatch {
     timestamps: unknown[];
-    signals: unknown[][];
+    eeg?: unknown[][];
+    emg?: unknown[][];
+}
+
+// Sample i of every channel. Non-numeric values become 0.
+function sampleAt(channels: unknown[][] | undefined, i: number): number[] {
+    return (channels ?? []).map((channel) => Number(channel[i]) || 0);
 }
 
 function normalizeBatch(batch: WebSocketBatch): DataPoint[] {
     return batch.timestamps.map((time: unknown, i: number) => ({
         time: formatTimestamp(time),
         rawTime: String(time),
-        signal1: Number(batch.signals[0][i]) ?? 0,
-        signal2: Number(batch.signals[1][i]) ?? 0,
-        signal3: Number(batch.signals[2][i]) ?? 0,
-        signal4: Number(batch.signals[3][i]) ?? 0,
+        eeg: sampleAt(batch.eeg, i),
+        emg: sampleAt(batch.emg, i),
     }));
 }
 
@@ -65,6 +65,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const subscribersRef = useRef<Set<Subscriber>>(new Set());
     const closingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isClosingGracefullyRef = useRef(false);
+    const [channelLayout, setChannelLayout] = useState<ChannelLayout | null>(
+        null
+    );
 
     const subscribe = useCallback((fn: Subscriber) => {
         subscribersRef.current.add(fn);
@@ -130,7 +133,13 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
                 isClosingGracefullyRef.current = false;
             } else {
                 try {
-                    const points = normalizeBatch(JSON.parse(message));
+                    const parsed = JSON.parse(message);
+                    // The server sends the channel layout once, before any batch
+                    if (isStreamMetadataMessage(parsed)) {
+                        setChannelLayout(parsed.channels);
+                        return;
+                    }
+                    const points = normalizeBatch(parsed);
                     subscribersRef.current.forEach((fn) => fn(points));
                 } catch (e) {
                     console.error('Failed to parse WebSocket message:', e);
@@ -171,7 +180,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }, [dataStreaming, activeSessionId]);
 
     return (
-        <WebSocketContext.Provider value={{ subscribe, startPipeline }}>
+        <WebSocketContext.Provider
+            value={{ subscribe, startPipeline, channelLayout }}
+        >
             {children}
         </WebSocketContext.Provider>
     );
