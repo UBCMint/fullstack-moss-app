@@ -1,5 +1,6 @@
 export type ProcessingConfig = {
     apply_bandpass: boolean;
+    apply_quality_check: boolean;
     use_iir: boolean;
     l_freq: number | null;
     h_freq: number | null;

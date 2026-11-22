@@ -4,22 +4,25 @@
 //!
 //! - the mock EEG generator ([`generate_mock_data`]), always on for now; comment it out to
 //!   use a real headset,
-//! - the acquisition loop ([`receive_eeg`]), which batches samples, runs ML and publishes
-//!   [`EEGDataPacket`]s on a `tokio::broadcast` channel (capacity 1000),
-//! - [`ws_receiver`], which serializes each packet to JSON and sends it to the client,
-//! - [`db_receiver`], which inserts each packet into `eeg_data` for the session.
+//! - the acquisition loop ([`receive_eeg`]), which batches samples, runs the processing chain
+//!   and ML, and publishes [`SessionBatch`]es on a `tokio::broadcast` channel (capacity 1000),
+//! - [`ws_receiver`], which serializes each batch's *processed* packet to JSON and sends it to
+//!   the client,
+//! - [`db_receiver`], which inserts each batch's *raw* samples into `eeg_data` for the session.
 //!
-//! `start_broadcast` returns once acquisition stops (after the cancellation token fires).
-//! It doesn't wait for the websocket or DB consumers, so the last packet can reach the
-//! client after `"confirmed closing"`.
+//! `start_broadcast` returns once acquisition stops (after the cancellation token fires, or
+//! right away if the session couldn't start, in which case it sends the client an error frame
+//! and cancels the token). It doesn't wait for the websocket or DB consumers, so the last
+//! packet can reach the client after `"confirmed closing"`.
 
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Receiver;
 
 use crate::db::{get_db_client, insert_batch_eeg};
-use crate::lsl::{receive_eeg, EEGDataPacket};
+use crate::lsl::{receive_eeg, SessionBatch};
 use crate::mockeeg::generate_mock_data;
-use crate::pipeline::Pipeline;
+use crate::pipeline::ProcessingPlan;
+use crate::protocol::{ClientError, ErrorCode};
 use futures_util::stream::SplitSink;
 use futures_util::SinkExt;
 use log::{error, info};
@@ -34,10 +37,10 @@ use tokio_util::sync::CancellationToken;
 pub async fn start_broadcast(
     write: Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,
     cancel_token: CancellationToken,
-    pipeline: Pipeline,
+    plan: ProcessingPlan,
     session_id: i32,
 ) {
-    let (tx, _rx) = broadcast::channel::<Arc<EEGDataPacket>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
+    let (tx, _rx) = broadcast::channel::<Arc<SessionBatch>>(1000); // size of the broadcast buffer, not recommand below 500, websocket will miss messages
     let rx_ws = tx.subscribe();
     let rx_db = tx.subscribe();
     let generator_token = cancel_token.clone();
@@ -53,9 +56,7 @@ pub async fn start_broadcast(
     //spawn a sender task
     let tx_clone = tx.clone();
     let sender_token = cancel_token.clone();
-    let sender = tokio::spawn(async move {
-        receive_eeg(tx_clone, sender_token, pipeline).await;
-    });
+    let sender = tokio::spawn(async move { receive_eeg(tx_clone, sender_token, plan).await });
 
     // Subscribe for websocket Receiver
     let write_clone = write.clone();
@@ -69,16 +70,36 @@ pub async fn start_broadcast(
     });
 
     //waits for sender to complete.
-    match sender.await {
-        Ok(_) => info!("Task finished successfully"),
-        Err(e) => error!("Task panicked: {:?}", e),
+    let failure = match sender.await {
+        Ok(Ok(_)) => {
+            info!("Task finished successfully");
+            None
+        }
+        Ok(Err(e)) => Some(e),
+        Err(e) => {
+            error!("Task panicked: {:?}", e);
+            Some(ClientError::new(
+                ErrorCode::InternalError,
+                "The EEG receiver stopped unexpectedly.",
+            ))
+        }
+    };
+
+    if let Some(e) = failure {
+        error!("Session {} could not run: {}", session_id, e);
+        // stops the mock generator too
+        cancel_token.cancel();
+        let mut write_guard = write.lock().await;
+        if let Err(send_err) = write_guard.send(Message::Text(e.to_json())).await {
+            error!("Failed to send error to client: {}", send_err);
+        }
     }
 }
 
 // ws_broadcast_receiver takes a EEGDataPacket  struct from the broadcast sender, and converts it to JSON, then send it to the connected websocket client.
 pub async fn ws_receiver(
     write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,
-    mut rx_ws: Receiver<Arc<EEGDataPacket>>,
+    mut rx_ws: Receiver<Arc<SessionBatch>>,
 ) {
     let mut packet_count = 0; // for debug purposes
     let mut sample_count = 0; // for debug purposes
@@ -87,9 +108,8 @@ pub async fn ws_receiver(
     // loops to hanle messages coming in from broadcast
     loop {
         match rx_ws.recv().await {
-            Ok(eeg_packet) => {
-                // receives the EEGData Packet
-                // Serialize to JSON for WebSocket transmission
+            Ok(batch) => {
+                let eeg_packet = &batch.processed;
                 match serde_json::to_string(&eeg_packet) {
                     Ok(msg) => {
                         // info!("websocket got: {}", msg);  // debug purposes
@@ -127,7 +147,7 @@ pub async fn ws_receiver(
 
 //db_broadcast_receiver takes EEGDataPacket  struct from the broadcast sender and inserts it into the database
 // it inserts as a batch of 100.
-pub async fn db_receiver(mut rx_db: Receiver<Arc<EEGDataPacket>>, session_id: i32) {
+pub async fn db_receiver(mut rx_db: Receiver<Arc<SessionBatch>>, session_id: i32) {
     let db_client = get_db_client();
 
     let mut packet_count = 0; // for debug purposes
@@ -136,8 +156,8 @@ pub async fn db_receiver(mut rx_db: Receiver<Arc<EEGDataPacket>>, session_id: i3
 
     loop {
         match rx_db.recv().await {
-            Ok(eeg_packet) => {
-                let num_samples = eeg_packet.signals[0].len();
+            Ok(batch) => {
+                let num_samples = batch.raw.timestamps.len();
                 info!("Database got packet with {} samples", num_samples); // debug purposes
                 packet_count += 1; // for debug purposes
                 sample_count += num_samples; // for debug purposes
@@ -147,8 +167,7 @@ pub async fn db_receiver(mut rx_db: Receiver<Arc<EEGDataPacket>>, session_id: i3
                 // Insert the packet directly
                 tokio::spawn(async move {
                     let now = Instant::now(); // for debug purposes
-                    if let Err(e) =
-                        insert_batch_eeg(&db_client_clone, session_id, &eeg_packet).await
+                    if let Err(e) = insert_batch_eeg(&db_client_clone, session_id, &batch.raw).await
                     {
                         error!("Packet insert failed: {:?}", e);
                     }

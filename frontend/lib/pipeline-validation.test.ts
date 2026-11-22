@@ -61,8 +61,14 @@ test('a valid board starts with its current configuration and session', () => {
     assert.deepEqual(result.payload, {
         session_id: '42',
         nodes: [
-            { type: 'window', config: { chunk_size: 128, overlap_size: 16 } },
+            { id: 'source', type: 'source', config: {} },
+            {
+                id: 'window',
+                type: 'window',
+                config: { chunk_size: 128, overlap_size: 16 },
+            },
         ],
+        edges: [{ source: 'source', target: 'window' }],
     });
 });
 
@@ -97,7 +103,7 @@ test('invalid edits and reset do not reuse a previous valid payload', () => {
         2
     );
     assert.equal(restarted.payload?.session_id, '2');
-    assert.equal(restarted.payload?.nodes[0].config.chunk_size, 256);
+    assert.equal(restarted.payload?.nodes[1].config.chunk_size, 256);
 });
 
 // Run this suite with the flag both unset and true to cover both configurations.
@@ -111,7 +117,8 @@ test('Artifact availability follows the feature flag', () => {
     if (process.env.NEXT_PUBLIC_ENABLE_ARTIFACT_NODE === 'true') {
         assert.deepEqual(result.errors, []);
         assert.ok(result.payload);
-        assert.equal(result.payload.nodes.length, 1);
+        // unconnected, so not sent
+        assert.equal(result.payload.nodes.length, 2);
     } else {
         assert.equal(result.payload, null);
         assert.ok(
@@ -146,7 +153,8 @@ test('enabled editor-only nodes remain valid without being sent to the backend',
         1
     );
     assert.deepEqual(result.errors, []);
-    assert.equal(result.payload?.nodes.length, 1);
+    // unconnected, so not sent
+    assert.equal(result.payload?.nodes.length, 2);
 });
 
 test('only the source node may connect into the window node', () => {
@@ -466,4 +474,71 @@ test('start returns the node issues so the editor can highlight them', () => {
     );
     assert.equal(result.payload, null);
     assert.equal(result.nodeIssues['ml'], SOURCE_FEEDS_WINDOW_MESSAGE);
+});
+
+test('the payload sends every node and edge so the backend can order the chain', () => {
+    const filter: Node = {
+        id: 'filter',
+        type: 'filter-node',
+        position: { x: 0, y: 0 },
+        data: { config: { apply_bandpass: true, l_freq: 1, h_freq: 30 } },
+    };
+    const resample: Node = {
+        id: 'resample',
+        type: 'resampling-node',
+        position: { x: 0, y: 0 },
+        data: { rate: 'custom', customRate: 128 },
+    };
+    const chart: Node = {
+        id: 'chart',
+        type: 'signal-graph-node',
+        position: { x: 0, y: 0 },
+        data: {},
+    };
+    const result = preparePipelineStart(
+        [chart, resample, filter, source, windowNode],
+        [
+            connection,
+            { id: 'e1', source: 'window', target: 'resample' },
+            { id: 'e2', source: 'resample', target: 'filter' },
+            { id: 'e3', source: 'filter', target: 'chart' },
+        ],
+        7
+    );
+    assert.deepEqual(result.errors, []);
+    const payload = result.payload!;
+    assert.deepEqual(
+        payload.nodes.map((n) => [n.id, n.type]),
+        [
+            ['source', 'source'],
+            ['window', 'window'],
+            ['resample', 'resample'],
+            ['filter', 'preprocessing'],
+            ['chart', 'signal_graph'],
+        ]
+    );
+    assert.deepEqual(payload.edges, [
+        { source: 'source', target: 'window' },
+        { source: 'window', target: 'resample' },
+        { source: 'resample', target: 'filter' },
+        { source: 'filter', target: 'chart' },
+    ]);
+    assert.deepEqual(payload.nodes[2].config, { target_hz: 128 });
+    assert.equal(payload.nodes[3].config.apply_quality_check, true);
+    assert.equal(payload.nodes[3].config.h_freq, 30);
+});
+
+test('resampling at the original rate sends no target rate', () => {
+    const resample: Node = {
+        id: 'resample',
+        type: 'resampling-node',
+        position: { x: 0, y: 0 },
+        data: { rate: 'input', customRate: 100 },
+    };
+    const result = preparePipelineStart(
+        [source, windowNode, resample],
+        [connection, { id: 'e', source: 'window', target: 'resample' }],
+        1
+    );
+    assert.deepEqual(result.payload?.nodes[2].config, { target_hz: null });
 });

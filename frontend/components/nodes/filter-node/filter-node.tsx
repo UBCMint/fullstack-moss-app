@@ -8,6 +8,7 @@ import ComboBox from './combo-box';
 
 interface FilterConfig {
     apply_bandpass: boolean;
+    apply_quality_check: boolean;
     use_iir: boolean;
     l_freq: number | null;
     h_freq: number | null;
@@ -44,6 +45,7 @@ export default function FilterNode({ id, data, selected }: FilterNodeProps) {
         if (!isConnected) {
             return {
                 apply_bandpass: false,
+                apply_quality_check: true,
                 use_iir: false,
                 l_freq: null,
                 h_freq: null,
@@ -57,6 +59,7 @@ export default function FilterNode({ id, data, selected }: FilterNodeProps) {
             case 'lowpass':
                 return {
                     apply_bandpass: true,
+                    apply_quality_check: true,
                     use_iir: false,
                     l_freq: null,
                     h_freq: highCutoff,
@@ -68,6 +71,7 @@ export default function FilterNode({ id, data, selected }: FilterNodeProps) {
             case 'highpass':
                 return {
                     apply_bandpass: true,
+                    apply_quality_check: true,
                     use_iir: false,
                     l_freq: lowCutoff,
                     h_freq: null,
@@ -79,6 +83,7 @@ export default function FilterNode({ id, data, selected }: FilterNodeProps) {
             case 'bandpass':
                 return {
                     apply_bandpass: true,
+                    apply_quality_check: true,
                     use_iir: false,
                     l_freq: lowCutoff,
                     h_freq: highCutoff,

@@ -1,168 +1,245 @@
 # Pipeline node spec
 
 This is the contract between the frontend node editor (`frontend/components/nodes/*`,
-`frontend/components/ui-react-flow/react-flow-view.tsx`) and the backend pipeline model
-(`backend/shared-logic/src/pipeline.rs`). The nodes travel in the `nodes` array of the
-websocket init message ([websocket-protocol.md](websocket-protocol.md)).
+`frontend/lib/pipeline-validation.ts`) and the backend pipeline model
+(`backend/shared-logic/src/pipeline.rs`). The graph travels in the `nodes` and `edges` arrays
+of the websocket init message ([websocket-protocol.md](websocket-protocol.md)).
 
 **If you change a field here, change it in all three places: `pipeline.rs`, the frontend node
-component, and this file.**
+component (and `buildPipelinePayload`), and this file.**
 
 ## Wire format
 
-Every node is `{"type": <string>, "config": <object>}`. This is serde's adjacently tagged
-representation of `enum Node`.
+The frontend sends every node on the canvas and every edge between them:
 
-| `type` | Rust variant | Frontend React Flow type |
-|---|---|---|
-| `"window"` | `Node::Window(WindowConfig)` | `window-node` |
-| `"preprocessing"` | `Node::Preprocessing(PreprocessingConfig)` | `filter-node` |
-| `"ml"` | `Node::ML(MLConfig)` | `machine-learning-node` |
+```json
+{
+  "session_id": "42",
+  "nodes": [
+    { "id": "source-1", "type": "source",        "config": {} },
+    { "id": "window-1", "type": "window",        "config": { "chunk_size": 64, "overlap_size": 0 } },
+    { "id": "filter-1", "type": "preprocessing", "config": { "apply_bandpass": true, "l_freq": 1, "h_freq": 30 } },
+    { "id": "chart-1",  "type": "signal_graph",  "config": {} },
+    { "id": "ml-1",     "type": "ml",            "config": { "model": "Stress" } }
+  ],
+  "edges": [
+    { "source": "source-1", "target": "window-1" },
+    { "source": "window-1", "target": "filter-1" },
+    { "source": "filter-1", "target": "chart-1" },
+    { "source": "filter-1", "target": "ml-1" }
+  ]
+}
+```
 
-Other editor nodes (source, signal-graph, label, resampling, artifact) are display-only and
-are filtered out before sending (`PIPELINE_NODE_TYPES` in `react-flow-view.tsx`). Sending any
-other `type` makes the whole init message fail to parse.
+- A node is `{"id": <string>, "type": <string>, "config": <object>}`. `id` is the React Flow
+  node id; error messages refer to it. `config` is required (`{}` is fine), and every field
+  inside it is optional: a missing field takes the default listed below.
+- An edge is `{"source": <node id>, "target": <node id>}`, from an output handle to an input
+  handle.
+- The **order of `nodes` doesn't matter**. The backend orders the pipeline from the edges.
 
-Rules for how the backend reads the array:
+| `type` | Rust variant | Frontend React Flow type | Role |
+|---|---|---|---|
+| `"source"` | `Node::Source` | `source-node` | The EEG stream. Exactly one. |
+| `"window"` | `Node::Window(WindowConfig)` | `window-node` | Batching. Straight after the source. |
+| `"preprocessing"` | `Node::Preprocessing(PreprocessingConfig)` | `filter-node` | Processing: filter. |
+| `"resample"` | `Node::Resample(ResampleConfig)` | `resampling-node` | Processing: changes the sample rate. |
+| `"artifact"` | `Node::Artifact` | `artifact-node` | Processing: **passes data through unchanged** for now. |
+| `"label"` | `Node::Label` | `label-node` | Output. Can feed other outputs. |
+| `"signal_graph"` | `Node::SignalGraph` | `signal-graph-node` | Output (chart). Terminal. |
+| `"ml"` | `Node::ML(MLConfig)` | `machine-learning-node` | Output (classifier). Terminal. At most one. |
 
-- **Order is ignored.** The backend runs a fixed sequence (window → preprocessing → ML),
-  whatever order the editor's edges put the nodes in.
-- **The first node of each type wins.** Later duplicates are ignored.
-- **A missing node means that stage uses its default** (see each node's *Default when
-  absent*). It does **not** turn the stage off.
-- **Required vs. optional fields.** No config struct uses `#[serde(default)]`. Every
-  non-`Option` field is **required** when the node is present: if it's missing, the whole
-  message is rejected. `Option` fields can be left out or set to `null`.
-- **Numbers.** `usize`/`u32` fields need non-negative integers. `5.0` and `-1` are rejected.
-  `f32` fields take any JSON number.
+An unknown `type`, or a field with the wrong JSON type (e.g. `"chunk_size": "64"`), fails the
+whole message with an `invalid_message` error.
+
+## Graph rules
+
+`Pipeline::compile` turns the graph into an ordered processing chain, or rejects it with an
+`invalid_pipeline` error that names the node at fault (`node_id`). The rules:
+
+1. Exactly one `source` node.
+2. No loops.
+3. Every node other than the source has **exactly one input**, so every node is connected to
+   the source. A node with no input ("isn't connected"), or one whose input chain doesn't reach
+   the source, is rejected, even if it's just sitting unused on the canvas.
+4. **Processing nodes form a single chain** from the source: `window`, `preprocessing`,
+   `resample` and `artifact` can each feed at most one other processing node. Two processing
+   nodes taking input from the same node is rejected, because the client receives one stream.
+5. `window`, if present, comes straight after the source.
+6. Output nodes can branch off anywhere along the chain. `signal_graph` and `ml` must be
+   terminal; `label` can only feed other outputs.
+7. At most one `ml` node.
+
+The frontend checks some of these before it sends (`validatePipeline`): one source, one
+window connected to the source, terminal outputs, no loops. The backend checks all of them.
 
 ## How the stages fit together
 
 ```
-LSL samples (4 ch) ──► window ──► batch of N samples ──┬──► websocket client (raw signals + ml_result)
-                                                       ├──► TimescaleDB (raw signals)
-                                                       └──► Python manager(preprocessing config, batch) ──► ml_result
+                     ┌───────── raw samples (no overlap) ───────────────► TimescaleDB
+LSL ──► window ──────┤
+ (stream rate)       └──► stage 1 ──► stage 2 ──► … ──► stage n ──────────► websocket client
+                               │                                            (signals + ml_result)
+                               └──► ml node's input ──► Python manager ──► ml_result
 ```
 
-Preprocessing and ML only affect `ml_result`. The `signals` sent to the client and stored
-in the DB are **always raw**. The Python pipeline returns `processed_eeg`, but
-`pipeline_gateway.rs` doesn't use it.
+- The window node sets how many new samples make one batch. Each batch then runs through the
+  processing chain in edge order.
+- **The client receives the output of the last processing node**, with the window's overlap
+  in front. If there are no processing nodes, that's the raw data.
+- **The database stores the raw samples**, without overlap, whatever the chain does.
+- The ML node receives the data at the point where it branches off the chain (so an ML node
+  connected to a filter that's followed by a resample sees filtered data at the original rate).
+- All filters and resamplers keep state between batches, so batch boundaries don't add
+  artifacts.
+- Sample rates are tracked along the chain. The input rate is the LSL stream's declared rate
+  (256 Hz for the Muse and the mock); each `resample` node changes it for the nodes after it.
+- Settings that only make sense at a known rate (cutoffs vs. Nyquist) are checked once the
+  stream is found, and reported as `invalid_pipeline` errors at that point.
+
+Chart nodes all show the same stream (the end of the chain), even when they branch off
+earlier. Per-branch streams would need a protocol change.
 
 ---
+
+## `source`
+
+No config. Send `{}`.
 
 ## `window`
 
-Controls how incoming samples are grouped into batches. This is the only node that changes
-the shape of what the client receives.
+Controls how incoming samples are grouped into batches.
 
-| Field | Type | Required | Default when node absent | Meaning |
-|---|---|---|---|---|
-| `chunk_size` | integer ≥ 0 (`usize`) | yes | `64` | New samples per batch. At 256 Hz, 64 samples is 250 ms. |
-| `overlap_size` | integer ≥ 0 (`usize`) | yes | `0` | How many trailing samples of each batch are repeated at the front of the next one. |
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `chunk_size` | integer ≥ 1 | `64` | New samples per batch, at the stream's rate. At 256 Hz, 64 samples is 250 ms. |
+| `overlap_size` | integer ≥ 0 | `0` | How many samples from the end of each batch are repeated at the front of the next one. |
 
 Effect on output:
 
-- Each batch has `chunk_size` samples, plus `overlap_size` repeated samples at the front of
-  every batch after the first.
-- Batches arrive about `sfreq / chunk_size` times per second.
-- ML runs once per batch, so `chunk_size` also sets how often you get a prediction and how
-  much data each prediction sees.
-- Repeated overlap samples get placeholder timestamps (copies of the first new sample's
-  timestamp). See known issue 3 in the protocol doc.
+- Batches arrive about `stream_rate / chunk_size` times per second.
+- Every batch after the first starts with the previous batch's last samples. The overlap is
+  counted at the stream rate; after a `resample` node it's scaled to the new rate
+  (`round(overlap_size × new_rate / stream_rate)`). Overlap samples keep their real
+  timestamps.
+- ML runs once per batch, so `chunk_size` also sets how often you get a prediction.
 
-Validation: the backend checks nothing beyond the types. `chunk_size: 0` acts like `1`.
-`overlap_size >= chunk_size` is accepted. The frontend enforces `chunk_size > 0` and
-`0 ≤ overlap_size < chunk_size`, and other clients should follow the same rules.
+Without a window node the defaults apply. `chunk_size: 0` is rejected. The frontend also
+enforces `0 ≤ overlap_size < chunk_size`; the backend doesn't.
 
-Frontend defaults: `chunk_size: 64`, `overlap_size: 0` (`DEFAULT_WINDOWING`, `window-node.tsx`).
-These match the backend.
+Frontend defaults: `chunk_size: 64`, `overlap_size: 0` (`DEFAULT_WINDOWING`).
 
 ---
 
-## `preprocessing`
+## `preprocessing` (filter)
 
-Configures the filtering and quality-check steps that the **Python ML pipeline** runs on each
-batch before classifying it. It does **not** filter the streamed or stored data.
+Filters the stream. Every node after it, the client, and an ML node connected to it see the
+filtered data.
 
-| Field | Type | Required | Default when node absent | Used by backend? | Meaning |
-|---|---|---|---|---|---|
-| `apply_bandpass` | bool | yes | `true` | yes | Adds a `bandpass filter` node to the Python pipeline. |
-| `apply_quality_check` | bool | yes | `true` | yes | Adds a `signal quality check` node to the Python pipeline. |
-| `use_iir` | bool | yes | `false` | yes | Filter method: `true` → `"IIR"`, `false` → `"FIR"`. |
-| `l_freq` | number \| null | no | `1.0` | yes | Low cutoff in Hz. `null` or missing becomes **1.0**. |
-| `h_freq` | number \| null | no | `50.0` | yes | High cutoff in Hz. `null` or missing becomes **50.0**. |
-| `downsample_factor` | integer \| null | no | `null` | **no** | Not used. Downsampling was removed with the old `SignalProcessor` path. |
-| `sfreq` | number | yes | `256.0` | yes | Sample rate in Hz that the Python filters and quality check assume. It is **not** measured from the stream, so it has to match the source (256 for Muse). |
-| `n_channels` | integer | yes | `4` | **no** | Not used. The backend always uses 4 channels. |
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `apply_bandpass` | bool | `true` | Turns the filter on. `false` passes data through unchanged. |
+| `apply_quality_check` | bool | `true` | Only used when an ML node comes after this filter: adds the Python signal quality check to the model's preprocessing. |
+| `use_iir` | bool | `false` | `true`: 4th-order Butterworth IIR (per cutoff). `false`: linear-phase windowed-sinc FIR (Hamming), sized like MNE's defaults. |
+| `l_freq` | number \| null | `1.0` | High-pass cutoff in Hz. `null` means **no high-pass**. |
+| `h_freq` | number \| null | `50.0` | Low-pass cutoff in Hz. `null` means **no low-pass**. |
+| `downsample_factor` | integer \| null | `null` | Not used. Use a `resample` node. |
+| `sfreq` | number | `256.0` | Not used. The backend uses the real rate at this point in the chain. |
+| `n_channels` | integer | `4` | Not used. The backend always uses 4 channels. |
 
-What gets sent to the Python manager (`build_python_pipeline_dict` in `pipeline_gateway.rs`):
+So `l_freq` + `h_freq` is a band-pass, `h_freq` alone a low-pass, `l_freq` alone a high-pass,
+and neither passes data through.
 
-```python
-{"nodes": [
-  # only if apply_quality_check
-  {"type": "signal quality check", "config": {"sfreq": sfreq}},
-  # only if apply_bandpass
-  {"type": "bandpass filter", "config": {"method": "IIR" | "FIR",
-                                         "low_cut_hz": l_freq or 1.0,
-                                         "Filter": h_freq or 50.0,
-                                         "src_fs": sfreq}},
-]}
-```
+Checked when the stream starts: cutoffs above 0, below half the sample rate at this point
+(after any resampling), and `l_freq < h_freq`.
 
-Also see [Unexpected Effects and Issues](#unexpected-effects-and-issues) section for some current problems.
+The FIR filter delays the signal by half its length: about `1.65 / transition_width` seconds,
+using the narrower of the transition widths `min(max(0.25 × l_freq, 2), l_freq)` (high-pass)
+and `min(max(0.25 × h_freq, 2), nyquist - h_freq)` (low-pass). For `l_freq: 1` that's about
+1.6 s. Use IIR for lower latency.
 
-Frontend defaults (`DEFAULT_PROCESSING`): `apply_bandpass: false`, `use_iir: false`,
-`l_freq: null`, `h_freq: null`, `downsample_factor: null`, `sfreq: 256`, `n_channels: 4`.
-Note that `apply_bandpass` defaults to **false** on the frontend but **true** on the backend
-when there's no node.
+Frontend: the filter node sends `lowpass` as `{l_freq: null, h_freq}`, `highpass` as
+`{l_freq, h_freq: null}` and `bandpass` as both. `DEFAULT_PROCESSING` fills in the rest
+(`apply_bandpass: false`, `apply_quality_check: true`, `use_iir: false`, …).
+
+---
+
+## `resample`
+
+Changes the sample rate for every node after it.
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `target_hz` | number \| null | `null` | Output rate in Hz. `null`, or the current rate, passes data through. |
+
+Linear interpolation across batch boundaries, with a 4th-order Butterworth low-pass at
+`0.45 × target_hz` first when downsampling. Output timestamps are interpolated too, so they're
+evenly spaced at the new rate. A batch can come out with one sample more or fewer than
+`chunk_size × target_hz / stream_rate`.
+
+Frontend: the resampling node's `Original rate` sends `null`, the presets send `200` or
+`256`, and `Custom` sends its whole-Hz value (1–256).
+
+---
+
+## `artifact`
+
+Accepted so graphs that use it are valid, but **it passes data through unchanged**. Its
+`config` is ignored. Whether artifact removal stays in the product is still open.
+
+## `label`, `signal_graph`
+
+Outputs that don't change the data. Their `config` is ignored.
 
 ---
 
 ## `ml`
 
-| Field | Type | Required | Default when node absent | Used by backend? | Meaning |
-|---|---|---|---|---|---|
-| `model` | string | yes | — (stage still runs, see below) | **no** | The model or task the user picked in the editor (e.g. `"Stress"`). |
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `model` | string | `"activity"` | The classifier the user picked, e.g. `"Stress"`. Lower-cased and sent to the Python manager as the task: `activity`, `focus`, `emotion` or `stress`. Other names fall back to `activity` in `manager.py`. |
 
-Effect on output today: **none.** `Pipeline::ml_config()` is never called. The Python manager
-runs on every batch whether or not an `ml` node is present, and the task it runs is chosen on
-the Python side. `ml_result` is filled in whenever the manager returns a `classifier_output`
-that has `overall_label`, `confidence` and `task`. Otherwise it is `null`.
+With an ML node, the backend loads the Python manager (`PIPELINE_MANAGER_SCRIPT`) and calls it
+on every batch with the ML node's input and this pipeline:
 
-Intended behaviour, not yet implemented: with no `ml` node, skip classification
-(`ml_result: null`); with one, pass `model` through so it picks the classifier task.
+```python
+{"nodes": [
+  # only if the closest filter before the ML node has apply_quality_check (or there's no filter)
+  {"type": "signal quality check", "config": {"sfreq": <rate at the ML node>}},
+  # the model's own preprocessing: bandpass, resample to 200 Hz, 4 s segments
+  {"type": "bandpass filter", "config": {"method": "IIR" | "FIR",
+                                         "low_cut_hz": <filter l_freq, or 1.0>,
+                                         "Filter": <filter h_freq, or 50.0, capped at 0.45 × rate>,
+                                         "src_fs": <rate at the ML node>}},
+  {"type": "ml", "config": {"task": "<model, lower-cased>"}},
+]}
+```
 
-Frontend: `machine-learning-node.tsx` always sends `{ "model": <selected option> }`,
-with `"Stress"` as the default selection.
+`ml_result` is filled in when the manager returns `overall_label`, `confidence` and `task`;
+otherwise it's `null`. **Without an ML node, Python isn't loaded and `ml_result` is always
+`null`.**
+
+Limits:
+
+- With the default `mock_manager.py`, every batch gets the same fixed `ml_result`.
+- The real `manager.py` needs at least 4 s of data per call to segment it, so it only
+  produces a result when the window (`chunk_size + overlap_size`) is at least 4 s of samples
+  (1024 at 256 Hz). Smaller windows log an error and return `ml_result: null`.
+- The model's bandpass runs on data the chain may already have filtered with the same
+  cutoffs.
+
+Frontend: `machine-learning-node.tsx` sends `{ "model": <selected option> }`, with `"Stress"`
+as the default.
 
 ---
 
 ## Checklist for adding a node type
 
-1. Add the variant and config struct in `pipeline.rs`, with `#[serde(rename = "...")]` and a
-   `Default` impl. Use `#[serde(default)]` on fields so older clients don't break.
-2. Read it in `lsl.rs` (or wherever it takes effect), and pass it to Python in
-   `pipeline_gateway.rs` if needed.
-3. Add the React Flow node, its `typeMap` entry and its `PIPELINE_NODE_TYPES` entry in
-   `react-flow-view.tsx`.
+1. Add the variant (and config struct, with `#[serde(default)]` and a `Default` impl) to
+   `Node` in `pipeline.rs`, and decide whether it's a processing node or an output in
+   `Pipeline::compile`.
+2. For a processing node: add a `StageKind`, and build its runtime stage in
+   `signal_processing/chain.rs` (stateful, so batching doesn't change the result).
+3. Map the React Flow type in `typeMap` (and its config in `nodeConfig` if it needs
+   translating) in `frontend/lib/pipeline-validation.ts`.
 4. Document it in this file.
-
----
-
-## Unexpected Effects and Issues
-
-The preprocessing stage has the following problems:
-
-- **There is no true low-pass or high-pass.** The editor's "lowpass" sends `l_freq: null`,
-  which becomes 1 Hz, so it's really a 1–`h_freq` bandpass. "highpass" sends `h_freq: null`,
-  which becomes 50 Hz, so it's really an `l_freq`–50 bandpass. To actually turn filtering off,
-  send `apply_bandpass: false`.
-- If the node is left out, filtering and the quality check are **on** (1–50 Hz FIR).
-- With the default `mock_manager.py` (`PIPELINE_MANAGER_SCRIPT`), the config is ignored
-  completely and every batch gets the same fixed `ml_result`.
-
-> ⚠️ **Contract mismatch today:** the frontend never sends `apply_quality_check`
-> (`FilterConfig` in `filter-node.tsx`, `DEFAULT_PROCESSING` in `react-flow-view.tsx`).
-> Because the field is required, any pipeline with a filter node is rejected and the
-> session never streams. Until that's fixed, the frontend must send
-> `"apply_quality_check": true` (or `false`).

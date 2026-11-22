@@ -30,15 +30,19 @@ the WebSocket-auth backlog note from the session-auth task).
 | Subprotocol / auth | None. |
 | Frames | Text only. The server ignores binary, ping and pong frames from the client (tungstenite replies to pings automatically). |
 | Sessions per connection | One. Each connection runs one pipeline, writes to one session, and then ends. To change the pipeline, close the connection and open a new one. |
+| Server → client frames | Data batches, the `{"type": "error", ...}` frame, and the text `confirmed closing`. |
 
 ## Lifecycle
 
 ```
 client                                         server
   |  ---- TCP + websocket upgrade ---------------> |
-  |  ---- init message (JSON text) --------------> |  parse; on failure log and keep waiting
+  |  ---- init message (JSON text) --------------> |  parse + compile the graph
+  |  <--- error frame, then Close (if invalid) --- |
   |                                                |  start_broadcast(): start EEG source,
-  |                                                |  batching + ML, DB writer, ws writer
+  |                                                |  batching + processing + ML, DB writer,
+  |                                                |  ws writer
+  |  <--- error frame (if the stream can't start)  |
   |  <--- batch (JSON text) ---------------------- |
   |  <--- batch ---------------------------------- |  repeats once per window
   |  ...                                           |
@@ -51,18 +55,21 @@ client                                         server
 
 ### 1. Init message (client → server)
 
-The first non-empty text frame that parses as the JSON below is treated as the init message.
-Text frames before it that don't parse are logged and skipped. Non-text frames are skipped.
+The first non-empty text frame is the init message. Non-text frames before it are skipped.
 
 ```json
 {
   "session_id": "42",
   "nodes": [
-    { "type": "window",        "config": { "chunk_size": 64, "overlap_size": 0 } },
-    { "type": "preprocessing", "config": { "apply_bandpass": true, "apply_quality_check": true,
-                                           "use_iir": false, "l_freq": 1.0, "h_freq": 50.0,
-                                           "downsample_factor": null, "sfreq": 256.0, "n_channels": 4 } },
-    { "type": "ml",            "config": { "model": "Stress" } }
+    { "id": "source-1", "type": "source",        "config": {} },
+    { "id": "window-1", "type": "window",        "config": { "chunk_size": 64, "overlap_size": 0 } },
+    { "id": "filter-1", "type": "preprocessing", "config": { "apply_bandpass": true, "l_freq": 1.0, "h_freq": 30.0 } },
+    { "id": "ml-1",     "type": "ml",            "config": { "model": "Stress" } }
+  ],
+  "edges": [
+    { "source": "source-1", "target": "window-1" },
+    { "source": "window-1", "target": "filter-1" },
+    { "source": "filter-1", "target": "ml-1" }
   ]
 }
 ```
@@ -70,14 +77,18 @@ Text frames before it that don't parse are logged and skipped. Non-text frames a
 | Field | Type | Notes |
 |---|---|---|
 | `session_id` | string | Decimal integer **as a string**, the id of a row in `sessions` (created through the REST API beforehand). Parsed with `parse::<i32>()`. If that fails, the server **quietly uses `0`**. |
-| `nodes` | array of `{type, config}` | Adjacently tagged enum `shared_logic::pipeline::Node`. Order doesn't matter: the server uses the **first** node of each type and ignores the rest. The array can be empty, in which case every stage uses its default. |
+| `nodes` | array of `{id, type, config}` | Every node on the canvas. See [pipeline-nodes.md](pipeline-nodes.md) for the types and configs. |
+| `edges` | array of `{source, target}` | Connections between node ids. They set the processing order. Optional, but without edges only a lone `source` node is valid. |
 
-`type` must be exactly `"window"`, `"preprocessing"` or `"ml"`. One unknown `type`, or one
-missing required config field, makes the **whole message** fail to parse (see
-[Error behaviour](#error-behaviour)).
+If the message can't be read (bad JSON, unknown node `type`, a field of the wrong type), the
+server sends an `invalid_message` [error frame](#error-frame-server--client) and closes the
+connection. If the graph breaks a rule in
+[pipeline-nodes.md § Graph rules](pipeline-nodes.md#graph-rules), it sends an
+`invalid_pipeline` error frame naming the node, and closes the connection.
 
-**Currently only one init message is read**. Text frames sent after it other than `"clientClosing"` are
-ignored, including a second pipeline payload. For any changes to the pipeline, the connection needs to be closed and a new one started with the updated init message (see [Known issues](#known-issues)).
+**Only one init message is read**. Text frames sent after it other than `"clientClosing"` are
+ignored, including a second pipeline payload. To change the pipeline, close the connection and
+start a new one with the updated init message. The frontend locks the canvas while streaming.
 
 ### 2. Data batches (server → client)
 
@@ -99,7 +110,7 @@ Each batch is one text frame holding a JSON-serialized `shared_logic::lsl::EEGDa
 | Field | Type | Notes |
 |---|---|---|
 | `timestamps` | string[] | RFC 3339 UTC with nanosecond precision (chrono `DateTime<Utc>`). This is the LSL sample time converted to wall-clock time. Length is `N`. |
-| `signals` | number[4][N] | **Channel-major**: `signals[c][i]` is channel `c` at `timestamps[i]`. There are always exactly 4 channels (Muse TP9, AF7, AF8, TP10 order when using a real headset). |
+| `signals` | number[4][N] | **Channel-major**: `signals[c][i]` is channel `c` at `timestamps[i]`. There are always exactly 4 channels (Muse TP9, AF7, AF8, TP10 order when using a real headset). This is the output of the **last processing node** in the pipeline (raw if there are none). |
 | `ml_result` | object \| null | Output of the Python pipeline for this batch. It is `null` when the pipeline returned no classifier output or failed. See below. |
 
 `ml_result` fields (`PipelineOutput`):
@@ -110,28 +121,48 @@ Each batch is one text frame holding a JSON-serialized `shared_logic::lsl::EEGDa
 | `confidence` | number | Usually 0–1. |
 | `task` | string | Which classification task produced the label, e.g. `"focus"`. |
 
-Batch size `N`:
+Batch size `N`, with `r = rate at the end of the chain / stream rate` (`1` without a
+`resample` node):
 
-- First batch: `chunk_size`.
-- Later batches, when `overlap_size > 0`: `overlap_size + chunk_size`. The last `overlap_size`
-  samples of the previous batch are repeated at the front. **Their timestamps are not the
-  original ones.** They are all copies of the first new sample's timestamp. Clients that
-  plot by timestamp should drop the first `overlap_size` points of every batch after the first.
-- The final batch, flushed on `clientClosing`, can be shorter than `chunk_size` and has no
-  overlap prefix.
+- First batch: about `chunk_size × r`.
+- Later batches: about `(chunk_size + overlap_size) × r`. The overlap samples at the front
+  repeat the end of the previous batch, **with their real timestamps**, so clients that plot by
+  timestamp should drop points they've already drawn.
+- The final batch, flushed on `clientClosing`, can be shorter.
+- A batch can be empty after heavy downsampling with a small window.
 
-`signals` always holds the **raw** samples. Preprocessing settings change only what the ML
-stage sees. They do not change the data streamed to the client or written to the database.
-See [pipeline-nodes.md](pipeline-nodes.md).
+The database stores the **raw** samples of each batch (no overlap, no processing), whatever the
+pipeline does. See [pipeline-nodes.md](pipeline-nodes.md).
 
-Rate: about `sample_rate / chunk_size` batches per second, so roughly 4/s at the defaults
+Rate: about `stream_rate / chunk_size` batches per second, so roughly 4/s at the defaults
 (256 Hz, chunk 64).
+
+### Error frame (server → client)
+
+Sent instead of data when a session can't start, before the server stops:
+
+```json
+{ "type": "error", "code": "invalid_pipeline", "message": "Low cutoff (60 Hz) must be below the high cutoff (30 Hz).", "node_id": "filter-1" }
+```
+
+| `code` | When | What happens next |
+|---|---|---|
+| `invalid_message` | The init message can't be parsed. | The server closes the connection. |
+| `invalid_pipeline` | The graph breaks a rule, or a setting doesn't fit the stream's sample rate (checked once the stream is found). `node_id` names the node. | Before streaming: the server closes the connection. After the stream is found: the pipeline stops; the client should send `clientClosing` as usual. |
+| `no_source` | No LSL stream of type `EEG` was found within 10 s. | The pipeline stops; send `clientClosing`. |
+| `pipeline_init_failed` | The pipeline has an ML node and the Python manager couldn't be loaded. | The pipeline stops; send `clientClosing`. |
+| `internal_error` | The acquisition task panicked. | The pipeline stops; send `clientClosing`. |
+
+`node_id` is left out when the error isn't about one node. The frontend shows `message` as a
+notification, selects the node named by `node_id`, and stops streaming
+(`WebSocketContext.tsx`, `react-flow-view.tsx`).
 
 ### 3. Graceful close: `clientClosing` / `confirmed closing`
 
 1. The client sends the exact text frame `clientClosing`, case-sensitive, with no JSON wrapper.
 2. The server cancels the session's `CancellationToken`. The mock generator stops, and the
-   acquisition loop sends any samples left in the current window as a final batch and exits.
+   acquisition loop runs any samples left in the current window through the pipeline as a
+   final batch and exits.
 3. The server waits for the acquisition task to finish, then sends the text frame
    `confirmed closing`.
 4. The server stops reading from the socket and drops the connection without sending a Close
@@ -156,16 +187,17 @@ Until the known issue is fixed, closing any other way leaks a background pipelin
 
 ## Error behaviour
 
-The server **never sends an error message to the client**. Every failure is either logged on
-the server (`RUST_LOG=info` or higher) or shows up as missing or `null` data. What the client
-sees in each case:
+Errors that stop a session are sent as an [error frame](#error-frame-server--client). Errors
+during a running session are only logged on the server (`RUST_LOG=info` or higher) or show up
+as missing or `null` data:
 
 | Failure | Where | What the client sees |
 |---|---|---|
-| Init JSON is invalid, has an unknown node `type`, or is missing a required config field | `websocket-server` | Nothing. The server logs `Failed to parse init message JSON: ...` and keeps waiting for another init message. The connection stays open with no data. |
+| Init message can't be parsed, or the graph is invalid | `websocket-server` | `invalid_message` / `invalid_pipeline` error frame, then the connection closes. |
+| A setting doesn't fit the stream's rate (e.g. a cutoff above Nyquist) | `lsl.rs` | `invalid_pipeline` error frame with `node_id`. No batches. |
 | `session_id` is not an integer | `websocket-server` | Normal streaming, but the rows are written to session `0`. If session 0 doesn't exist, every DB insert fails (logged). |
-| The Python manager script can't be loaded (`PIPELINE_MANAGER_SCRIPT` is wrong) | `lsl.rs` | No batches. Acquisition stops right away. `clientClosing` still gets `confirmed closing`. |
-| No LSL stream of type `EEG` exists | `lsl.rs` | No batches. `resolve_bypred` waits **forever**. In this state `clientClosing` never gets `confirmed closing`, because the server is waiting on a task that never finishes, so the client's timeout is the only way out. |
+| The pipeline has an ML node and the Python manager script can't be loaded | `lsl.rs` | `pipeline_init_failed` error frame. No batches. |
+| No LSL stream of type `EEG` within 10 s | `lsl.rs` | `no_source` error frame. No batches. |
 | A sample has fewer than 4 channels | `lsl.rs` | The sample is dropped. Channels beyond 4 are ignored without a message. |
 | The Python pipeline raises, or returns no `classifier_output` | `pipeline_gateway.rs` | The batch is still sent, with `ml_result: null`. |
 | The websocket writer falls behind by more than 1000 batches | `bc.rs` | Batches are skipped without notice. The DB writer has its own 1000-batch buffer. |
@@ -186,16 +218,10 @@ block in `bc.rs` and run `muselsl stream`.
 These are listed so the spec describes how the code behaves today. Each one should be fixed in
 code and then removed from this list alongside any update to this document.
 
-1. **Pipelines with a filter node never start.** The frontend's filter-node config
-   (`DEFAULT_PROCESSING` in `react-flow-view.tsx`, and `filter-node.tsx`) leaves out
-   `apply_quality_check`. That field is required by `PreprocessingConfig`, so the init message
-   fails to parse and the connection sits idle.
-2. A Close frame or a disconnect without `clientClosing` leaks the session's pipeline (see §4). The EEG source, the ML loop and the DB writer keep running and keep inserting rows for the session until the process restarts.
-3. Overlap samples have made-up timestamps. Because of `ON CONFLICT (session_id, time) DO NOTHING`,
-   the DB stores the first *overlap* sample at the first new sample's timestamp and drops the
-   real one. With `overlap_size > 0`, one stored sample per batch is wrong.
-4. The final batch can race `confirmed closing` (see §3).
-5. Errors are never reported to the client. A protocol-level error message (for example
-   `{"error": "...", "code": "..."}`) would let the frontend show why a session isn't streaming.
-6. Runtime pipeline updates are not supported. `lsl.rs` has a `watch` channel set up for
-   window config changes, but its sender is dropped right away, so nothing can push an update. The frontend currently re-sends the payload every time the graph changes, but those updates do nothing until the next connection.
+1. A Close frame or a disconnect without `clientClosing` leaks the session's pipeline (see §4). The EEG source, the ML loop and the DB writer keep running and keep inserting rows for the session until the process restarts.
+2. The final batch can race `confirmed closing` (see §3).
+3. Runtime pipeline updates are not supported: the pipeline is fixed for the life of the
+   connection, and the frontend locks the canvas while streaming. Changing it means stopping
+   and starting again.
+4. All chart nodes show the same stream (the end of the processing chain), even when they
+   branch off earlier in the pipeline.

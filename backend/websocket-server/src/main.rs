@@ -3,11 +3,12 @@
 //! Accepts raw TCP on `WS_HOST:WS_PORT` (default `127.0.0.1:8080`), upgrades each connection
 //! to a websocket, and runs one live session per connection:
 //!
-//! 1. Waits for the first text frame that parses as a [`WebSocketInitMessage`]
-//!    (`{session_id, nodes}`). Frames that don't parse are logged and skipped. No error is
-//!    sent to the client.
-//! 2. Builds a [`Pipeline`] from `nodes` and spawns [`start_broadcast`], which streams
-//!    `EEGDataPacket` JSON batches to the client and writes them to the database.
+//! 1. Reads the first non-empty text frame as a [`WebSocketInitMessage`]
+//!    (`{session_id, nodes, edges}`) and compiles its node graph with [`Pipeline::compile`].
+//!    If either step fails, it sends an error frame (`{"type": "error", ...}`, see
+//!    [`ClientError`]) and closes the connection.
+//! 2. Spawns [`start_broadcast`], which streams processed `EEGDataPacket` JSON batches to the
+//!    client and writes the raw samples to the database.
 //! 3. On the text frame `"clientClosing"`, cancels the pipeline, waits for acquisition to
 //!    stop, and replies `"confirmed closing"`.
 //!
@@ -24,7 +25,8 @@ use log::{error, info};
 use serde::Deserialize;
 use shared_logic::bc::start_broadcast;
 use shared_logic::db::initialize_connection;
-use shared_logic::pipeline::{Node, Pipeline};
+use shared_logic::pipeline::{Pipeline, PipelineEdge, PipelineNode};
+use shared_logic::protocol::{ClientError, ErrorCode};
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
@@ -34,7 +36,9 @@ use tokio_util::sync::CancellationToken;
 #[derive(Deserialize)]
 struct WebSocketInitMessage {
     session_id: String,
-    nodes: Vec<Node>,
+    nodes: Vec<PipelineNode>,
+    #[serde(default)]
+    edges: Vec<PipelineEdge>,
 }
 
 #[tokio::main]
@@ -108,22 +112,13 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
     let cancel_token = CancellationToken::new();
     let cancel_clone = cancel_token.clone();
 
-    // Listen for the first non-null text message — this is the pipeline init message.
-    let init_message = loop {
+    // The first non-empty text message is the pipeline init message.
+    let init_text = loop {
         match read.next().await {
-            Some(Ok(msg)) if msg.is_text() => {
-                let text = match msg.to_text() {
-                    Ok(t) if !t.is_empty() => t,
-                    _ => continue,
-                };
-                match serde_json::from_str::<WebSocketInitMessage>(text) {
-                    Ok(init) => break init,
-                    Err(e) => {
-                        error!("Failed to parse init message JSON: {}", e);
-                        continue;
-                    }
-                }
-            }
+            Some(Ok(msg)) if msg.is_text() => match msg.into_text() {
+                Ok(t) if !t.is_empty() => break t,
+                _ => continue,
+            },
             Some(Ok(_)) => continue, // ping, binary, etc — keep waiting
             Some(Err(e)) => {
                 error!("Error on init: {}", e);
@@ -136,17 +131,43 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
         }
     };
 
+    let init_message = match serde_json::from_str::<WebSocketInitMessage>(&init_text) {
+        Ok(init) => init,
+        Err(e) => {
+            error!("Failed to parse init message JSON: {}", e);
+            let err = ClientError::new(
+                ErrorCode::InvalidMessage,
+                format!("The pipeline message couldn't be read: {}", e),
+            );
+            reject(&write, err).await;
+            return;
+        }
+    };
+
     // KNOWN GAP: no check that the caller owns this session — see "Known
     // gap: no session-ownership check" in docs/websocket-protocol.md.
     let session_id = init_message.session_id.parse::<i32>().unwrap_or(0);
     let pipeline = Pipeline {
         nodes: init_message.nodes,
+        edges: init_message.edges,
     };
-    info!("Received pipeline with {} nodes", pipeline.nodes.len());
+    let plan = match pipeline.compile() {
+        Ok(plan) => plan,
+        Err(e) => {
+            error!("Rejected pipeline: {}", e);
+            reject(&write, e.into()).await;
+            return;
+        }
+    };
+    info!(
+        "Received pipeline with {} nodes, {} processing stage(s)",
+        pipeline.nodes.len(),
+        plan.stages.len()
+    );
 
     // spawns the broadcast task
     let mut broadcast = Some(tokio::spawn(async move {
-        start_broadcast(write_clone, cancel_clone, pipeline, session_id).await;
+        start_broadcast(write_clone, cancel_clone, plan, session_id).await;
     }));
 
     while let Some(msg) = read.next().await {
@@ -171,6 +192,18 @@ async fn handle_connection(ws_stream: WebSocketStream<TcpStream>) {
         }
     }
     info!("Client disconnected.");
+}
+
+// Sends an error frame for an init message that can't be run, then closes the connection.
+async fn reject(
+    write: &Arc<Mutex<SplitSink<WebSocketStream<TcpStream>, Message>>>,
+    err: ClientError,
+) {
+    let mut w = write.lock().await;
+    if let Err(e) = w.send(Message::Text(err.to_json())).await {
+        error!("Failed to send error to client: {}", e);
+    }
+    let _ = w.send(Message::Close(None)).await;
 }
 
 // handle_prep_close uses the cancel_token to stop the broadcast sender task, and sends a "prep close complete" message to the client

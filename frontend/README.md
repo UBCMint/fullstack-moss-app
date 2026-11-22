@@ -123,14 +123,17 @@ two things to the rest of the tree:
 
 - `subscribe(fn)` — register a callback that receives each parsed batch as
   `DataPoint[]` (chart components use this to append points).
-- `startPipeline(payload)` — stages a freshly validated `{session_id, nodes}`
-  snapshot and starts streaming. Both Start buttons request `pipeline-start`;
-  the canvas validates its current nodes and edges before calling this method.
-  Draft edits do not log validation errors or send payloads. Pipeline editing is
-  locked while streaming, and stopping clears the staged payload.
+- `startPipeline(payload)` — stages a freshly validated
+  `{session_id, nodes, edges}` snapshot and starts streaming. Both Start buttons
+  request `pipeline-start`; the canvas validates its current nodes and edges
+  before calling this method. Draft edits do not log validation errors or send
+  payloads. Pipeline editing is locked while streaming, and stopping clears the
+  staged payload.
 
 It implements the same `"clientClosing"` → `"confirmed closing"` handshake as
-the Rust server (with a 5s timeout fallback), and converts incoming
+the Rust server (with a 5s timeout fallback), turns the server's
+`{"type": "error", ...}` frames into a `pipeline-error` window event (the canvas
+shows the message and stops streaming), and converts incoming
 `{timestamps, signals}` batches into flat `DataPoint` objects
 (`normalizeBatch`). The full wire protocol is specified in
 [`backend/docs/websocket-protocol.md`](../backend/docs/websocket-protocol.md);
@@ -140,18 +143,20 @@ frontend-focused walkthrough of the same exchange in [`design.md`](design.md).
 
 ## The pipeline editor
 
-`react-flow-view.tsx` is the React Flow canvas. Of its node types, only three
-are actually sent to the backend (`PIPELINE_NODE_TYPES`); the rest are
-editor-only:
+`react-flow-view.tsx` is the React Flow canvas. Every node on the board is sent
+to the backend with the edges between them, and the backend runs the pipeline in
+edge order (`typeMap` in `lib/pipeline-validation.ts`):
 
-| React Flow type                                  | Sent to backend as | Component                                                          | Backend node (`pipeline-nodes.md`)                                                                             |
-| ------------------------------------------------ | ------------------ | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `window-node`                                    | `"window"`         | `components/nodes/window-node/window-node.tsx`                     | `window`                                                                                                       |
-| `filter-node`                                    | `"preprocessing"`  | `components/nodes/filter-node/filter-node.tsx`                     | `preprocessing`                                                                                                |
-| `machine-learning-node`                          | `"ml"`             | `components/nodes/machine-learning-node/machine-learning-node.tsx` | `ml`                                                                                                           |
-| `source-node`                                    | _(not sent)_       | `components/nodes/source-node.tsx`                                 | — marks the EEG source in the canvas; doesn't carry a payload.                                                 |
-| `signal-graph-node`                              | _(not sent)_       | `components/nodes/signal-graph-node/`                              | — renders the live chart via `WebSocketContext.subscribe`.                                                     |
-| `label-node`, `artifact-node`, `resampling-node` | _(not sent)_       | `components/nodes/{label,artifact,resampling}-node/`               | — editor-only annotation/placeholder nodes; `resampling-node` exists in the UI but has no backend counterpart. |
+| React Flow type         | Sent to backend as | Component                                 | What the backend does (`pipeline-nodes.md`)                      |
+| ----------------------- | ------------------ | ----------------------------------------- | ---------------------------------------------------------------- |
+| `source-node`           | `"source"`         | `components/nodes/source-node.tsx`        | The EEG stream; the start of the pipeline.                       |
+| `window-node`           | `"window"`         | `components/nodes/window-node/`           | Sets the batch size and overlap.                                 |
+| `filter-node`           | `"preprocessing"`  | `components/nodes/filter-node/`           | Filters the stream (low-, high- or band-pass).                   |
+| `resampling-node`       | `"resample"`       | `components/nodes/resampling-node/`       | Changes the sample rate.                                         |
+| `artifact-node`         | `"artifact"`       | `components/nodes/artifact-node/`         | Accepted, but passes data through unchanged for now.             |
+| `machine-learning-node` | `"ml"`             | `components/nodes/machine-learning-node/` | Classifies its input with the selected model.                    |
+| `signal-graph-node`     | `"signal_graph"`   | `components/nodes/signal-graph-node/`     | Output; renders the live chart via `WebSocketContext.subscribe`. |
+| `label-node`            | `"label"`          | `components/nodes/label-node/`            | Output; doesn't change the data.                                 |
 
 Each sendable node writes its config into React Flow's node `data.config` on
 every relevant state change (`pushConfigToNodeData`), using the
@@ -160,13 +165,14 @@ its upstream connection (a node is only "active," per its combo box styling, if
 it traces back to the source node through valid edges). On any node/edge/session
 change, `buildPipelinePayload`:
 
-1. Topologically sorts nodes (`topoSort`, Kahn's algorithm) — this ordering is
-   cosmetic only; the backend always runs window → preprocessing → ML regardless
-   of array order (see `pipeline-nodes.md`).
-2. Filters to the three sendable types and remaps them to backend `type` strings
-   (`typeMap`).
-3. Merges in `DEFAULT_PROCESSING` / `DEFAULT_WINDOWING` under the node's own
-   config (so a config value the node already set always wins over the default).
+1. Topologically sorts nodes (`topoSort`, Kahn's algorithm). The order is for
+   readability only; the backend orders the pipeline from the edges.
+2. Remaps every known node type to its backend `type` (`typeMap`) and keeps its
+   React Flow `id`, plus the edges between sent nodes.
+3. Builds each node's config (`nodeConfig`): `DEFAULT_PROCESSING` /
+   `DEFAULT_WINDOWING` merged under the node's own config (so a value the node
+   set always wins), and the resampling node's `rate`/`customRate` turned into
+   `target_hz`.
 
 `validatePipeline` runs first and blocks sending on structural errors (no source
 node, no window node, ML not preceded by a filter node, cycles, etc.). Every
