@@ -1,14 +1,18 @@
 # Rust–Python signal processing
 
-The live path is `lsl.rs` → `PipelineGateway` → Python
-`run_pipeline_sync(pipeline, data)`. Python runs inside the Rust process via
-PyO3, not through a subprocess or HTTP service. The receiver initializes the
-gateway inside `tokio::task::spawn_blocking` and reuses its module for batches.
+The live path is `lsl.rs` → `chain.rs` (the Rust processing chain: filters
+and resamplers from `dsp.rs`, in the order of the canvas edges) → and, if the
+pipeline has an ML node, `PipelineGateway` → Python
+`run_pipeline_sync(pipeline, data)` on the ML node's input. Python runs inside
+the Rust process via PyO3, not through a subprocess or HTTP service. The
+receiver initializes the gateway inside `tokio::task::spawn_blocking` and reuses
+its module for batches. The node contract is in
+[`backend/docs/pipeline-nodes.md`](../../../docs/pipeline-nodes.md).
 
 ## Selecting a manager
 
-`receive_eeg_with_config` reads `PIPELINE_MANAGER_SCRIPT` when the receiver
-starts. If unset, it uses
+`receive_eeg` reads `PIPELINE_MANAGER_SCRIPT` when the receiver starts, and
+only when the pipeline has an ML node. If unset, it uses
 `/app/shared-logic/src/signal_processing/moss/mock_manager.py`; the websocket
 Dockerfile also sets this value. For local development, set it to an absolute
 path in your checkout (see the root README). It is a filesystem path, not a
@@ -25,11 +29,11 @@ with `PyModule::from_code(..., "manager.py", "manager")`.
   point uses `asyncio.run`; the async wrappers offload blocking work with
   `asyncio.to_thread`. It caches the encoder but loads the classifier per ML call.
 
-**Current integration limit:** the Rust dictionary builder emits only optional
-quality-check and bandpass nodes, in that order. It never emits an `ml` node or
-forwards a frontend ML model selection. Switching scripts alone does not enable
-live classification. A successfully loaded real manager therefore returns no ML
-result for the graph currently built by Rust.
+The Rust dictionary builder (`MlRequest` in `pipeline_gateway.rs`) emits an
+optional quality check, the bandpass/resample/segment node, and an `ml` node
+whose `task` is the ML node's `model`, lower-cased. The real ML path needs at
+least four seconds of samples per call, so the window must be at least that
+long.
 
 ## Bridge input and output
 
@@ -37,26 +41,26 @@ Rust accepts channel-major `&[Vec<f64>]` and transposes it to a NumPy float64
 array of shape `(n_samples, 4)`. Supply four equally sized channels in order
 `TP9, AF7, AF8, TP10`; the transpose helper does not validate this contract.
 
-The first argument is a Python dictionary, not a JSON string. With both optional
-steps enabled it has this shape (values shown are illustrative):
+The first argument is a Python dictionary, not a JSON string. It has this shape
+(values shown are illustrative; the quality check is optional):
 
 ```python
 {
     "nodes": [
         {"type": "signal quality check", "config": {"sfreq": 256.0}},
         {"type": "bandpass filter", "config": {
-            "method": "FIR",       # "IIR" when use_iir is true
-            "Filter": 50.0,        # h_freq, defaults to 50 Hz
-            "low_cut_hz": 1.0,     # l_freq, defaults to 1 Hz
-            "src_fs": 256.0,       # ProcessingConfig.sfreq
+            "method": "FIR",       # "IIR" when the upstream filter's use_iir is true
+            "Filter": 50.0,        # upstream filter's h_freq, defaults to 50 Hz
+            "low_cut_hz": 1.0,     # upstream filter's l_freq, defaults to 1 Hz
+            "src_fs": 256.0,       # sample rate at the ML node
         }},
+        {"type": "ml", "config": {"task": "stress"}},
     ]
 }
 ```
 
-Disabled steps are omitted, so `{"nodes": []}` is valid. A Python caller can
-append `{"type": "ml", "config": {"task": "focus"}}` **after bandpass**.
-The real ML wrapper requires a nonempty list of preprocessed arrays, not raw
+The manager itself accepts any subset, so `{"nodes": []}` is valid when calling
+it directly; `ml` must come **after bandpass**. The real ML wrapper requires a nonempty list of preprocessed arrays, not raw
 samples. Tasks are `activity`, `focus`, `emotion`, and `stress`; `model` can also
 name a task. An unmapped model name falls back to `activity`, while an explicit
 unknown task raises an error. Bandpass also accepts `bandpass_filter`/`bandpass`.
@@ -98,8 +102,8 @@ means across segments, ordered highest first; scores are rounded to four places.
 
 Rust extracts only `overall_label: String`, `confidence: f64`, and `task: String`
 into `PipelineOutput`, attached as `EEGDataPacket.ml_result`. It ignores
-`processed_eeg`, quality reports, and detailed probabilities; outgoing packet
-signals remain the original samples. A null/non-dict classifier output or a
+`processed_eeg`, quality reports, and detailed probabilities; the streamed
+signals come from the Rust chain, not from Python. A null/non-dict classifier output or a
 missing required field yields `Ok(None)`. A missing outer `classifier_output`,
 Python exception, or failed type extraction yields an error. `lsl.rs` logs
 per-batch errors and sets `ml_result` to `None`; failure to load the manager ends

@@ -10,51 +10,61 @@ specs live in the backend:
 
 ## Where this lives in the frontend
 
-| Concern                                                                      | File                                                                                                                                              |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Socket lifecycle, sending the init message, close handshake, parsing batches | `context/WebSocketContext.tsx`                                                                                                                    |
-| Payload types                                                                | `lib/pipeline.ts` (`PipelinePayload`, `PipelineNode`)                                                                                             |
-| Turning the React Flow graph into `nodes`, validating, applying defaults     | `components/ui-react-flow/react-flow-view.tsx` (`buildPipelinePayload`, `validatePipeline`, `typeMap`, `DEFAULT_PROCESSING`, `DEFAULT_WINDOWING`) |
-| Per-node config                                                              | `components/nodes/{window-node,filter-node,machine-learning-node}/*`                                                                              |
+| Concern                                                                      | File                                                                                                                            |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Socket lifecycle, sending the init message, close handshake, parsing batches | `context/WebSocketContext.tsx`                                                                                                  |
+| Payload types                                                                | `lib/pipeline.ts` (`PipelinePayload`, `PipelineNode`)                                                                           |
+| Turning the React Flow graph into `nodes` + `edges`, validating, defaults    | `lib/pipeline-validation.ts` (`buildPipelinePayload`, `validatePipeline`, `typeMap`, `DEFAULT_PROCESSING`, `DEFAULT_WINDOWING`) |
+| Showing server errors on the canvas                                          | `components/ui-react-flow/react-flow-view.tsx` (`pipeline-error` listener)                                                      |
+| Per-node config                                                              | `components/nodes/*`                                                                                                            |
 
 ## The exchange
 
 1. When `dataStreaming` is true and `activeSessionId` is set, open
    `ws://localhost:8080`.
-2. On open, send the init message once:
+2. On open, send the init message once: every node with its React Flow `id`,
+   plus the edges.
 
     ```json
     {
         "session_id": "42",
         "nodes": [
+            { "id": "source-1", "type": "source", "config": {} },
             {
+                "id": "window-1",
                 "type": "window",
                 "config": { "chunk_size": 64, "overlap_size": 0 }
             },
             {
+                "id": "filter-1",
                 "type": "preprocessing",
                 "config": {
                     "apply_bandpass": true,
                     "apply_quality_check": true,
                     "use_iir": false,
                     "l_freq": 1,
-                    "h_freq": 50,
+                    "h_freq": 30,
                     "downsample_factor": null,
                     "sfreq": 256,
                     "n_channels": 4
                 }
             },
-            { "type": "ml", "config": { "model": "Stress" } }
+            { "id": "ml-1", "type": "ml", "config": { "model": "Stress" } }
+        ],
+        "edges": [
+            { "source": "source-1", "target": "window-1" },
+            { "source": "window-1", "target": "filter-1" },
+            { "source": "filter-1", "target": "ml-1" }
         ]
     }
     ```
 
     - `session_id` is a **string** holding an integer session id.
-    - The server reads only the first init message it can parse. Changes made to
-      the graph after that are ignored until the next connection.
-    - If the message doesn't parse, the server sends **nothing back**. A
-      connection that stays silent usually means the payload was rejected. Check
-      the websocket-server logs.
+    - The server reads only the init message. Changes made to the graph after
+      that are ignored until the next connection (the canvas is locked while
+      streaming anyway).
+    - If the message doesn't parse or the graph is invalid, the server sends an
+      error frame and closes the connection (see below).
 
 3. Receive batches, one JSON text frame per window:
 
@@ -67,12 +77,26 @@ specs live in the backend:
     ```
 
     - `signals` is channel-major: `signals[c][i]` lines up with `timestamps[i]`.
-    - `signals` is always **raw**. Filter settings change only `ml_result`, not
-      the plotted data.
-    - `ml_result` can be `null`.
-    - When `overlap_size > 0`, every batch after the first starts with
-      `overlap_size` repeated samples whose timestamps are placeholders. Drop
-      them before plotting.
+    - `signals` is the output of the **last processing node** (filtered,
+      resampled, …). After a resampling node there are fewer or more samples per
+      batch than `chunk_size`.
+    - `ml_result` is `null` without an ML node, and can be `null` with one.
+    - When `overlap_size > 0`, every batch after the first starts with samples
+      repeated from the previous batch, with their real timestamps.
+
+    Or receive an error frame instead, when the session can't start:
+
+    ```json
+    {
+        "type": "error",
+        "code": "invalid_pipeline",
+        "message": "…",
+        "node_id": "filter-1"
+    }
+    ```
+
+    `WebSocketContext` dispatches it as a `pipeline-error` event and stops
+    streaming; the canvas shows `message` and selects the node `node_id` names.
 
 4. To stop, send the plain text `clientClosing`, wait for the plain text
    `confirmed closing`, then call `ws.close()`. If no confirmation arrives
@@ -82,9 +106,13 @@ specs live in the backend:
 
 ## Contract rules for the node editor
 
-- Node `type` strings must be exactly `window`, `preprocessing` or `ml`. Strip
-  out display-only nodes before sending.
-- Every non-nullable field in a node's config must be present, or the whole
-  payload is rejected. See the field tables in `pipeline-nodes.md`.
+- Every node needs a `type` the backend knows (`typeMap`) and a `config` object.
+  Unknown types reject the whole payload.
+- Config fields can be left out; the backend fills in defaults. See the field
+  tables in `pipeline-nodes.md`.
+- The backend enforces the graph rules in `pipeline-nodes.md` (one source,
+  window right after it, processing nodes in a single chain, every node
+  connected). Catch what you can in `validatePipeline` so users see it before
+  Start.
 - Keep window validation (`chunk_size > 0`, `0 ≤ overlap_size < chunk_size`) on
-  the frontend. The backend doesn't check these.
+  the frontend. The backend only rejects `chunk_size: 0`.
