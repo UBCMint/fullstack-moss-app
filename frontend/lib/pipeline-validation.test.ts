@@ -88,6 +88,55 @@ test('invalid edits and reset do not reuse a previous valid payload', () => {
     assert.equal(restarted.payload?.nodes[0].config.chunk_size, 256);
 });
 
+// Run this suite with the flag both unset and true to cover both configurations.
+test('Artifact availability follows the feature flag', () => {
+    const artifact = { ...source, id: 'artifact', type: 'artifact-node' };
+    const result = preparePipelineStart(
+        [source, windowNode, artifact],
+        [connection],
+        1
+    );
+    if (process.env.NEXT_PUBLIC_ENABLE_ARTIFACT_NODE === 'true') {
+        assert.deepEqual(result.errors, []);
+        assert.ok(result.payload);
+        assert.equal(result.payload.nodes.length, 1);
+    } else {
+        assert.equal(result.payload, null);
+        assert.ok(
+            result.errors.some((error) => error.includes('artifact-node'))
+        );
+    }
+});
+
+test('unknown and missing node types block an otherwise valid pipeline', () => {
+    for (const type of ['unknown-node', undefined, '']) {
+        const result = preparePipelineStart(
+            [source, windowNode, { ...source, id: 'invalid', type }],
+            [connection],
+            1
+        );
+        assert.equal(result.payload, null);
+        assert.ok(
+            result.errors.some((error) => error.includes('unavailable type'))
+        );
+    }
+});
+
+test('enabled editor-only nodes remain valid without being sent to the backend', () => {
+    const editorNodes = [
+        'resampling-node',
+        'signal-graph-node',
+        'label-node',
+    ].map((type) => ({ ...source, id: type, type }));
+    const result = preparePipelineStart(
+        [source, windowNode, ...editorNodes],
+        [connection],
+        1
+    );
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.payload?.nodes.length, 1);
+});
+
 test('only the source node may connect into the window node', () => {
     assert.equal(isWindowInputAllowed('source-node', 'window-node'), true);
     assert.equal(isWindowInputAllowed('filter-node', 'window-node'), false);
