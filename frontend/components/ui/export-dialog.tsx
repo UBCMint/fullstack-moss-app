@@ -12,6 +12,7 @@ import { useNotifications } from '@/components/notifications';
 import { exportEEGData, downloadCSV } from '@/lib/eeg-api';
 import { getUserFacingErrorMessage } from '@/lib/errors';
 import { ExitIcon } from '@radix-ui/react-icons';
+import CsvFormatSummary from '@/components/ui/eeg-csv-format';
 
 type ExportDialogProps = {
     open: boolean;
@@ -87,7 +88,7 @@ export default function ExportDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleClose}>
-            <DialogContent className="sm:max-w-[400px] p-8">
+            <DialogContent className="sm:max-w-[400px] max-h-[90vh] overflow-y-auto p-8">
                 <DialogHeader className="mb-4 text-left">
                     <DialogTitle className="flex items-center text-2xl font-bold mb-2">
                         <ExitIcon className="mr-2" width={24} height={24} />
@@ -188,11 +189,7 @@ export default function ExportDialog({
                         </p>
                     )}
 
-                    <p className="text-sm text-gray-400 font-medium mb-3">
-                        Data will be exported as CSV with columns time,
-                        eeg1–eeg8 and emg1–emg4. Channels your device
-                        doesn&apos;t have are left empty.
-                    </p>
+                    <CsvFormatSummary mode="export" />
 
                     <Button
                         onClick={handleExport}

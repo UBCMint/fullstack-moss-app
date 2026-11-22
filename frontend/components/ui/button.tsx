@@ -19,9 +19,14 @@ const buttonVariants = cva(
                     'bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80',
                 ghost: 'hover:bg-accent hover:text-accent-foreground',
                 link: 'text-primary underline-offset-4 hover:underline',
-                // Filled teal action inside a pipeline node (matches "Start labeling"), e.g. "Preview" in chart node
+                // Filled teal action inside a pipeline node, e.g. "Preview" and "Start labeling"
                 nodeAction:
                     'font-normal text-white bg-[#2E7B75] border border-[#2E7B75] rounded-md hover:bg-[#256560] focus-visible:ring-2 focus-visible:ring-[#2E7B75] focus-visible:ring-offset-2',
+                // Outlined counterpart of nodeAction for an active toggle, e.g. "Stop labeling"
+                nodeActionOutline:
+                    'font-normal text-[#2E7B75] bg-white border border-[#2E7B75] rounded-md hover:bg-[#EAF1F0] focus-visible:ring-2 focus-visible:ring-[#2E7B75] focus-visible:ring-offset-2',
+                // Filled teal "Continue" action on the login/signup screens
+                auth: 'font-medium font-ibmplex text-[16px] text-white bg-[#0d585f] border border-[#0d585f] rounded-[10px] hover:bg-[#0a464b] focus-visible:ring-2 focus-visible:ring-[#0d585f] focus-visible:ring-offset-2',
             },
             size: {
                 default: 'h-9 px-4 py-2',
@@ -30,6 +35,8 @@ const buttonVariants = cva(
                 icon: 'h-9 w-9',
                 //size used for nodeAction in preview
                 node: 'h-auto px-3 py-1 gap-1.5 text-[16px] leading-none',
+                // full-width pill used by the auth variant
+                auth: 'h-[37px] w-full rounded-[10px] px-[24px] py-[12px]',
             },
         },
         defaultVariants: {

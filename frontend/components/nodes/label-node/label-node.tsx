@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Handle, Position, useReactFlow } from '@xyflow/react';
+import { useNodeConnection } from '../use-node-connection';
+import { Handle, Position } from '@xyflow/react';
 import { useGlobalContext } from '@/context/GlobalContext';
 import useNodeData from '@/hooks/useNodeData';
 import ComboBox, { LabelColor } from './label-combo-box';
@@ -85,7 +86,7 @@ function normalizeNodeTimestamp(raw: unknown): string | null {
 }
 
 export default function LabelNode({ id, selected }: LabelNodeProps) {
-    const [isConnected, setIsConnected] = React.useState(false);
+    const { connected: isConnected } = useNodeConnection(id);
     const [isTriggerActive, setIsTriggerActive] = React.useState(false);
     const [isExpanded, setIsExpanded] = React.useState(false);
     const [viewMode, setViewMode] = React.useState<'timeline' | 'graph'>(
@@ -119,8 +120,6 @@ export default function LabelNode({ id, selected }: LabelNodeProps) {
     const { dataStreaming, activeSessionId } = useGlobalContext();
     const { renderData } = useNodeData(300, 15);
     const notifications = useNotifications();
-
-    const reactFlowInstance = useReactFlow();
 
     // Load persisted labels whenever the active session changes.
     const validColors: LabelColor[] = React.useMemo(
@@ -165,73 +164,6 @@ export default function LabelNode({ id, selected }: LabelNodeProps) {
             .catch((e) => console.error('Failed to load time labels:', e))
             .finally(() => setIsLoadingLabels(false));
     }, [activeSessionId, validColors]);
-
-    const checkConnectionStatus = React.useCallback(() => {
-        try {
-            const edges = reactFlowInstance.getEdges();
-            const nodes = reactFlowInstance.getNodes();
-
-            // Check if this node is connected to source node or any activated node
-            const isConnectedToActivatedNode = (
-                nodeId: string,
-                visited: Set<string> = new Set()
-            ): boolean => {
-                if (visited.has(nodeId)) return false; // Prevent infinite loops
-                visited.add(nodeId);
-
-                // Find incoming edges to this node
-                const incomingEdges = edges.filter(
-                    (edge) => edge.target === nodeId
-                );
-
-                for (const edge of incomingEdges) {
-                    const sourceNode = nodes.find((n) => n.id === edge.source);
-                    if (!sourceNode) continue;
-
-                    // If source is a source-node, we're activated
-                    if (sourceNode.type === 'source-node') {
-                        return true;
-                    }
-
-                    // If source is another node, check if it's activated
-                    if (
-                        sourceNode.id &&
-                        isConnectedToActivatedNode(sourceNode.id, visited)
-                    ) {
-                        return true;
-                    }
-                }
-
-                return false;
-            };
-
-            const isActivated = id ? isConnectedToActivatedNode(id) : false;
-            setIsConnected(isActivated);
-        } catch (error) {
-            console.error('Error checking connection:', error);
-            setIsConnected(false);
-        }
-    }, [id, reactFlowInstance]);
-
-    React.useEffect(() => {
-        checkConnectionStatus();
-
-        const handleEdgeChange = () => {
-            checkConnectionStatus();
-        };
-
-        window.addEventListener('reactflow-edges-changed', handleEdgeChange);
-
-        const interval = setInterval(checkConnectionStatus, 1000);
-
-        return () => {
-            window.removeEventListener(
-                'reactflow-edges-changed',
-                handleEdgeChange
-            );
-            clearInterval(interval);
-        };
-    }, [checkConnectionStatus]);
 
     React.useEffect(() => {
         labelsRef.current = labeledMoments;

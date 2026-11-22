@@ -1,4 +1,5 @@
 import { FrontendWorkspaceState } from '@/lib/frontend-state';
+import { apiFetch as fetch } from '@/lib/api-client';
 
 export type SessionSummary = {
     id: number;

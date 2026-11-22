@@ -1,3 +1,46 @@
+import { apiFetch as fetch } from '@/lib/api-client';
+import { UserFacingError } from '@/lib/errors';
+
+/**
+ * The CSV format accepted by import and produced by export. Keep in sync with
+ * backend `parse_eeg_csv` (shared-logic/src/db.rs) and docs/eeg-csv-format.md.
+ */
+const EEG_CSV_CHANNEL_COLUMNS = [
+    ...Array.from({ length: 8 }, (_, i) => `eeg${i + 1}`),
+    ...Array.from({ length: 4 }, (_, i) => `emg${i + 1}`),
+];
+export const EEG_CSV_COLUMNS = ['time', ...EEG_CSV_CHANNEL_COLUMNS];
+export const EEG_CSV_HEADER = EEG_CSV_COLUMNS.join(',');
+export const EEG_CSV_TIME_EXAMPLE = '2024-01-15T13:45:00Z';
+export const EEG_CSV_EXAMPLE = [
+    EEG_CSV_HEADER,
+    `${EEG_CSV_TIME_EXAMPLE},12.5,-4.1,8,3.3,0.7,-2,5.9,1.2,40.1,-12,7.5,`,
+    '2024-01-15T13:45:00.004Z,11.8,-4.7,7.6,3.1,0.9,-1.8,6.2,1.1,38.4,-10.9,7.1,',
+].join('\n');
+/** Must match MAX_IMPORT_BYTES in the backend. */
+export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+
+/** One problem the backend found in an uploaded CSV. */
+export type CsvProblem = {
+    line: number | null;
+    column: string | null;
+    value: string | null;
+    problem: string;
+};
+
+/** Thrown when the backend rejects an import file; carries per-row details. */
+export class ImportValidationError extends UserFacingError {
+    readonly problems: CsvProblem[];
+    readonly totalProblems: number;
+
+    constructor(message: string, problems: CsvProblem[], total: number) {
+        super(message);
+        this.name = 'ImportValidationError';
+        this.problems = problems;
+        this.totalProblems = total;
+    }
+}
+
 export type ExportOptions = {
     format?: 'csv';
     includeHeader?: boolean;
@@ -37,12 +80,13 @@ export async function exportEEGData(
     });
 
     if (!response.ok) {
-        let message = `Export failed (${response.status})`;
-        try {
-            const text = await response.text();
-            if (text) message = text;
-        } catch {}
-        throw new Error(message);
+        const text = await response.text().catch(() => '');
+        // 400/404 messages are written for users by the backend; anything else
+        // may be a raw server error and stays generic.
+        if ((response.status === 400 || response.status === 404) && text) {
+            throw new UserFacingError(text);
+        }
+        throw new Error(text || `Export failed (${response.status})`);
     }
 
     return response.text();
@@ -53,8 +97,15 @@ export async function exportEEGData(
  */
 export function downloadCSV(csvContent: string, sessionId: number): void {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `session_${sessionId}_${timestamp}.csv`;
+    saveCsvFile(csvContent, `session_${sessionId}_${timestamp}.csv`);
+}
 
+/** Download a small valid sample file for users to start from when importing. */
+export function downloadExampleCSV(): void {
+    saveCsvFile(`${EEG_CSV_EXAMPLE}\n`, 'moss-eeg-example.csv');
+}
+
+function saveCsvFile(csvContent: string, filename: string): void {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
 
@@ -70,10 +121,17 @@ export function downloadCSV(csvContent: string, sessionId: number): void {
 /**
  * Import EEG data from a raw CSV string into the given session.
  */
+export type ImportResult = {
+    /** Data rows in the uploaded file. */
+    rowsRead: number;
+    /** Rows actually written; the rest already existed in the session. */
+    rowsInserted: number;
+};
+
 export async function importEEGData(
     sessionId: number,
     csvText: string
-): Promise<void> {
+): Promise<ImportResult> {
     const response = await fetch(`/api/sessions/${sessionId}/eeg_data/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'text/csv' },
@@ -81,11 +139,41 @@ export async function importEEGData(
     });
 
     if (!response.ok) {
-        let message = `Import failed (${response.status})`;
+        if (response.status === 413) {
+            throw new UserFacingError(
+                `The file is too large. The maximum size is ${MAX_IMPORT_BYTES / 1024 / 1024} MB; split it into smaller files.`
+            );
+        }
+
+        const text = await response.text().catch(() => '');
+        let body: {
+            message?: string;
+            errors?: CsvProblem[];
+            total_errors?: number;
+        } = {};
         try {
-            const text = await response.text();
-            if (text) message = text;
+            body = JSON.parse(text);
         } catch {}
-        throw new Error(message);
+
+        if (response.status === 400 && body.message) {
+            const problems = body.errors ?? [];
+            throw new ImportValidationError(
+                body.message,
+                problems,
+                body.total_errors ?? problems.length
+            );
+        }
+        throw new Error(
+            body.message || text || `Import failed (${response.status})`
+        );
     }
+
+    const result = await response.json().catch(() => ({}));
+    const rowsRead =
+        typeof result.rows_read === 'number' ? result.rows_read : 0;
+    const rowsInserted =
+        typeof result.rows_inserted === 'number'
+            ? result.rows_inserted
+            : rowsRead;
+    return { rowsRead, rowsInserted };
 }

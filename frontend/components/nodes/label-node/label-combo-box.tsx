@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import LabelTimelinePanel, {
     LabelGraphPoint,
@@ -134,29 +134,31 @@ export default function ComboBox({
                         </div>
                     </div>
 
-                    {/* Trigger and Preview buttons */}
-                    <div className="flex items-center justify-center gap-3 pb-4">
-                        <button
-                            className={cn(
-                                'nodrag nopan text-lg px-4 py-1 rounded-md border transition-colors',
+                    {/* Trigger and Preview buttons, tucked under the title like Chart View */}
+                    <div className="flex items-center justify-start gap-3 pl-24 pr-16 -mt-4 pb-4">
+                        <Button
+                            variant={
                                 isTriggerActive
-                                    ? 'bg-white text-[#2E7B75] border-[#2E7B75]'
-                                    : 'bg-[#2E7B75] text-white border-[#2E7B75]'
-                            )}
+                                    ? 'nodeActionOutline'
+                                    : 'nodeAction'
+                            }
+                            size="node"
+                            className="nodrag nopan"
                             onClick={onTriggerClick}
                         >
                             {isTriggerActive
                                 ? 'Stop labeling'
                                 : 'Start labeling'}
-                        </button>
+                        </Button>
 
-                        <button
-                            className="nodrag nopan text-lg px-2 py-1 rounded-md text-black hover:text-[#2E7B75] transition-colors"
+                        <Button
+                            variant="nodeAction"
+                            size="node"
+                            className="nodrag nopan"
                             onClick={onPreviewOpen}
                         >
-                            Preview{' '}
-                            <ArrowUpRight size={16} className="inline ml-1" />
-                        </button>
+                            Preview
+                        </Button>
                     </div>
                 </>
             )}

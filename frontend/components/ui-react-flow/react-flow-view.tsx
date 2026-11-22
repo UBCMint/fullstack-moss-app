@@ -1,5 +1,6 @@
 'use client';
 
+import { isNodeTypeEnabled } from '@/lib/node-availability';
 import React, { useCallback } from 'react';
 import {
     ReactFlow,
@@ -44,23 +45,28 @@ import { X, Ellipsis, RotateCw, RotateCcw, LockKeyhole } from 'lucide-react';
 import { Alert, AlertDescription } from '../ui/alert';
 import { useWebSocketContext } from '@/context/WebSocketContext';
 import {
-    WINDOW_AFTER_SOURCE_MESSAGE,
-    isWindowInputAllowed,
+    checkNodeConnection,
     preparePipelineStart,
 } from '@/lib/pipeline-validation';
+import { NodeIssuesContext, withNodeFeedback } from './node-feedback';
 import { useNotifications } from '@/components/notifications';
 import { useGlobalContext } from '@/context/GlobalContext';
 
-const nodeTypes = {
-    'source-node': SourceNode,
-    'artifact-node': ArtifactNode,
-    'filter-node': FilterNode,
-    'resampling-node': ResamplingNode,
-    'machine-learning-node': MachineLearningNode,
-    'signal-graph-node': SignalGraphNode,
-    'window-node': WindowNode,
-    'label-node': LabelNode,
-};
+// Every node is wrapped so it can show its grey-node hint and Start-time issue.
+const nodeTypes = Object.fromEntries(
+    Object.entries({
+        'source-node': SourceNode,
+        'artifact-node': ArtifactNode,
+        'filter-node': FilterNode,
+        'resampling-node': ResamplingNode,
+        'machine-learning-node': MachineLearningNode,
+        'signal-graph-node': SignalGraphNode,
+        'window-node': WindowNode,
+        'label-node': LabelNode,
+    })
+        .filter(([type]) => isNodeTypeEnabled(type))
+        .map(([type, component]) => [type, withNodeFeedback(component)])
+);
 
 let id = 0;
 const getId = () => `node_${id++}`;
@@ -74,6 +80,8 @@ const ReactFlowInterface = () => {
     const [open, setOpen] = useState(true);
     const [showPipelineWarning, setShowPipelineWarning] = useState(false);
     const [pipelineWarning, setPipelineWarning] = useState('');
+    // Start-time problems to show on the node responsible (cleared on any edit).
+    const [startIssues, setStartIssues] = useState<Record<string, string>>({});
 
     // Auto-dismiss pipeline warning after 30 seconds
     useEffect(() => {
@@ -184,12 +192,9 @@ const ReactFlowInterface = () => {
                 return;
             }
 
-            // Enforce: ML node must have a Filter as immediate predecessor
-            if (targetNode.type === 'machine-learning-node') {
-                if (sourceNode.type !== 'filter-node') {
-                    // block Source → ML or anything else → ML
-                    return;
-                }
+            // Same rules as isValidConnection, as a last line of defence.
+            if (!checkNodeConnection(sourceNode, targetNode, edges).allowed) {
+                return;
             }
 
             setEdges((eds) => {
@@ -199,8 +204,18 @@ const ReactFlowInterface = () => {
             // dispatch immediately after scheduling state update
             dispatchEdgesChanged();
         },
-        [nodes, setEdges, dataStreaming]
+        [nodes, edges, setEdges, dataStreaming]
     );
+
+    // Start-time highlights describe the board as it was when Start was pressed;
+    // drop them as soon as nodes or connections change (moving a node doesn't count).
+    const graphSignature = JSON.stringify([
+        nodes.map((n) => [n.id, n.type]),
+        edges.map((e) => [e.source, e.target]),
+    ]);
+    useEffect(() => {
+        setStartIssues({});
+    }, [graphSignature]);
 
     // Keep draft editing separate from execution: incomplete boards are normal while
     // editing. This effect only registers a Start listener; validation and payload
@@ -213,11 +228,13 @@ const ReactFlowInterface = () => {
             // a previous render or reusing the last valid board's payload.
             const currentNodes = getNodes();
             const currentEdges = getEdges();
-            const { errors, warnings, payload } = preparePipelineStart(
-                currentNodes,
-                currentEdges,
-                activeSessionId
-            );
+            const { errors, warnings, nodeIssues, payload } =
+                preparePipelineStart(
+                    currentNodes,
+                    currentEdges,
+                    activeSessionId
+                );
+            setStartIssues(nodeIssues);
             // Invalid boards (or a missing session) must not open a WebSocket.
             if (!payload) {
                 notifications.error({
@@ -304,7 +321,7 @@ const ReactFlowInterface = () => {
 
         const nodeType = event.dataTransfer.getData('application/reactflow');
 
-        if (!nodeType) return;
+        if (!isNodeTypeEnabled(nodeType)) return;
 
         if (nodeType === 'source-node') {
             const existingSource = nodes.find((n) => n.type === 'source-node');
@@ -339,200 +356,192 @@ const ReactFlowInterface = () => {
             const targetNode = nodes.find((n) => n.id === connection.target);
             if (!sourceNode || !targetNode) return false;
 
-            // Source must be the first node: block any incoming edge into Source
-            if (targetNode.type === 'source-node') {
-                return false;
-            }
-
-            // Block if source node already has an outgoing edge (Source can have only one)
-            if (sourceNode.type === 'source-node') {
-                const hasOutgoing = edges.some(
-                    (e) => e.source === sourceNode.id
-                );
-                if (hasOutgoing) return false;
-            }
-
-            // Block window node not directly connecting to source
-            if (!isWindowInputAllowed(sourceNode.type, targetNode.type)) {
-                return false;
-            }
-
-            // Output nodes are terminal: block any outgoing edge from them
-            if (
-                sourceNode.type === 'machine-learning-node' ||
-                sourceNode.type === 'signal-graph-node'
-            ) {
-                return false;
-            }
-
-            return true;
+            // Every rule (and its message) lives in lib/pipeline-validation.ts.
+            return checkNodeConnection(sourceNode, targetNode, edges).allowed;
         },
         [nodes, edges, dataStreaming]
     );
 
-    // isValidConnection rejects silently, so explain the window rule when a drag
-    // ends on the window node without producing a connection.
+    // isValidConnection just rejects the drag, so when a drag ends on a node
+    // without producing a connection, say which rule blocked it.
     const onConnectEnd: OnConnectEnd = useCallback(
         (_event, connectionState) => {
             if (dataStreaming || connectionState.isValid !== false) return;
-            const { fromNode, toNode } = connectionState;
-            if (!isWindowInputAllowed(fromNode?.type, toNode?.type)) {
-                setPipelineWarning(WINDOW_AFTER_SOURCE_MESSAGE);
+            const { fromNode, toNode, fromHandle, toHandle } = connectionState;
+            if (!fromNode || !toNode || fromNode.id === toNode.id) return;
+            // Only explain real source -> target attempts, whichever end the drag started from.
+            if (!fromHandle || !toHandle || fromHandle.type === toHandle.type) {
+                return;
+            }
+            const [sourceNode, targetNode] =
+                fromHandle.type === 'source'
+                    ? [fromNode, toNode]
+                    : [toNode, fromNode];
+            const check = checkNodeConnection(sourceNode, targetNode, edges);
+            if (!check.allowed) {
+                setPipelineWarning(check.message);
                 setShowPipelineWarning(true);
             }
         },
-        [dataStreaming]
+        [dataStreaming, edges]
     );
 
     return (
-        <div
-            style={{
-                width: '100%',
-                height: '100%',
-                position: 'relative',
-            }}
-        >
-            {/* Keep dragging available, but disable connection edits and keyboard
-                deletion during streaming. Handler guards above also enforce this. */}
-            <ReactFlow
-                nodesDraggable
-                nodesConnectable={!dataStreaming}
-                edgesReconnectable={!dataStreaming}
-                deleteKeyCode={dataStreaming ? null : ['Backspace', 'Delete']}
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onConnectEnd={onConnectEnd}
-                onDrop={onDrop}
-                onDragOver={onDragOver}
-                connectionMode={ConnectionMode.Strict}
-                fitView
-                style={{ backgroundColor: '#F7F9FB' }}
-                nodeTypes={nodeTypes}
-                snapToGrid={false}
-                snapGrid={[15, 15]}
-                defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-                minZoom={0.5}
-                maxZoom={2}
-                attributionPosition="bottom-left"
-                isValidConnection={isValidConnection}
+        <NodeIssuesContext.Provider value={startIssues}>
+            <div
+                style={{
+                    width: '100%',
+                    height: '100%',
+                    position: 'relative',
+                }}
             >
-                {/* Explain the editing restrictions only while they are active. */}
-                {dataStreaming && (
-                    <Panel position="bottom-center">
-                        <p
-                            role="status"
-                            className="rounded border bg-white px-4 py-2 text-sm"
-                        >
-                            Stop the data stream to edit the pipeline.
-                        </p>
-                    </Panel>
-                )}
-                {open && (
-                    <div className="flex justify-center items-center absolute top-24 left-1/2 transform -translate-x-1/2 z-10">
-                        <Alert className="w-[288px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
-                            <AlertDescription className="flex-1">
-                                <div className="flex items-center gap-5">
-                                    <LockKeyhole className="h-3.5 w-3.5 flex-shrink-0" />
-                                    <h3 className="font-bold text-sm">
-                                        Data Storage & Privacy
-                                    </h3>
-                                </div>
-                                <p className="text-[0.75rem] mt-1 ml-8">
-                                    Your data stays on your device and is never
-                                    uploaded to the cloud.
-                                </p>
-                            </AlertDescription>
-                            <button
-                                onClick={() => setOpen(false)}
-                                className="ml-2"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        </Alert>
-                    </div>
-                )}
-                {showPipelineWarning && (
-                    <div className="flex justify-center items-center absolute top-3 left-1/2 transform -translate-x-1/2 z-10">
-                        <Alert className="w-[300px] bg-[#FFF4E1] text-black flex justify-between items-start p-3 font-ibmplex border-2 border-[#F0E4CA]">
-                            <AlertDescription className="text-[0.75rem] text-center w-full">
-                                {pipelineWarning}
-                            </AlertDescription>
-                            <button
-                                onClick={() => setShowPipelineWarning(false)}
-                                className="ml-2"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        </Alert>
-                    </div>
-                )}
-                <Panel
-                    position="top-right"
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                    }}
+                {/* Keep dragging available, but disable connection edits and keyboard
+                deletion during streaming. Handler guards above also enforce this. */}
+                <ReactFlow
+                    nodesDraggable
+                    nodesConnectable={!dataStreaming}
+                    edgesReconnectable={!dataStreaming}
+                    deleteKeyCode={
+                        dataStreaming ? null : ['Backspace', 'Delete']
+                    }
+                    nodes={nodes}
+                    edges={edges}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onConnect={onConnect}
+                    onConnectEnd={onConnectEnd}
+                    onDrop={onDrop}
+                    onDragOver={onDragOver}
+                    connectionMode={ConnectionMode.Strict}
+                    fitView
+                    style={{ backgroundColor: '#F7F9FB' }}
+                    nodeTypes={nodeTypes}
+                    snapToGrid={false}
+                    snapGrid={[15, 15]}
+                    defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+                    minZoom={0.5}
+                    maxZoom={2}
+                    attributionPosition="bottom-left"
+                    isValidConnection={isValidConnection}
                 >
-                    <button
-                        onClick={toggleControls}
-                        className="p-1 rounded-full bg-white border"
+                    {/* Explain the editing restrictions only while they are active. */}
+                    {dataStreaming && (
+                        <Panel position="bottom-center">
+                            <p
+                                role="status"
+                                className="rounded border bg-white px-4 py-2 text-sm"
+                            >
+                                Stop the data stream to edit the pipeline.
+                            </p>
+                        </Panel>
+                    )}
+                    {open && (
+                        <div className="flex justify-center items-center absolute top-24 left-1/2 transform -translate-x-1/2 z-10">
+                            <Alert className="w-[288px] bg-[#FFFFFF] text-black flex justify-between items-start p-3 font-ibmplex border border-black">
+                                <AlertDescription className="flex-1">
+                                    <div className="flex items-center gap-5">
+                                        <LockKeyhole className="h-3.5 w-3.5 flex-shrink-0" />
+                                        <h3 className="font-bold text-sm">
+                                            Data Storage & Privacy
+                                        </h3>
+                                    </div>
+                                    <p className="text-[0.75rem] mt-1 ml-8">
+                                        Your data stays on your device and is
+                                        never uploaded to the cloud.
+                                    </p>
+                                </AlertDescription>
+                                <button
+                                    onClick={() => setOpen(false)}
+                                    className="ml-2"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </Alert>
+                        </div>
+                    )}
+                    {showPipelineWarning && (
+                        <div className="flex justify-center items-center absolute top-3 left-1/2 transform -translate-x-1/2 z-10">
+                            <Alert className="w-[300px] bg-[#FFF4E1] text-black flex justify-between items-start p-3 font-ibmplex border-2 border-[#F0E4CA]">
+                                <AlertDescription className="text-[0.75rem] text-center w-full">
+                                    {pipelineWarning}
+                                </AlertDescription>
+                                <button
+                                    onClick={() =>
+                                        setShowPipelineWarning(false)
+                                    }
+                                    className="ml-2"
+                                >
+                                    <X className="h-3 w-3" />
+                                </button>
+                            </Alert>
+                        </div>
+                    )}
+                    <Panel
+                        position="top-right"
                         style={{
-                            width: 30,
-                            height: 30,
-                            border: '1px solid #ebebeb',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
                         }}
                     >
-                        {isControlsOpen ? (
-                            <X size={20} />
-                        ) : (
-                            <Ellipsis size={20} />
-                        )}
-                    </button>
-                    <div
-                        style={{
-                            transition: 'opacity 0.2s, transform 0.2s',
-                            opacity: isControlsOpen ? 1 : 0,
-                            transform: isControlsOpen
-                                ? 'translateY(5px)'
-                                : 'translateY(-5px)',
-                            pointerEvents: isControlsOpen ? 'auto' : 'none',
-                        }}
-                    >
-                        <Controls
-                            showFitView={false}
-                            showInteractive={false}
+                        <button
+                            onClick={toggleControls}
+                            className="p-1 rounded-full bg-white border"
                             style={{
-                                position: 'static',
-                                boxShadow: '0 1px 1px rgba(255, 255, 255, 0)',
+                                width: 30,
+                                height: 30,
                                 border: '1px solid #ebebeb',
                             }}
                         >
-                            <ControlButton>
-                                <RotateCw
-                                    strokeWidth={2.5}
-                                    style={{ fill: 'none' }}
-                                />
-                            </ControlButton>
-                            <ControlButton>
-                                <RotateCcw
-                                    strokeWidth={2.5}
-                                    style={{ fill: 'none' }}
-                                />
-                            </ControlButton>
-                        </Controls>
-                    </div>
-                </Panel>
-                <Panel position="top-left">
-                    <Sidebar />
-                </Panel>
+                            {isControlsOpen ? (
+                                <X size={20} />
+                            ) : (
+                                <Ellipsis size={20} />
+                            )}
+                        </button>
+                        <div
+                            style={{
+                                transition: 'opacity 0.2s, transform 0.2s',
+                                opacity: isControlsOpen ? 1 : 0,
+                                transform: isControlsOpen
+                                    ? 'translateY(5px)'
+                                    : 'translateY(-5px)',
+                                pointerEvents: isControlsOpen ? 'auto' : 'none',
+                            }}
+                        >
+                            <Controls
+                                showFitView={false}
+                                showInteractive={false}
+                                style={{
+                                    position: 'static',
+                                    boxShadow:
+                                        '0 1px 1px rgba(255, 255, 255, 0)',
+                                    border: '1px solid #ebebeb',
+                                }}
+                            >
+                                <ControlButton>
+                                    <RotateCw
+                                        strokeWidth={2.5}
+                                        style={{ fill: 'none' }}
+                                    />
+                                </ControlButton>
+                                <ControlButton>
+                                    <RotateCcw
+                                        strokeWidth={2.5}
+                                        style={{ fill: 'none' }}
+                                    />
+                                </ControlButton>
+                            </Controls>
+                        </div>
+                    </Panel>
+                    <Panel position="top-left">
+                        <Sidebar />
+                    </Panel>
 
-                <Background />
-            </ReactFlow>
-        </div>
+                    <Background />
+                </ReactFlow>
+            </div>
+        </NodeIssuesContext.Provider>
     );
 };
 
