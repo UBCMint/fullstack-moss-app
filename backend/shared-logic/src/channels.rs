@@ -91,6 +91,11 @@ pub enum ChannelLayoutError {
         var: &'static str,
         value: String,
     },
+    LabelCountMismatch {
+        var: &'static str,
+        expected: usize,
+        got: usize,
+    },
 }
 
 impl fmt::Display for ChannelLayoutError {
@@ -111,6 +116,11 @@ impl fmt::Display for ChannelLayoutError {
             ChannelLayoutError::InvalidEnvValue { var, value } => {
                 write!(f, "{}={:?} is not a non-negative integer", var, value)
             }
+            ChannelLayoutError::LabelCountMismatch { var, expected, got } => write!(
+                f,
+                "{} has {} labels but the layout has {} channels of that kind",
+                var, got, expected
+            ),
         }
     }
 }
@@ -198,6 +208,69 @@ impl ChannelLayout {
     }
 }
 
+pub const EEG_CHANNEL_LABELS_ENV: &str = "EEG_CHANNEL_LABELS";
+pub const EMG_CHANNEL_LABELS_ENV: &str = "EMG_CHANNEL_LABELS";
+
+/// Display names for each channel (electrode positions, e.g. `TP9`), in sample order.
+///
+/// Read from the optional comma-separated `EEG_CHANNEL_LABELS` / `EMG_CHANNEL_LABELS`; each
+/// must have exactly as many names as the layout has channels of that kind. When unset,
+/// channels get generic names: `EEG 1..EEG n`, `EMG 1..EMG n`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChannelLabels {
+    pub eeg: Vec<String>,
+    pub emg: Vec<String>,
+}
+
+impl ChannelLabels {
+    /// Generic names for every channel in `layout`.
+    pub fn generic(layout: &ChannelLayout) -> Self {
+        let names = |kind: ChannelKind| {
+            (1..=layout.count(kind))
+                .map(|i| format!("{} {}", kind.prefix().to_uppercase(), i))
+                .collect()
+        };
+        Self {
+            eeg: names(ChannelKind::Eeg),
+            emg: names(ChannelKind::Emg),
+        }
+    }
+
+    pub fn from_env(layout: &ChannelLayout) -> Result<Self, ChannelLayoutError> {
+        Self::from_lookup(layout, |key| std::env::var(key).ok())
+    }
+
+    /// Like [`from_env`](Self::from_env), with an injectable lookup (for tests).
+    pub fn from_lookup(
+        layout: &ChannelLayout,
+        lookup: impl Fn(&str) -> Option<String>,
+    ) -> Result<Self, ChannelLayoutError> {
+        let generic = Self::generic(layout);
+        let read = |var: &'static str, default: Vec<String>| -> Result<_, ChannelLayoutError> {
+            let Some(value) = lookup(var) else {
+                return Ok(default);
+            };
+            let labels: Vec<String> = if value.trim().is_empty() {
+                Vec::new()
+            } else {
+                value.split(',').map(|s| s.trim().to_string()).collect()
+            };
+            if labels.len() != default.len() {
+                return Err(ChannelLayoutError::LabelCountMismatch {
+                    var,
+                    expected: default.len(),
+                    got: labels.len(),
+                });
+            }
+            Ok(labels)
+        };
+        Ok(Self {
+            eeg: read(EEG_CHANNEL_LABELS_ENV, generic.eeg)?,
+            emg: read(EMG_CHANNEL_LABELS_ENV, generic.emg)?,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,6 +334,46 @@ mod tests {
         let sample = [1, 2, 3, 4, 5, 6];
         assert_eq!(layout.split(&sample), Some((&[1, 2, 3][..], &[4, 5][..])));
         assert_eq!(layout.split(&sample[..4]), None);
+    }
+
+    #[test]
+    fn labels_default_to_generic_names() {
+        let labels =
+            ChannelLabels::from_lookup(&ChannelLayout::new(2, 1).unwrap(), |_| None).unwrap();
+        assert_eq!(labels.eeg, vec!["EEG 1", "EEG 2"]);
+        assert_eq!(labels.emg, vec!["EMG 1"]);
+    }
+
+    #[test]
+    fn labels_read_from_env() {
+        let muse = ChannelLayout::new(4, 0).unwrap();
+        let labels = ChannelLabels::from_lookup(
+            &muse,
+            lookup(&[
+                (EEG_CHANNEL_LABELS_ENV, "TP9, AF7,AF8 ,TP10"),
+                (EMG_CHANNEL_LABELS_ENV, ""),
+            ]),
+        )
+        .unwrap();
+        assert_eq!(labels.eeg, vec!["TP9", "AF7", "AF8", "TP10"]);
+        assert!(labels.emg.is_empty());
+    }
+
+    #[test]
+    fn labels_must_match_channel_count() {
+        let err = ChannelLabels::from_lookup(
+            &ChannelLayout::default(),
+            lookup(&[(EEG_CHANNEL_LABELS_ENV, "Fp1,Fp2")]),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            ChannelLayoutError::LabelCountMismatch {
+                var: EEG_CHANNEL_LABELS_ENV,
+                expected: 8,
+                got: 2
+            }
+        );
     }
 
     #[test]

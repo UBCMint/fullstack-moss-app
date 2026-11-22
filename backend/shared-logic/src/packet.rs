@@ -9,7 +9,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::channels::{column_index, ChannelKind, ChannelLayout, CHANNEL_COLUMN_COUNT};
+use crate::channels::{
+    column_index, ChannelKind, ChannelLabels, ChannelLayout, CHANNEL_COLUMN_COUNT,
+};
 use crate::models::EegDataRow;
 use crate::signal_processing::pipeline_gateway::PipelineOutput;
 
@@ -19,6 +21,16 @@ pub struct EEGDataPacket {
     pub eeg: Vec<Vec<f64>>,
     pub emg: Vec<Vec<f64>>,
     pub ml_result: Option<PipelineOutput>,
+}
+
+/// First message the server sends after a valid init message, before any batch:
+/// `{"type": "metadata", "channels": {"eeg": [...], "emg": [...]}}`. It tells the client how
+/// many channels of each kind every batch will carry and what to call them, so clients don't
+/// hardcode a layout.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(tag = "type", rename = "metadata")]
+pub struct StreamMetadata {
+    pub channels: ChannelLabels,
 }
 
 /// A sample that doesn't fit the packet's layout.
@@ -201,6 +213,20 @@ mod tests {
         assert_eq!(json["eeg"], serde_json::json!([[1.0]]));
         assert_eq!(json["emg"], serde_json::json!([[2.0]]));
         assert!(json.get("signals").is_none());
+    }
+
+    #[test]
+    fn metadata_wire_format() {
+        let metadata = StreamMetadata {
+            channels: ChannelLabels::generic(&ChannelLayout::new(1, 1).unwrap()),
+        };
+        assert_eq!(
+            serde_json::to_value(&metadata).unwrap(),
+            serde_json::json!({
+                "type": "metadata",
+                "channels": { "eeg": ["EEG 1"], "emg": ["EMG 1"] }
+            })
+        );
     }
 
     #[test]

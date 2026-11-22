@@ -24,6 +24,7 @@ client                                         server
   |  ---- TCP + websocket upgrade ---------------> |
   |  ---- init message (JSON text) --------------> |  parse; on failure log and keep waiting
   |                                                |  start_broadcast(): start EEG source,
+  |  <--- metadata (JSON text) ------------------- |  channel layout, sent once
   |                                                |  batching + ML, DB writer, ws writer
   |  <--- batch (JSON text) ---------------------- |
   |  <--- batch ---------------------------------- |  repeats once per window
@@ -65,7 +66,36 @@ missing required config field, makes the **whole message** fail to parse (see
 **Currently only one init message is read**. Text frames sent after it other than `"clientClosing"` are
 ignored, including a second pipeline payload. For any changes to the pipeline, the connection needs to be closed and a new one started with the updated init message (see [Known issues](#known-issues)).
 
-### 2. Data batches (server → client)
+### 2. Stream metadata (server → client)
+
+Right after a valid init message, and before any batch, the server sends one text frame
+describing the channel layout (`shared_logic::packet::StreamMetadata`):
+
+```json
+{
+  "type": "metadata",
+  "channels": {
+    "eeg": ["EEG 1", "EEG 2", "EEG 3", "EEG 4", "EEG 5", "EEG 6", "EEG 7", "EEG 8"],
+    "emg": ["EMG 1", "EMG 2", "EMG 3", "EMG 4"]
+  }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `type` | `"metadata"` | Distinguishes this frame from batches, which have no `type` field. |
+| `channels.eeg` | string[E] | One display name per EEG channel, in the same order as a batch's `eeg` arrays. `E` is the EEG channel count. |
+| `channels.emg` | string[M] | Same for EMG. Can be `[]`. |
+
+Every batch in the session has exactly `E` EEG and `M` EMG channels. Names come from
+`EEG_CHANNEL_LABELS` / `EMG_CHANNEL_LABELS` (see [Channel layout](#channel-layout)) and default
+to `EEG 1..E`, `EMG 1..M`. Clients should use this message rather than hardcoding a layout,
+so a board with a different channel count works without a client change.
+
+It is sent once per connection. If it can't be sent, or the layout env vars are invalid, the
+session doesn't start (logged).
+
+### 3. Data batches (server → client)
 
 Each batch is one text frame holding a JSON-serialized `shared_logic::lsl::EEGDataPacket`:
 
@@ -104,6 +134,8 @@ not in the init message, because it describes the hardware rather than the pipel
 |---|---|---|---|
 | `EEG_CHANNEL_COUNT` | `8` | 0–8 | EEG channels per LSL sample |
 | `EMG_CHANNEL_COUNT` | `4` | 0–4 | EMG channels per LSL sample |
+| `EEG_CHANNEL_LABELS` | `EEG 1,...,EEG n` | exactly `EEG_CHANNEL_COUNT` comma-separated names | EEG channel names sent in the [metadata message](#2-stream-metadata-server--client), e.g. `TP9,AF7,AF8,TP10` |
+| `EMG_CHANNEL_LABELS` | `EMG 1,...,EMG n` | exactly `EMG_CHANNEL_COUNT` names (empty for 0) | EMG channel names for the metadata message |
 | `ML_EEG_CHANNELS` | `0,1,2,3` | 4 distinct indices `< EEG_CHANNEL_COUNT` | Which EEG channels (0-based, in order) are passed to the Python models |
 
 Each LSL sample must carry the EEG channels first, then the EMG channels. For a 4-channel
@@ -139,7 +171,7 @@ See [pipeline-nodes.md](pipeline-nodes.md).
 Rate: about `sample_rate / chunk_size` batches per second, so roughly 4/s at the defaults
 (256 Hz, chunk 64).
 
-### 3. Graceful close: `clientClosing` / `confirmed closing`
+### 4. Graceful close: `clientClosing` / `confirmed closing`
 
 1. The client sends the exact text frame `clientClosing`, case-sensitive, with no JSON wrapper.
 2. The server cancels the session's `CancellationToken`. The mock generator stops, and the
@@ -154,7 +186,7 @@ it before sending `confirmed closing`. So the final flushed batch can arrive **a
 `confirmed closing`, or not at all if the client has already closed. Database writes are not
 affected by this.
 
-### 4. Other ways a connection ends
+### 5. Other ways a connection ends
 
 | Trigger | Server behaviour |
 |---|---|
@@ -205,11 +237,11 @@ code and then removed from this list alongside any update to this document.
    (`DEFAULT_PROCESSING` in `react-flow-view.tsx`, and `filter-node.tsx`) leaves out
    `apply_quality_check`. That field is required by `PreprocessingConfig`, so the init message
    fails to parse and the connection sits idle.
-2. A Close frame or a disconnect without `clientClosing` leaks the session's pipeline (see §4). The EEG source, the ML loop and the DB writer keep running and keep inserting rows for the session until the process restarts.
+2. A Close frame or a disconnect without `clientClosing` leaks the session's pipeline (see §5). The EEG source, the ML loop and the DB writer keep running and keep inserting rows for the session until the process restarts.
 3. Overlap samples have made-up timestamps. Because of `ON CONFLICT (session_id, time) DO NOTHING`,
    the DB stores the first *overlap* sample at the first new sample's timestamp and drops the
    real one. With `overlap_size > 0`, one stored sample per batch is wrong.
-4. The final batch can race `confirmed closing` (see §3).
+4. The final batch can race `confirmed closing` (see §4).
 5. Errors are never reported to the client. A protocol-level error message (for example
    `{"error": "...", "code": "..."}`) would let the frontend show why a session isn't streaming.
 6. Runtime pipeline updates are not supported. `lsl.rs` has a `watch` channel set up for
