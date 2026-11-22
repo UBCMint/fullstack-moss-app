@@ -189,7 +189,9 @@ export default function ExportDialog({
                     )}
 
                     <p className="text-sm text-gray-400 font-medium mb-3">
-                        Data will be exported as CSV format.
+                        Data will be exported as CSV with columns time,
+                        eeg1–eeg8 and emg1–emg4. Channels your device
+                        doesn&apos;t have are left empty.
                     </p>
 
                     <Button

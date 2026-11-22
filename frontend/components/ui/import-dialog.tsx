@@ -144,9 +144,17 @@ export default function ImportDialog({
                                     The file must have a header row followed by
                                     data rows in this shape:
                                 </p>
-                                <code className="block bg-gray-100 rounded px-2 py-1.5 text-xs font-mono mb-2">
-                                    Time,Channel1,Channel2,Channel3,Channel4
+                                <code className="block bg-gray-100 rounded px-2 py-1.5 text-xs font-mono mb-2 break-all">
+                                    time,eeg1,…,eeg8,emg1,…,emg4
                                 </code>
+                                <p className="text-gray-500 mb-2">
+                                    Columns are matched by name, in any order.
+                                    Include only the channels you have; older{' '}
+                                    <code className="text-xs font-mono">
+                                        channel1–channel4
+                                    </code>{' '}
+                                    files are read as EEG 1–4.
+                                </p>
                                 <p className="text-gray-500">
                                     The{' '}
                                     <span className="font-medium text-gray-700">
