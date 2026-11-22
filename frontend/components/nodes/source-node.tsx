@@ -1,4 +1,6 @@
 import { useGlobalContext } from '@/context/GlobalContext';
+import { useWebSocketContext } from '@/context/WebSocketContext';
+import { describeLayout } from '@/lib/channels';
 import { Handle, Position } from '@xyflow/react';
 import { ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -12,6 +14,7 @@ interface SourceNodeProps {
 
 export default function SourceNode({ selected }: SourceNodeProps) {
     const { dataStreaming, dataSource } = useGlobalContext();
+    const { channelLayout } = useWebSocketContext();
     const [isExpanded, setIsExpanded] = React.useState(false);
     const [deviceType, setDeviceType] = React.useState<DeviceType>('eeg');
 
@@ -27,6 +30,10 @@ export default function SourceNode({ selected }: SourceNodeProps) {
         : isImported
           ? 'Imported Data'
           : 'No device connected.';
+    // Channel counts per signal type, from the server's metadata message.
+    // The device-type title above is a separate, user-chosen setting (6B).
+    const channelSummary =
+        dataStreaming && channelLayout ? describeLayout(channelLayout) : null;
 
     return (
         <div
@@ -53,6 +60,11 @@ export default function SourceNode({ selected }: SourceNodeProps) {
                     <span className="font-geist text-[14px] font-normal leading-tight text-black mt-0">
                         {subtitle}
                     </span>
+                    {channelSummary && (
+                        <span className="font-geist text-[12px] font-normal leading-tight text-[#2E7B75]">
+                            {channelSummary}
+                        </span>
+                    )}
                 </div>
 
                 {/* Expand/collapse device type selector */}
