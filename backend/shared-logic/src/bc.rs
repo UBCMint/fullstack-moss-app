@@ -54,7 +54,7 @@ pub async fn start_broadcast(
 
     ////// spawn the mock data generator, comment out when connecting to the muse headset.
     tokio::spawn(async move {
-        if let Err(e) = generate_mock_data(generator_token).await {
+        if let Err(e) = generate_mock_data(layout, generator_token).await {
             error!("Mock data generation failed: {}", e);
         }
     });
