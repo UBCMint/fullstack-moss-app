@@ -72,11 +72,13 @@ Each batch is one text frame holding a JSON-serialized `shared_logic::lsl::EEGDa
 ```json
 {
   "timestamps": ["2026-03-11T03:55:22.715574979Z", "2026-03-11T03:55:22.719612001Z", "..."],
-  "signals": [
-    [12.5, 80.1, "..."],
-    [44.0,  3.2, "..."],
-    [91.7, 55.5, "..."],
-    [ 0.4, 67.9, "..."]
+  "eeg": [
+    [12.5, -8.1, "..."],
+    "... 8 channels in total ..."
+  ],
+  "emg": [
+    [ 1.9, -2.4, "..."],
+    "... 4 channels in total ..."
   ],
   "ml_result": { "overall_label": "focused", "confidence": 0.85, "task": "focus" }
 }
@@ -84,9 +86,33 @@ Each batch is one text frame holding a JSON-serialized `shared_logic::lsl::EEGDa
 
 | Field | Type | Notes |
 |---|---|---|
-| `timestamps` | string[] | RFC 3339 UTC with nanosecond precision (chrono `DateTime<Utc>`). This is the LSL sample time converted to wall-clock time. Length is `N`. |
-| `signals` | number[4][N] | **Channel-major**: `signals[c][i]` is channel `c` at `timestamps[i]`. There are always exactly 4 channels (Muse TP9, AF7, AF8, TP10 order when using a real headset). |
+| `timestamps` | string[] | RFC 3339 UTC with nanosecond precision (chrono `DateTime<Utc>`). This is the LSL sample time converted to wall-clock time. Length is `N`. Shared by every EEG and EMG channel. |
+| `eeg` | number[E][N] | **Channel-major**: `eeg[c][i]` is EEG channel `c` at `timestamps[i]`, in microvolts. `E` is `EEG_CHANNEL_COUNT` (default 8). |
+| `emg` | number[M][N] | Same shape for EMG: `emg[c][i]`. `M` is `EMG_CHANNEL_COUNT` (default 4). Can be `[]` for a device without EMG. |
 | `ml_result` | object \| null | Output of the Python pipeline for this batch. It is `null` when the pipeline returned no classifier output or failed. See below. |
+
+`E` and `M` are fixed for a server process (see [Channel layout](#channel-layout)), so every
+batch of a session has the same shape. The previous `signals` field is gone.
+
+#### Channel layout
+
+The device's channel layout is set on the **websocket server** with environment variables,
+not in the init message, because it describes the hardware rather than the pipeline
+(`shared_logic::channels::ChannelLayout`).
+
+| Env var | Default | Range | Meaning |
+|---|---|---|---|
+| `EEG_CHANNEL_COUNT` | `8` | 0–8 | EEG channels per LSL sample |
+| `EMG_CHANNEL_COUNT` | `4` | 0–4 | EMG channels per LSL sample |
+| `ML_EEG_CHANNELS` | `0,1,2,3` | 4 distinct indices `< EEG_CHANNEL_COUNT` | Which EEG channels (0-based, in order) are passed to the Python models |
+
+Each LSL sample must carry the EEG channels first, then the EMG channels. For a 4-channel
+Muse, set `EEG_CHANNEL_COUNT=4 EMG_CHANNEL_COUNT=0`. An invalid layout stops the session
+before it starts (logged; no batches).
+
+The Python models are still the 4-channel Muse models, so `pipeline_gateway.rs` passes them
+only the `ML_EEG_CHANNELS` subset of `eeg`, never EMG. `eeg`/`emg` in the batch always
+carry every channel.
 
 `ml_result` fields (`PipelineOutput`):
 
@@ -106,7 +132,7 @@ Batch size `N`:
 - The final batch, flushed on `clientClosing`, can be shorter than `chunk_size` and has no
   overlap prefix.
 
-`signals` always holds the **raw** samples. Preprocessing settings change only what the ML
+`eeg` and `emg` always hold the **raw** samples. Preprocessing settings change only what the ML
 stage sees. They do not change the data streamed to the client or written to the database.
 See [pipeline-nodes.md](pipeline-nodes.md).
 
@@ -152,7 +178,8 @@ sees in each case:
 | `session_id` is not an integer | `websocket-server` | Normal streaming, but the rows are written to session `0`. If session 0 doesn't exist, every DB insert fails (logged). |
 | The Python manager script can't be loaded (`PIPELINE_MANAGER_SCRIPT` is wrong) | `lsl.rs` | No batches. Acquisition stops right away. `clientClosing` still gets `confirmed closing`. |
 | No LSL stream of type `EEG` exists | `lsl.rs` | No batches. `resolve_bypred` waits **forever**. In this state `clientClosing` never gets `confirmed closing`, because the server is waiting on a task that never finishes, so the client's timeout is the only way out. |
-| A sample has fewer than 4 channels | `lsl.rs` | The sample is dropped. Channels beyond 4 are ignored without a message. |
+| `EEG_CHANNEL_COUNT` / `EMG_CHANNEL_COUNT` / `ML_EEG_CHANNELS` is invalid | `bc.rs` / `lsl.rs` | No batches. The error is logged and the session doesn't start. |
+| The LSL stream has fewer channels than the layout | `lsl.rs` | A warning is logged when the stream is found, then every sample is dropped. Channels beyond `EEG_CHANNEL_COUNT + EMG_CHANNEL_COUNT` are ignored without a message. |
 | The Python pipeline raises, or returns no `classifier_output` | `pipeline_gateway.rs` | The batch is still sent, with `ml_result: null`. |
 | The websocket writer falls behind by more than 1000 batches | `bc.rs` | Batches are skipped without notice. The DB writer has its own 1000-batch buffer. |
 | A DB insert fails | `bc.rs` | Nothing. Streaming continues. Rows that duplicate an existing `(session_id, time)` are skipped without notice. |
@@ -161,8 +188,10 @@ sees in each case:
 ## Data source: mock vs. real headset
 
 `bc::start_broadcast` always starts `mockeeg::generate_mock_data`. It publishes an LSL outlet
-named `MyStream` (type `EEG`, 4 × float32 channels, nominal 256 Hz, values uniformly random in
-`[0, 100)`). The acquisition loop then connects to **the first LSL stream of type `EEG` that it
+named `MyStream` (type `EEG`, one float32 channel per layout channel, EEG then EMG, paced at
+256 Hz). The EEG channels carry theta/alpha/beta rhythms, background noise, 60 Hz mains and an
+eye blink every 5 s on the first two channels; the EMG channels carry a quiet baseline with a
+1 s contraction burst every 4 s, staggered per channel (see `mockeeg.rs`). The acquisition loop then connects to **the first LSL stream of type `EEG` that it
 finds**. If `muselsl stream` is also running, or more than one client is connected, which
 stream gets picked is effectively random. To use a real headset, comment out the mock spawn
 block in `bc.rs` and run `muselsl stream`.
@@ -185,3 +214,8 @@ code and then removed from this list alongside any update to this document.
    `{"error": "...", "code": "..."}`) would let the frontend show why a session isn't streaming.
 6. Runtime pipeline updates are not supported. `lsl.rs` has a `watch` channel set up for
    window config changes, but its sender is dropped right away, so nothing can push an update. The frontend currently re-sends the payload every time the graph changes, but those updates do nothing until the next connection.
+7. **The frontend still reads the old `signals` field.** `normalizeBatch` in
+   `frontend/context/WebSocketContext.tsx` hasn't been moved to `eeg`/`emg` yet, so live
+   batches fail to parse there until it is. Likewise the frontend's CSV parsers
+   (`label-node.tsx`, `signal-graph-node.tsx`) look for `channel1..4`/`ch1..4` headers and the
+   `EegDataRow` type in `lib/session-api.ts` still has `channel1..4`.

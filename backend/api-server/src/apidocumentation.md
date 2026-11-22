@@ -245,9 +245,17 @@ GET /api/sessions/1/eeg-data?start=2026-03-01T12:00:00Z&end=2026-03-01T12:00:01Z
 **Response 200**
 ```json
 [
-  { "time": "2026-03-01T12:00:00Z", "channel1": 12, "channel2": -4, "channel3": 8, "channel4": 0 }
+  {
+    "time": "2026-03-01T12:00:00Z",
+    "eeg1": 12.5, "eeg2": -4.1, "eeg3": 8.0, "eeg4": 0.3,
+    "eeg5": 3.2, "eeg6": -1.7, "eeg7": 6.4, "eeg8": 2.2,
+    "emg1": 1.9, "emg2": -2.4, "emg3": 0.8, "emg4": 55.1
+  }
 ]
 ```
+
+Values are microvolts (floats). A channel the recording device doesn't have is `null`. For
+example, rows recorded with a 4-channel Muse have `eeg5..eeg8` and `emg1..emg4` as `null`.
 
 **Errors**
 - 400: `start` or `end` is missing or not RFC 3339
@@ -280,9 +288,12 @@ Export EEG data for a session as CSV.
 
 **Response 200:** CSV body with `Content-Type: text/csv; charset=utf-8` and `Content-Disposition: attachment; filename="<filename>"`.
 ```
-time,channel1,channel2,channel3,channel4
-2026-03-01T12:00:00+00:00,12,-4,8,0
+time,eeg1,eeg2,eeg3,eeg4,eeg5,eeg6,eeg7,eeg8,emg1,emg2,emg3,emg4
+2026-03-01T12:00:00+00:00,12.5,-4.1,8,0.3,3.2,-1.7,6.4,2.2,1.9,-2.4,0.8,55.1
+2026-03-01T12:00:00.003906+00:00,11.9,-3.8,7.6,0.1,,,,,,,,
 ```
+
+All 12 channel columns are always written. A channel the device didn't record is an empty cell.
 
 **Errors**
 - 400: `format` is not `csv`, or `start_time` is after `end_time`
@@ -293,13 +304,18 @@ time,channel1,channel2,channel3,channel4
 
 Import EEG data from CSV.
 
-**Request body:** raw CSV text (not JSON). The first row is treated as a header. Columns are read by position: `time` (RFC 3339), `channel1`, `channel2`, `channel3`, `channel4`.
+**Request body:** raw CSV text (not JSON). The first row must be a header. Columns are matched **by header name** (case-insensitive, any order):
+
+- `time` (required): RFC 3339
+- any subset of `eeg1`..`eeg8`, `emg1`..`emg4` (at least one)
+- legacy `channel1`..`channel4`, read as `eeg1`..`eeg4`, so files exported before the 12-channel change still import
+
 ```
-time,channel1,channel2,channel3,channel4
-2026-03-01T12:00:00Z,12,-4,8,0
+time,eeg1,eeg2,eeg3,eeg4,emg1
+2026-03-01T12:00:00Z,12.5,-4.1,8,0.3,1.9
 ```
 
-Rows whose `(session_id, time)` already exists are skipped.
+Missing columns and empty cells are stored as `NULL`. Rows whose `(session_id, time)` already exists are skipped. Large files are inserted in several statements (about 4,600 rows each) to stay under Postgres's bind-parameter limit.
 
 **Response 200**
 ```json
@@ -307,7 +323,7 @@ Rows whose `(session_id, time)` already exists are skipped.
 ```
 
 **Errors**
-- 500: a row is missing a field, has an invalid timestamp, or has a non-numeric channel value (nothing is inserted); or the insert failed (including a `session_id` that does not exist)
+- 500: the header has an unknown or duplicate column, no `time` column or no channel column; a row has the wrong number of fields, an invalid timestamp, or a non-numeric channel value (nothing is inserted); or the insert failed (including a `session_id` that does not exist). All statements run in one transaction, so a failed import inserts nothing.
 
 ---
 
