@@ -42,12 +42,14 @@ Channel values are whole numbers because the `eeg_data` table stores them as
 ## Import behaviour
 
 - The entire file is validated before anything is written. If any row is
-  invalid, **nothing is imported**.
+  invalid, **nothing is imported**. The rows are then saved in a single database
+  transaction, so a database failure part-way through also imports nothing.
 - Errors say where the problem is: line number (header = line 1), column, the
   offending value, and what is accepted. Up to 10 problems are listed, plus the
   total count.
 - Rows whose `time` already exists in the target session are skipped; existing
-  data is never overwritten.
+  data is never overwritten. The import result reports how many rows were
+  skipped this way.
 
 ## Export behaviour
 

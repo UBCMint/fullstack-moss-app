@@ -12,6 +12,10 @@ type ForwardOptions = {
     method: 'GET' | 'POST';
     body?: string;
     contentType?: string;
+    /** The incoming request's Cookie header, forwarded as-is so the backend
+     * sees the session cookie. Without this, every proxied request looks
+     * logged-out no matter what the browser sent. */
+    cookie?: string | null;
 };
 
 export async function forwardToBackend(
@@ -22,6 +26,9 @@ export async function forwardToBackend(
         headers['Content-Type'] = options.contentType;
     } else if (options.method === 'POST') {
         headers['Content-Type'] = 'application/json';
+    }
+    if (options.cookie) {
+        headers['Cookie'] = options.cookie;
     }
 
     let lastError: unknown = null;
@@ -60,7 +67,7 @@ export async function passthroughJsonResponse(
     backendResponse: Response
 ): Promise<Response> {
     const text = await backendResponse.text();
-    return new Response(text, {
+    const response = new Response(text, {
         status: backendResponse.status,
         headers: {
             'Content-Type':
@@ -68,4 +75,13 @@ export async function passthroughJsonResponse(
                 'application/json',
         },
     });
+
+    // Carry the session cookie back to the browser. getSetCookie() (not the
+    // plain .get(), which would merge multiple Set-Cookie headers into one
+    // invalid comma-joined value) keeps each cookie separate.
+    for (const cookie of backendResponse.headers.getSetCookie?.() ?? []) {
+        response.headers.append('Set-Cookie', cookie);
+    }
+
+    return response;
 }

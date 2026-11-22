@@ -87,7 +87,7 @@ pub async fn add_user(
     info!("Adding user: {} ({})", new_user.username, new_user.email);
     let user = sqlx::query_as!(
         User,
-        "INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, password_hash",
+        "INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3) RETURNING id, username, email, password_hash, created_at",
         new_user.username,
         new_user.email,
         password_hash
@@ -98,23 +98,88 @@ pub async fn add_user(
     Ok(user)
 }
 
-pub async fn get_users(client: &DbClient) -> Result<Vec<User>, Error> {
-    info!("Retrieving users...");
-    let users = sqlx::query_as!(User, "SELECT id, username, email, password_hash FROM users")
-        .fetch_all(&**client)
-        .await?;
-    info!("Retrieved {} users.", users.len());
-    Ok(users)
-}
-
 pub async fn get_user_by_email(client: &DbClient, email: &str) -> Result<User, Error> {
     sqlx::query_as!(
         User,
-        "SELECT id, username, email, password_hash FROM users WHERE email = $1",
+        "SELECT id, username, email, password_hash, created_at FROM users WHERE email = $1",
         email
     )
     .fetch_one(&**client)
     .await
+}
+
+pub async fn get_user_by_id(client: &DbClient, user_id: i32) -> Result<User, Error> {
+    sqlx::query_as!(
+        User,
+        "SELECT id, username, email, password_hash, created_at FROM users WHERE id = $1",
+        user_id
+    )
+    .fetch_one(&**client)
+    .await
+}
+
+/// Updates a user's password hash directly (the caller is responsible for
+/// verifying the current password first — see `change_password` in
+/// api-server). Only the password changes; everything else is untouched.
+pub async fn update_password(
+    client: &DbClient,
+    user_id: i32,
+    new_password_hash: String,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "UPDATE users SET password_hash = $1 WHERE id = $2",
+        new_password_hash,
+        user_id
+    )
+    .execute(&**client)
+    .await?;
+    Ok(())
+}
+
+/// Create a session row for a logged-in user. Only the SHA-256 hash of the
+/// session token is stored — the raw token is never persisted.
+pub async fn create_auth_session(
+    client: &DbClient,
+    user_id: i32,
+    token_hash: &str,
+    expires_at: DateTime<Utc>,
+) -> Result<(), Error> {
+    sqlx::query!(
+        "INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)",
+        token_hash,
+        user_id,
+        expires_at
+    )
+    .execute(&**client)
+    .await?;
+    Ok(())
+}
+
+/// Returns the user id for a non-expired session, or `None` if the token is
+/// unknown or has expired.
+pub async fn get_auth_session_user_id(
+    client: &DbClient,
+    token_hash: &str,
+) -> Result<Option<i32>, Error> {
+    let row = sqlx::query!(
+        "SELECT user_id FROM auth_sessions WHERE token_hash = $1 AND expires_at > now()",
+        token_hash
+    )
+    .fetch_optional(&**client)
+    .await?;
+    Ok(row.map(|r| r.user_id))
+}
+
+/// Delete a session row (logout). Not finding a matching row is not an
+/// error — the session may already be expired or already logged out.
+pub async fn delete_auth_session(client: &DbClient, token_hash: &str) -> Result<(), Error> {
+    sqlx::query!(
+        "DELETE FROM auth_sessions WHERE token_hash = $1",
+        token_hash
+    )
+    .execute(&**client)
+    .await?;
+    Ok(())
 }
 
 /// Insert a new record into testtime_series using chrono's DateTime<Utc>.
@@ -157,12 +222,27 @@ pub async fn insert_batch_eeg(
     session_id: i32,
     packet: &EEGDataPacket,
 ) -> Result<(), sqlx::Error> {
+    insert_eeg_rows(&**client, session_id, packet).await?;
+    Ok(())
+}
+
+/// Runs the batch INSERT on any executor (the pool, or a transaction) and
+/// returns how many rows were actually inserted. Rows whose
+/// (session_id, time) already exists are skipped.
+async fn insert_eeg_rows<'e, E>(
+    executor: E,
+    session_id: i32,
+    packet: &EEGDataPacket,
+) -> Result<u64, sqlx::Error>
+where
+    E: sqlx::PgExecutor<'e>,
+{
     let n_samples = packet.timestamps.len();
 
     // Add validation to prevent empty inserts
     if n_samples == 0 {
         info!("Skipping insert - packet has no samples");
-        return Ok(());
+        return Ok(0);
     }
 
     // Construct a single SQL insert statement
@@ -194,12 +274,13 @@ pub async fn insert_batch_eeg(
     );
 
     query_builder.push(" ON CONFLICT (session_id, time) DO NOTHING");
-    query_builder.build().execute(&**client).await?;
+    let result = query_builder.build().execute(executor).await?;
     info!(
-        "EEG packet inserted successfully - {} data",
-        packet.timestamps.len()
+        "EEG packet inserted successfully - {} of {} samples were new",
+        result.rows_affected(),
+        n_samples
     );
-    Ok(())
+    Ok(result.rows_affected())
 }
 
 /// Update a user by id.
@@ -234,7 +315,7 @@ pub async fn update_user(
         (Some(username), Some(email), Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, email = $2, password_hash = $3 WHERE id = $4 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1, email = $2, password_hash = $3 WHERE id = $4 RETURNING id, username, email, password_hash, created_at",
                 username,
                 email,
                 password_hash,
@@ -246,7 +327,7 @@ pub async fn update_user(
         (Some(username), Some(email), None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1, email = $2 WHERE id = $3 RETURNING id, username, email, password_hash, created_at",
                 username,
                 email,
                 user_id
@@ -257,7 +338,7 @@ pub async fn update_user(
         (Some(username), None, Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash, created_at",
                 username,
                 password_hash,
                 user_id
@@ -268,7 +349,7 @@ pub async fn update_user(
         (None, Some(email), Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET email = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash",
+                "UPDATE users SET email = $1, password_hash = $2 WHERE id = $3 RETURNING id, username, email, password_hash, created_at",
                 email,
                 password_hash,
                 user_id
@@ -279,7 +360,7 @@ pub async fn update_user(
         (Some(username), None, None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                "UPDATE users SET username = $1 WHERE id = $2 RETURNING id, username, email, password_hash, created_at",
                 username,
                 user_id
             )
@@ -289,7 +370,7 @@ pub async fn update_user(
         (None, Some(email), None) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                "UPDATE users SET email = $1 WHERE id = $2 RETURNING id, username, email, password_hash, created_at",
                 email,
                 user_id
             )
@@ -299,7 +380,7 @@ pub async fn update_user(
         (None, None, Some(password_hash)) => {
             sqlx::query_as!(
                 User,
-                "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username, email, password_hash",
+                "UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id, username, email, password_hash, created_at",
                 password_hash,
                 user_id
             )
@@ -337,15 +418,20 @@ pub async fn delete_user(client: &DbClient, user_id: i32) -> Result<(), Error> {
     Ok(())
 }
 
-/// Create a new session
+/// Create a new session owned by the given user.
 //
 /// Returns the created Session on success.
-pub async fn create_session(client: &DbClient, name: String) -> Result<Session, Error> {
-    info!("Creating session: {}", name);
+pub async fn create_session(
+    client: &DbClient,
+    name: String,
+    user_id: i32,
+) -> Result<Session, Error> {
+    info!("Creating session: {} for user {}", name, user_id);
     let session = sqlx::query_as!(
         Session,
-        "INSERT INTO sessions (name) VALUES ($1) RETURNING id, name",
+        "INSERT INTO sessions (name, user_id) VALUES ($1, $2) RETURNING id, name, user_id",
         name,
+        user_id,
     )
     .fetch_one(&**client)
     .await?;
@@ -354,17 +440,49 @@ pub async fn create_session(client: &DbClient, name: String) -> Result<Session, 
     Ok(session)
 }
 
-/// Get all sessions
+/// Get all sessions owned by the given user.
 //
 /// Returns a vector of Sessions on success.
-pub async fn get_sessions(client: &DbClient) -> Result<Vec<Session>, Error> {
-    info!("Retrieving sessions...");
-    let sessions = sqlx::query_as!(Session, "SELECT id, name FROM sessions")
-        .fetch_all(&**client)
-        .await?;
+pub async fn get_sessions(client: &DbClient, user_id: i32) -> Result<Vec<Session>, Error> {
+    info!("Retrieving sessions for user {}...", user_id);
+    let sessions = sqlx::query_as!(
+        Session,
+        "SELECT id, name, user_id FROM sessions WHERE user_id = $1",
+        user_id
+    )
+    .fetch_all(&**client)
+    .await?;
     info!("Retrieved {} sessions.", sessions.len());
 
     Ok(sessions)
+}
+
+/// Checks that `session_id` exists and is owned by `user_id`. Every
+/// `/api/sessions/:session_id/...` handler calls this before touching the
+/// session's data, so ownership is enforced in one place instead of being
+/// repeated per handler.
+///
+/// Returns `Err(Error::RowNotFound)` both when the session doesn't exist and
+/// when it belongs to someone else — callers map that to a 404, never a
+/// 403, so a caller can't use the response to tell the two cases apart and
+/// enumerate other users' session ids.
+pub async fn require_session_owner(
+    client: &DbClient,
+    session_id: i32,
+    user_id: i32,
+) -> Result<(), Error> {
+    let found = sqlx::query!(
+        "SELECT id FROM sessions WHERE id = $1 AND user_id = $2",
+        session_id,
+        user_id
+    )
+    .fetch_optional(&**client)
+    .await?;
+
+    match found {
+        Some(_) => Ok(()),
+        None => Err(Error::RowNotFound),
+    }
 }
 
 /// Delete a session by id.
@@ -1015,25 +1133,36 @@ pub fn parse_eeg_csv(csv_bytes: &[u8]) -> Result<EEGDataPacket, EegImportError> 
     })
 }
 
+/// Outcome of a successful import.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ImportSummary {
+    /// Data rows read from the file.
+    pub rows_read: usize,
+    /// Rows actually written; the rest already existed in the session.
+    pub rows_inserted: u64,
+}
+
 /// Validate and import an EEG CSV for `session_id`. See `parse_eeg_csv` for the
 /// accepted format. The file is validated completely before anything is
-/// written, so an invalid file imports nothing.
+/// written, and all inserts run in one transaction, so a file is either
+/// imported in full or not at all.
 ///
 /// Rows whose `time` already exists in the session are skipped (existing data
-/// is never overwritten).
-///
-/// Returns the number of data rows read from the file.
+/// is never overwritten); `ImportSummary` reports how many were skipped.
 pub async fn import_eeg_data_from_csv(
     client: &DbClient,
     session_id: i32,
     csv_bytes: &[u8],
-) -> Result<usize, EegImportError> {
+) -> Result<ImportSummary, EegImportError> {
     info!("Importing EEG data for session id {} from CSV", session_id);
 
     let packet = parse_eeg_csv(csv_bytes)?;
     let n_rows = packet.timestamps.len();
 
-    // Insert in chunks to stay under Postgres' bind-parameter limit.
+    // Insert in chunks to stay under Postgres' bind-parameter limit. The
+    // transaction rolls back automatically if any chunk fails (or on drop).
+    let mut tx = client.begin().await?;
+    let mut rows_inserted = 0;
     for start in (0..n_rows).step_by(INSERT_CHUNK_ROWS) {
         let end = (start + INSERT_CHUNK_ROWS).min(n_rows);
         let chunk = EEGDataPacket {
@@ -1045,10 +1174,14 @@ pub async fn import_eeg_data_from_csv(
                 .collect(),
             ml_result: None,
         };
-        insert_batch_eeg(client, session_id, &chunk).await?;
+        rows_inserted += insert_eeg_rows(&mut *tx, session_id, &chunk).await?;
     }
+    tx.commit().await?;
 
-    Ok(n_rows)
+    Ok(ImportSummary {
+        rows_read: n_rows,
+        rows_inserted,
+    })
 }
 
 #[cfg(test)]

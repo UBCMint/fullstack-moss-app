@@ -1,3 +1,4 @@
+import { apiFetch as fetch } from '@/lib/api-client';
 import { UserFacingError } from '@/lib/errors';
 
 /**
@@ -113,10 +114,17 @@ export function downloadCSV(csvContent: string, sessionId: number): void {
 /**
  * Import EEG data from a raw CSV string into the given session.
  */
+export type ImportResult = {
+    /** Data rows in the uploaded file. */
+    rowsRead: number;
+    /** Rows actually written; the rest already existed in the session. */
+    rowsInserted: number;
+};
+
 export async function importEEGData(
     sessionId: number,
     csvText: string
-): Promise<number> {
+): Promise<ImportResult> {
     const response = await fetch(`/api/sessions/${sessionId}/eeg_data/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'text/csv' },
@@ -154,5 +162,11 @@ export async function importEEGData(
     }
 
     const result = await response.json().catch(() => ({}));
-    return typeof result.rows_read === 'number' ? result.rows_read : 0;
+    const rowsRead =
+        typeof result.rows_read === 'number' ? result.rows_read : 0;
+    const rowsInserted =
+        typeof result.rows_inserted === 'number'
+            ? result.rows_inserted
+            : rowsRead;
+    return { rowsRead, rowsInserted };
 }

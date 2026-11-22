@@ -91,10 +91,14 @@ export default function ImportDialog({
         setIsImporting(true);
         try {
             const csvText = await file.text();
-            const rows = await importEEGData(sessionId, csvText);
+            const { rowsRead, rowsInserted } = await importEEGData(
+                sessionId,
+                csvText
+            );
+            const skipped = rowsRead - rowsInserted;
             notifications.success({
                 title: 'EEG data imported successfully',
-                description: `${rows > 0 ? `${rows.toLocaleString()} rows from ` : ''}${file.name} loaded into session ${sessionId}. Rows whose time already exists in the session are skipped.`,
+                description: `${rowsInserted.toLocaleString()} rows from ${file.name} loaded into session ${sessionId}.${skipped > 0 ? ` ${skipped.toLocaleString()} rows were skipped because their time already exists in the session.` : ''}`,
             });
             onImportSuccess?.();
             onOpenChange(false);
