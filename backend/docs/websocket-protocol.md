@@ -246,8 +246,3 @@ code and then removed from this list alongside any update to this document.
    `{"error": "...", "code": "..."}`) would let the frontend show why a session isn't streaming.
 6. Runtime pipeline updates are not supported. `lsl.rs` has a `watch` channel set up for
    window config changes, but its sender is dropped right away, so nothing can push an update. The frontend currently re-sends the payload every time the graph changes, but those updates do nothing until the next connection.
-7. **The frontend still reads the old `signals` field.** `normalizeBatch` in
-   `frontend/context/WebSocketContext.tsx` hasn't been moved to `eeg`/`emg` yet, so live
-   batches fail to parse there until it is. Likewise the frontend's CSV parsers
-   (`label-node.tsx`, `signal-graph-node.tsx`) look for `channel1..4`/`ch1..4` headers and the
-   `EegDataRow` type in `lib/session-api.ts` still has `channel1..4`.
