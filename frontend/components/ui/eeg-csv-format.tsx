@@ -43,7 +43,9 @@ export default function CsvFormatSummary({
                     {isImport
                         ? 'First line is the header, exactly: '
                         : 'Header: '}
-                    <code className="font-mono">{EEG_CSV_HEADER}</code>
+                    <code className="font-mono break-all">
+                        {EEG_CSV_HEADER}
+                    </code>
                     {isImport &&
                         ' (columns matched by name, any letter case or order)'}
                     .
@@ -89,9 +91,13 @@ export default function CsvFormatSummary({
                 )}
             </ul>
             <p className="font-semibold text-gray-800 mb-1">Example</p>
-            <pre className="bg-white border border-gray-200 rounded px-2 py-1.5 font-mono overflow-x-auto">
-                {example}
-            </pre>
+            {/* w-0 min-w-full: the long 12-channel rows scroll inside the box
+                instead of widening the dialog. */}
+            <div className="w-0 min-w-full">
+                <pre className="bg-white border border-gray-200 rounded px-2 py-1.5 font-mono overflow-x-auto">
+                    {example}
+                </pre>
+            </div>
             {isImport && (
                 <Button
                     type="button"
