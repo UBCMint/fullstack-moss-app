@@ -11,7 +11,22 @@ import {
 } from '@/components/nodes/label-node/label-timeline-panel';
 import { saveTimeLabels, getTimeLabels } from '@/lib/session-api';
 import { exportEEGData } from '@/lib/eeg-api';
+import { parseEegCsv } from '@/lib/eeg-csv';
+import type { DataPoint } from '@/lib/channels';
 import { useNotifications } from '@/components/notifications';
+
+// The timeline graph still plots 4 traces: the first four EEG channels.
+function toLabelGraphPoint(point: DataPoint, id: string): LabelGraphPoint {
+    const [signal1 = 0, signal2 = 0, signal3 = 0, signal4 = 0] = point.eeg;
+    return {
+        id,
+        time: point.rawTime ?? point.time,
+        signal1,
+        signal2,
+        signal3,
+        signal4,
+    };
+}
 
 interface LabelNodeProps {
     id?: string;
@@ -413,38 +428,9 @@ export default function LabelNode({ id, selected }: LabelNodeProps) {
                     start_time: start,
                     end_time: end,
                 });
-                const lines = csv.trim().split('\n');
-                if (lines.length < 2) return [];
-                const header = lines[0]
-                    .split(',')
-                    .map((h) => h.trim().toLowerCase());
-                const timeIdx = header.findIndex(
-                    (h) => h.includes('time') || h === 'timestamp'
+                return parseEegCsv(csv).points.map((point, i) =>
+                    toLabelGraphPoint(point, `fetched-${i}`)
                 );
-                const chIdxs = [0, 1, 2, 3].map((n) => {
-                    const pats = [`ch${n + 1}`, `channel${n + 1}`];
-                    return header.findIndex((h) => pats.includes(h));
-                });
-                if (timeIdx === -1 || chIdxs.includes(-1)) return [];
-                return lines.slice(1).flatMap((line, i) => {
-                    const cols = line
-                        .trim()
-                        .split(',')
-                        .map((c) => c.trim());
-                    if (!cols[timeIdx]) return [];
-                    const vals = chIdxs.map((idx) => parseFloat(cols[idx]));
-                    if (vals.some((v) => isNaN(v))) return [];
-                    return [
-                        {
-                            id: `fetched-${i}`,
-                            time: cols[timeIdx],
-                            signal1: vals[0],
-                            signal2: vals[1],
-                            signal3: vals[2],
-                            signal4: vals[3],
-                        },
-                    ];
-                });
             } catch {
                 return [];
             }
@@ -488,16 +474,9 @@ export default function LabelNode({ id, selected }: LabelNodeProps) {
 
     const graphData = React.useMemo<LabelGraphPoint[]>(() => {
         return renderData
-            .map((item, index: number) => {
-                return {
-                    id: `graph-point-${index}`,
-                    time: item.rawTime ?? item.time,
-                    signal1: Number(item.signal1 ?? 0),
-                    signal2: Number(item.signal2 ?? 0),
-                    signal3: Number(item.signal3 ?? 0),
-                    signal4: Number(item.signal4 ?? 0),
-                };
-            })
+            .map((item, index: number) =>
+                toLabelGraphPoint(item, `graph-point-${index}`)
+            )
             .slice(-300);
     }, [renderData]);
 
