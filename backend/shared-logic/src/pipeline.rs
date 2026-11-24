@@ -11,6 +11,8 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+use crate::signal_processing::quality::SignalKind;
+
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Pipeline {
     #[serde(default)]
@@ -47,6 +49,10 @@ pub enum Node {
     #[serde(rename = "resample")]
     Resample(ResampleConfig),
 
+    // passes data through unchanged and reports its quality
+    #[serde(rename = "signal_quality")]
+    SignalQuality(QualityConfig),
+
     // passes data through unchanged for now
     #[serde(rename = "artifact")]
     Artifact(serde_json::Value),
@@ -68,6 +74,7 @@ impl Node {
             Node::Window(_) => "window",
             Node::Preprocessing(_) => "preprocessing",
             Node::Resample(_) => "resample",
+            Node::SignalQuality(_) => "signal_quality",
             Node::Artifact(_) => "artifact",
             Node::Label(_) => "label",
             Node::ML(_) => "ml",
@@ -136,6 +143,12 @@ pub struct ResampleConfig {
     pub target_hz: Option<f64>,
 }
 
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
+#[serde(default)]
+pub struct QualityConfig {
+    pub signal: SignalKind,
+}
+
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(default)]
 pub struct MLConfig {
@@ -194,6 +207,8 @@ pub struct Stage {
 pub enum StageKind {
     Filter(PreprocessingConfig),
     Resample(ResampleConfig),
+    // data passes through unchanged; the quality of what reaches it is reported
+    Quality(QualityConfig),
     Passthrough(&'static str),
 }
 
@@ -421,6 +436,10 @@ impl Pipeline {
                     node_id: child.to_string(),
                     kind: StageKind::Resample(config.clone()),
                 }),
+                Node::SignalQuality(config) => plan.stages.push(Stage {
+                    node_id: child.to_string(),
+                    kind: StageKind::Quality(config.clone()),
+                }),
                 node @ Node::Artifact(_) => plan.stages.push(Stage {
                     node_id: child.to_string(),
                     kind: StageKind::Passthrough(node.type_name()),
@@ -465,6 +484,12 @@ fn display_name(node: &Node) -> &'static str {
         Node::Window(_) => "Window",
         Node::Preprocessing(_) => "Filter",
         Node::Resample(_) => "Resampling",
+        Node::SignalQuality(QualityConfig {
+            signal: SignalKind::Eeg,
+        }) => "EEG Signal Quality",
+        Node::SignalQuality(QualityConfig {
+            signal: SignalKind::Emg,
+        }) => "EMG Signal Quality",
         Node::Artifact(_) => "Artifact",
         Node::Label(_) => "Label",
         Node::ML(_) => "ML",
@@ -651,6 +676,34 @@ mod tests {
             "edges": edges(&[("s", "l"), ("l", "f")])
         }));
         assert_eq!(e.node_id.as_deref(), Some("f"));
+    }
+
+    #[test]
+    fn quality_nodes_are_passthrough_stages_in_the_chain() {
+        let p = pipeline(json!({
+            "nodes": [
+                {"id": "s", "type": "source", "config": {}},
+                {"id": "w", "type": "window", "config": {}},
+                {"id": "qe", "type": "signal_quality", "config": {"signal": "eeg"}},
+                {"id": "qm", "type": "signal_quality", "config": {"signal": "emg"}},
+                {"id": "f", "type": "preprocessing", "config": {}}
+            ],
+            "edges": edges(&[("s", "w"), ("w", "qe"), ("qe", "qm"), ("qm", "f")])
+        }));
+        let plan = p.compile().unwrap();
+        let kinds: Vec<_> = plan.stages.iter().map(|s| &s.kind).collect();
+        assert_eq!(
+            kinds[..2],
+            [
+                &StageKind::Quality(QualityConfig {
+                    signal: SignalKind::Eeg
+                }),
+                &StageKind::Quality(QualityConfig {
+                    signal: SignalKind::Emg
+                })
+            ]
+        );
+        assert!(matches!(kinds[2], StageKind::Filter(_)));
     }
 
     #[test]
