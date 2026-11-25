@@ -1130,6 +1130,7 @@ pub fn parse_eeg_csv(csv_bytes: &[u8]) -> Result<EEGDataPacket, EegImportError> 
             c4.into_iter().map(f64::from).collect(),
         ],
         ml_result: None,
+        quality: Vec::new(),
     })
 }
 
@@ -1173,6 +1174,7 @@ pub async fn import_eeg_data_from_csv(
                 .map(|c| c[start..end].to_vec())
                 .collect(),
             ml_result: None,
+            quality: Vec::new(),
         };
         rows_inserted += insert_eeg_rows(&mut *tx, session_id, &chunk).await?;
     }

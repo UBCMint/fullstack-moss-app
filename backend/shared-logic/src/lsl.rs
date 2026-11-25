@@ -9,8 +9,9 @@
 //! - builds the [`ProcessingChain`] for that rate (cutoffs that don't fit the rate are
 //!   reported here),
 //! - collects 4-channel samples (fewer channels: dropped; extra channels: ignored), converts
-//!   LSL clock time to UTC, and every `chunk_size` samples runs the chain, runs ML on the
-//!   ML node's input, and publishes a [`SessionBatch`],
+//!   LSL clock time to UTC, and every `chunk_size` samples runs the chain, rates the signal
+//!   reaching each Signal Quality node, runs ML on the ML node's input, and publishes a
+//!   [`SessionBatch`],
 //! - on cancellation, publishes whatever samples are left as a final, shorter batch.
 //!
 //! Setup failures come back as a [`ClientError`] for the caller to send to the client.
@@ -25,10 +26,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::Sender;
 use tokio_util::sync::CancellationToken;
 
-use crate::pipeline::ProcessingPlan;
+use crate::pipeline::{ProcessingPlan, StageKind};
 use crate::protocol::{ClientError, ErrorCode};
 use crate::signal_processing::chain::{Block, ProcessingChain};
 use crate::signal_processing::pipeline_gateway::{MlRequest, PipelineGateway, PipelineOutput};
+use crate::signal_processing::quality::{self, QualityLevel, QualityReport, SignalKind};
 
 pub const N_CHANNELS: usize = 4;
 
@@ -43,6 +45,9 @@ pub struct EEGDataPacket {
     pub timestamps: Vec<DateTime<Utc>>,
     pub signals: Vec<Vec<f64>>,
     pub ml_result: Option<PipelineOutput>,
+    // one per Signal Quality node; the safety gate (40A) reads these too
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub quality: Vec<QualityReport>,
 }
 
 // raw (no overlap) goes to the db, processed goes to the client
@@ -50,6 +55,48 @@ pub struct EEGDataPacket {
 pub struct SessionBatch {
     pub raw: EEGDataPacket,
     pub processed: EEGDataPacket,
+}
+
+struct QualityTap {
+    node_id: String,
+    signal: SignalKind,
+    // the node rates outputs[stage]: what reaches it
+    stage: usize,
+    sfreq: f64,
+    last_level: Option<QualityLevel>,
+}
+
+impl QualityTap {
+    fn assess(&mut self, outputs: &[Block]) -> Option<QualityReport> {
+        let input = &outputs[self.stage];
+        let report = quality::assess(
+            &self.node_id,
+            self.signal,
+            &input.signals,
+            self.signal.channels(),
+            self.sfreq,
+        )?;
+        // log changes, not every window, so failures can be counted without flooding the log
+        if self.last_level != Some(report.level) {
+            let failing: Vec<_> = report
+                .failing_channels()
+                .map(|c| format!("ch{} {:?}", c.channel, c.issues))
+                .collect();
+            if report.level == QualityLevel::Strong {
+                info!(
+                    "{:?} quality ({}): {:?}",
+                    self.signal, self.node_id, report.level
+                );
+            } else {
+                warn!(
+                    "{:?} quality ({}): {:?} {:?}",
+                    self.signal, self.node_id, report.level, failing
+                );
+            }
+            self.last_level = Some(report.level);
+        }
+        Some(report)
+    }
 }
 
 struct MlRunner {
@@ -94,6 +141,21 @@ pub async fn receive_eeg(
         };
 
         let chain = ProcessingChain::new(&plan, sample_rate, N_CHANNELS)?;
+        let quality_taps = plan
+            .stages
+            .iter()
+            .enumerate()
+            .filter_map(|(i, stage)| match &stage.kind {
+                StageKind::Quality(config) => Some(QualityTap {
+                    node_id: stage.node_id.clone(),
+                    signal: config.signal,
+                    stage: i,
+                    sfreq: chain.rate_after(i),
+                    last_level: None,
+                }),
+                _ => None,
+            })
+            .collect();
         let ml = gateway
             .zip(plan.ml.as_ref())
             .map(|(gateway, tap)| MlRunner {
@@ -108,6 +170,7 @@ pub async fn receive_eeg(
             cancel_token,
             plan.window.chunk_size,
             chain,
+            quality_taps,
             ml,
         ))
     });
@@ -189,6 +252,7 @@ fn run_eeg_collection(
     cancel_token: CancellationToken,
     chunk_size: usize,
     mut chain: ProcessingChain,
+    mut quality_taps: Vec<QualityTap>,
     ml: Option<MlRunner>,
 ) -> (u32, u32) {
     let mut count = 0;
@@ -201,7 +265,7 @@ fn run_eeg_collection(
 
     let mut publish = |pending: &mut Block, count: &mut u32, drop: &mut u32| {
         let window = std::mem::replace(pending, Block::empty(N_CHANNELS));
-        match process_and_send(window, &mut chain, ml.as_ref(), &tx) {
+        match process_and_send(window, &mut chain, &mut quality_taps, ml.as_ref(), &tx) {
             Ok(()) => *count += 1,
             Err(e) => {
                 error!("Process/send error: {}", e);
@@ -278,6 +342,7 @@ fn accumulate_sample(sample: &[f32], timestamp: f64, pending: &mut Block) -> Res
 fn process_and_send(
     window: Block,
     chain: &mut ProcessingChain,
+    quality_taps: &mut [QualityTap],
     ml: Option<&MlRunner>,
     tx: &Sender<Arc<SessionBatch>>,
 ) -> Result<(), String> {
@@ -286,6 +351,10 @@ fn process_and_send(
     }
 
     let mut outputs = chain.process(window.clone());
+    let quality = quality_taps
+        .iter_mut()
+        .filter_map(|tap| tap.assess(&outputs))
+        .collect();
 
     let ml_result = ml.and_then(|ml| {
         let input = &outputs[ml.after_stage];
@@ -319,11 +388,13 @@ fn process_and_send(
             timestamps: window.timestamps,
             signals: window.signals,
             ml_result: None,
+            quality: Vec::new(),
         },
         processed: EEGDataPacket {
             timestamps: processed.timestamps,
             signals: processed.signals,
             ml_result,
+            quality,
         },
     };
 
