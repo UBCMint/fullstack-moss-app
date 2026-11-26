@@ -8,6 +8,8 @@ const enabledNodeTypes = new Set([
     'window-node',
     'filter-node',
     'resampling-node',
+    'eeg-quality-node',
+    'emg-quality-node',
     'machine-learning-node',
     'signal-graph-node',
     'label-node',

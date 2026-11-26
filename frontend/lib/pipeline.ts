@@ -35,3 +35,15 @@ export const isPipelineServerError = (
     value !== null &&
     (value as { type?: unknown }).type === 'error' &&
     typeof (value as { message?: unknown }).message === 'string';
+
+// one per Signal Quality node in each data batch (backend/docs/websocket-protocol.md)
+export type QualitySignal = 'eeg' | 'emg';
+export type QualityLevel = 'strong' | 'moderate' | 'poor' | 'no_signal';
+export type ChannelIssue = 'empty' | 'flatline' | 'railing' | 'line_noise';
+
+export type QualityReport = {
+    node_id: string;
+    signal: QualitySignal;
+    level: QualityLevel;
+    channels: { channel: number; issues: ChannelIssue[] }[];
+};
