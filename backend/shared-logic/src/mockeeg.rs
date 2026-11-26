@@ -5,6 +5,10 @@
 //! in `[0, 100)`, pushed about every 4 ms, so the real rate is a little under 250 Hz. It runs
 //! until the cancellation token fires.
 //!
+//! Set `MOCK_EEG_FLAT_CHANNEL` to a channel index (0-3) to hold that channel at a constant
+//! value, like an unplugged electrode. The EEG Signal Quality node should then show Poor and
+//! name that channel.
+//!
 //! It is started by `bc::start_broadcast` for every connection, and `lsl::receive_eeg` picks
 //! the first `EEG` stream it finds. So a real `muselsl` stream and the mock (or several
 //! connections' mocks) can be mixed up. The loop uses `thread::sleep`, which blocks a tokio
@@ -32,6 +36,13 @@ pub async fn generate_mock_data(
     // Create outlet
     let outlet = StreamOutlet::new(&stream_info, 0, 360)?; // 0 = default chunk size, 360 = max buffered
 
+    let flat_channel: Option<usize> = std::env::var("MOCK_EEG_FLAT_CHANNEL")
+        .ok()
+        .and_then(|v| v.trim().parse().ok());
+    if let Some(c) = flat_channel {
+        info!("Mock EEG: channel {} is flat (MOCK_EEG_FLAT_CHANNEL)", c);
+    }
+
     println!("Stream created. Sending data...");
 
     // Send data in a loop
@@ -43,7 +54,13 @@ pub async fn generate_mock_data(
 
         // Create sample data (4 channels of float data)
         let sample_data: Vec<f32> = (0..4)
-            .map(|_| rand::thread_rng().gen_range(0.0..100.0))
+            .map(|c| {
+                if flat_channel == Some(c) {
+                    50.0
+                } else {
+                    rand::thread_rng().gen_range(0.0..100.0)
+                }
+            })
             .collect();
 
         // Send the sample
