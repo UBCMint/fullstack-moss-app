@@ -103,7 +103,20 @@ Each batch is one text frame holding a JSON-serialized `shared_logic::lsl::EEGDa
     [91.7, 55.5, "..."],
     [ 0.4, 67.9, "..."]
   ],
-  "ml_result": { "overall_label": "focused", "confidence": 0.85, "task": "focus" }
+  "ml_result": { "overall_label": "focused", "confidence": 0.85, "task": "focus" },
+  "quality": [
+    {
+      "node_id": "quality-1",
+      "signal": "eeg",
+      "level": "poor",
+      "channels": [
+        { "channel": 0, "issues": [] },
+        { "channel": 1, "issues": [] },
+        { "channel": 2, "issues": ["flatline"] },
+        { "channel": 3, "issues": [] }
+      ]
+    }
+  ]
 }
 ```
 
@@ -112,6 +125,7 @@ Each batch is one text frame holding a JSON-serialized `shared_logic::lsl::EEGDa
 | `timestamps` | string[] | RFC 3339 UTC with nanosecond precision (chrono `DateTime<Utc>`). This is the LSL sample time converted to wall-clock time. Length is `N`. |
 | `signals` | number[4][N] | **Channel-major**: `signals[c][i]` is channel `c` at `timestamps[i]`. There are always exactly 4 channels (Muse TP9, AF7, AF8, TP10 order when using a real headset). This is the output of the **last processing node** in the pipeline (raw if there are none). |
 | `ml_result` | object \| null | Output of the Python pipeline for this batch. It is `null` when the pipeline returned no classifier output or failed. See below. |
+| `quality` | object[] | One report per `signal_quality` node, in chain order. **Left out** when the pipeline has no quality node, or the batch is under 10 samples (too short to rate). See below. |
 
 `ml_result` fields (`PipelineOutput`):
 
@@ -120,6 +134,15 @@ Each batch is one text frame holding a JSON-serialized `shared_logic::lsl::EEGDa
 | `overall_label` | string | The predicted class label, e.g. `"focused"`. |
 | `confidence` | number | Usually 0–1. |
 | `task` | string | Which classification task produced the label, e.g. `"focus"`. |
+
+`quality` entries (`QualityReport`, rules in `pipeline-nodes.md`):
+
+| Field | Type | Notes |
+|---|---|---|
+| `node_id` | string | The `signal_quality` node this report is for. |
+| `signal` | `"eeg"` \| `"emg"` | Which channels were rated. |
+| `level` | `"strong"` \| `"moderate"` \| `"poor"` \| `"no_signal"` | Overall rating for this batch. |
+| `channels` | object[] | One per rated channel: `channel` (index into the stream) and `issues` (any of `"empty"`, `"flatline"`, `"railing"`, `"line_noise"`; empty when it passes). |
 
 Batch size `N`, with `r = rate at the end of the chain / stream rate` (`1` without a
 `resample` node):

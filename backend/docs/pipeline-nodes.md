@@ -79,8 +79,9 @@ window connected to the source, terminal outputs, no loops. The backend checks a
                      ┌───────── raw samples (no overlap) ───────────────► TimescaleDB
 LSL ──► window ──────┤
  (stream rate)       └──► stage 1 ──► stage 2 ──► … ──► stage n ──────────► websocket client
-                               │                                            (signals + ml_result)
-                               └──► ml node's input ──► Python manager ──► ml_result
+                               │                               (signals + ml_result + quality)
+                               ├──► ml node's input ──► Python manager ──► ml_result
+                               └──► each signal_quality node's input ──► quality report
 ```
 
 - The window node sets how many new samples make one batch. Each batch then runs through the
@@ -179,6 +180,51 @@ evenly spaced at the new rate. A batch can come out with one sample more or fewe
 
 Frontend: the resampling node's `Original rate` sends `null`, the presets send `200` or
 `256`, and `Custom` sends its whole-Hz value (1–256).
+
+---
+
+## `signal_quality`
+
+Rates the signal that reaches it, for the EEG Signal Quality and EMG Signal Quality nodes. It's
+a processing node, so it sits in the chain, but **it passes data through unchanged**. Put it
+before the filter so it sees what the electrodes send, line noise included.
+
+| Field | Type | Default | Meaning |
+|---|---|---|---|
+| `signal` | `"eeg"` \| `"emg"` | `"eeg"` | Which channels to rate (see below). |
+
+Every batch, each quality node adds a report to the packet's `quality` list (see
+`websocket-protocol.md`), except batches under 10 samples (such as the last one of a session),
+which are too short to rate. Each channel is checked for:
+
+| Issue | Rule | Same as Python |
+|---|---|---|
+| `empty` | No finite samples in the window. | ✓ |
+| `flatline` | Variance below 0.1 after removing the mean. | ✓ |
+| `railing` | Any sample more than 50 000 from the mean. | ✓ |
+| `line_noise` | Over 40% of the window's power in the bin nearest 60 Hz (Hann window, one-sided). Skipped when 60 Hz is at or above Nyquist. | ✓ (`welch` with one segment) |
+
+The thresholds are the ones in `check_eeg_quality_moss` (`signalProcessing.py`). The overall
+`level` is ours:
+
+- `strong`: every channel passes.
+- `moderate`: at most half the channels fail, and only from line noise.
+- `poor`: more than half fail, or any channel is empty, flat or railing.
+- `no_signal`: no channels for this signal in the stream, or all of them empty.
+
+**Still open:** Signals hasn't signed off the level rule or EMG-specific thresholds. The EMG
+node uses the EEG checks for now. Both live in `signal_processing/quality.rs`.
+
+**Channels:** `EEG_CHANNELS` and `EMG_CHANNELS` in `quality.rs` say which stream channels
+belong to which signal. Today's source is a 4-channel EEG headset, so EEG is `0..4` and EMG is
+empty (the EMG node always reports `no_signal`). Update both when the 8 EEG + 4 EMG source
+(31A) lands.
+
+Changes of level are logged (`info` for strong, `warn` otherwise, with the failing channels),
+so failures can be counted from the logs without one line per batch.
+
+To test without a headset, set `MOCK_EEG_FLAT_CHANNEL=<0-3>` on the websocket server: the mock
+holds that channel constant and the EEG node reports `poor` with that channel `flatline`.
 
 ---
 
