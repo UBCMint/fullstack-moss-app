@@ -60,6 +60,16 @@ export default function Sidebar() {
             help: 'Prepares recorded data for analysis by reducing unwanted noise or making adjustments to improve signal quality.',
             nodes: [
                 {
+                    id: 'eeg-quality-node',
+                    label: 'EEG Signal Quality',
+                    description: 'Check EEG electrode contact and noise',
+                },
+                {
+                    id: 'emg-quality-node',
+                    label: 'EMG Signal Quality',
+                    description: 'Check EMG sensor contact and noise',
+                },
+                {
                     id: 'resampling-node',
                     label: 'Resampling Node',
                     description: 'Resample EEG data to a target frequency',
