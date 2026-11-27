@@ -542,3 +542,36 @@ test('resampling at the original rate sends no target rate', () => {
     );
     assert.deepEqual(result.payload?.nodes[2].config, { target_hz: null });
 });
+
+test('EEG and EMG quality nodes are sent as signal_quality with their signal', () => {
+    const at = (id: string, type: string, x: number): Node => ({
+        id,
+        type,
+        position: { x, y: 0 },
+        data: {},
+    });
+    const nodes = [
+        source,
+        windowNode,
+        at('eeg', 'eeg-quality-node', 200),
+        at('emg', 'emg-quality-node', 300),
+    ];
+    const edges: Edge[] = [
+        connection,
+        { id: 'w-eeg', source: 'window', target: 'eeg' },
+        { id: 'eeg-emg', source: 'eeg', target: 'emg' },
+    ];
+    const result = preparePipelineStart(nodes, edges, 7);
+    assert.deepEqual(result.errors, []);
+    const sent = result.payload!.nodes.filter(
+        (n) => n.type === 'signal_quality'
+    );
+    assert.deepEqual(sent, [
+        { id: 'eeg', type: 'signal_quality', config: { signal: 'eeg' } },
+        { id: 'emg', type: 'signal_quality', config: { signal: 'emg' } },
+    ]);
+    assert.deepEqual(getNodeConnectionStatus('emg', nodes, edges), {
+        connected: true,
+        hint: null,
+    });
+});

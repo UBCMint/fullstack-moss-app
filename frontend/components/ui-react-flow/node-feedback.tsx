@@ -19,6 +19,8 @@ export const NodeIssuesContext = React.createContext<Record<string, string>>(
 const HINTED_NODE_TYPES = new Set([
     'filter-node',
     'resampling-node',
+    'eeg-quality-node',
+    'emg-quality-node',
     'signal-graph-node',
     'label-node',
 ]);

@@ -8,10 +8,18 @@ const typeMap: Record<string, string> = {
     'window-node': 'window',
     'filter-node': 'preprocessing',
     'resampling-node': 'resample',
+    'eeg-quality-node': 'signal_quality',
+    'emg-quality-node': 'signal_quality',
     'artifact-node': 'artifact',
     'label-node': 'label',
     'machine-learning-node': 'ml',
     'signal-graph-node': 'signal_graph',
+};
+
+// both quality nodes are one backend type; the config says which channels to rate
+const qualitySignal: Record<string, 'eeg' | 'emg'> = {
+    'eeg-quality-node': 'eeg',
+    'emg-quality-node': 'emg',
 };
 
 // allow for defaults of the filtering node to still be applied if user doesn't specify them in the UI
@@ -446,7 +454,10 @@ export const buildPipelinePayload = (
             return {
                 id: n.id,
                 type,
-                config: nodeConfig(type, (n.data ?? {}) as NodeData),
+                config:
+                    type === 'signal_quality'
+                        ? { signal: qualitySignal[n.type ?? ''] }
+                        : nodeConfig(type, (n.data ?? {}) as NodeData),
             };
         }),
         edges: edges

@@ -9,7 +9,11 @@ import React, {
     ReactNode,
 } from 'react';
 import { useGlobalContext } from './GlobalContext';
-import { isPipelineServerError, PipelinePayload } from '@/lib/pipeline';
+import {
+    isPipelineServerError,
+    PipelinePayload,
+    QualityReport,
+} from '@/lib/pipeline';
 
 export type DataPoint = {
     time: string;
@@ -21,9 +25,12 @@ export type DataPoint = {
 };
 
 type Subscriber = (points: DataPoint[]) => void;
+type QualitySubscriber = (reports: QualityReport[]) => void;
 
 type WebSocketContextType = {
     subscribe: (fn: Subscriber) => () => void;
+    /** Quality reports from each batch, one per Signal Quality node. */
+    subscribeQuality: (fn: QualitySubscriber) => () => void;
     startPipeline: (payload: PipelinePayload) => void;
 };
 
@@ -44,6 +51,7 @@ function formatTimestamp(raw: unknown): string {
 interface WebSocketBatch {
     timestamps: unknown[];
     signals: unknown[][];
+    quality?: QualityReport[];
 }
 
 function normalizeBatch(batch: WebSocketBatch): DataPoint[] {
@@ -63,12 +71,18 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     const wsRef = useRef<WebSocket | null>(null);
     const pipelinePayloadRef = useRef<PipelinePayload | null>(null);
     const subscribersRef = useRef<Set<Subscriber>>(new Set());
+    const qualitySubscribersRef = useRef<Set<QualitySubscriber>>(new Set());
     const closingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const isClosingGracefullyRef = useRef(false);
 
     const subscribe = useCallback((fn: Subscriber) => {
         subscribersRef.current.add(fn);
         return () => subscribersRef.current.delete(fn);
+    }, []);
+
+    const subscribeQuality = useCallback((fn: QualitySubscriber) => {
+        qualitySubscribersRef.current.add(fn);
+        return () => qualitySubscribersRef.current.delete(fn);
     }, []);
 
     // The caller supplies a freshly validated snapshot before opening the socket.
@@ -145,8 +159,13 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
                     setDataStreaming(false);
                     return;
                 }
-                const points = normalizeBatch(parsed as WebSocketBatch);
+                const batch = parsed as WebSocketBatch;
+                const points = normalizeBatch(batch);
                 subscribersRef.current.forEach((fn) => fn(points));
+                if (batch.quality?.length) {
+                    const reports = batch.quality;
+                    qualitySubscribersRef.current.forEach((fn) => fn(reports));
+                }
             }
         };
 
@@ -183,7 +202,9 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }, [dataStreaming, activeSessionId, setDataStreaming]);
 
     return (
-        <WebSocketContext.Provider value={{ subscribe, startPipeline }}>
+        <WebSocketContext.Provider
+            value={{ subscribe, subscribeQuality, startPipeline }}
+        >
             {children}
         </WebSocketContext.Provider>
     );

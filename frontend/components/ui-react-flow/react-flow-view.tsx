@@ -33,6 +33,10 @@ import ResamplingNode from '@/components/nodes/resampling-node/resampling-node';
 import SignalGraphNode from '@/components/nodes/signal-graph-node/signal-graph-node';
 import WindowNode from '@/components/nodes/window-node/window-node';
 import LabelNode from '@/components/nodes/label-node/label-node';
+import {
+    EegQualityNode,
+    EmgQualityNode,
+} from '@/components/nodes/signal-quality-node/signal-quality-node';
 
 import Sidebar from '@/components/ui-sidebar/sidebar';
 import {
@@ -60,6 +64,8 @@ const nodeTypes = Object.fromEntries(
         'artifact-node': ArtifactNode,
         'filter-node': FilterNode,
         'resampling-node': ResamplingNode,
+        'eeg-quality-node': EegQualityNode,
+        'emg-quality-node': EmgQualityNode,
         'machine-learning-node': MachineLearningNode,
         'signal-graph-node': SignalGraphNode,
         'window-node': WindowNode,

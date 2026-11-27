@@ -127,7 +127,7 @@ impl ProcessingChain {
                         .map_err(|e| PipelineError::at(&stage.node_id, e))?;
                     (RuntimeStage::Filter(filters), rate)
                 }
-                StageKind::Filter(_) | StageKind::Passthrough(_) => {
+                StageKind::Filter(_) | StageKind::Quality(_) | StageKind::Passthrough(_) => {
                     (RuntimeStage::Passthrough, rate)
                 }
                 StageKind::Resample(config) => match config.target_hz {
