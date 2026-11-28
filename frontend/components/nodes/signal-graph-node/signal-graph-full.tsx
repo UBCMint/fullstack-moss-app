@@ -12,7 +12,8 @@ import {
 import { useGlobalContext } from '@/context/GlobalContext';
 import { Button } from '@/components/ui/button';
 import ExportDialog from '@/components/ui/export-dialog';
-import { Download } from 'lucide-react';
+import { CircleAlert, Download } from 'lucide-react';
+import { getSignalGraphEmptyStateMessage } from './empty-state';
 import {
     Dialog,
     DialogContent,
@@ -57,6 +58,10 @@ export default function SignalGraphView({
 
     const timeStart = data.length > 0 ? data[0].time : null;
     const timeEnd = data.length > 0 ? data[data.length - 1].time : null;
+    const emptyStateMessage = getSignalGraphEmptyStateMessage(
+        data.length > 0,
+        dataStreaming
+    );
 
     const signals = [
         { key: 'signal1', colour: '#0000ff', name: 'Channel 1' },
@@ -100,14 +105,18 @@ export default function SignalGraphView({
 
             {/* ---- TOP HALF: CHART ---- */}
             <div className="flex flex-col h-[55vh] border bg-white shadow-lg rounded-2xl p-4 overflow-hidden relative">
-                {data.length === 0 && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center z-10 rounded-2xl bg-white">
-                        <p className="text-gray-400 font-medium text-sm">
-                            No data yet
-                        </p>
-                        <p className="text-gray-300 text-xs mt-1">
-                            Start the data stream to see signal data
-                        </p>
+                {emptyStateMessage && (
+                    <div
+                        role="status"
+                        aria-live="polite"
+                        className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-white"
+                    >
+                        <div className="flex items-center gap-3 text-[#2E7B75]">
+                            <CircleAlert className="h-7 w-7 shrink-0" />
+                            <p className="text-xl font-semibold">
+                                {emptyStateMessage}
+                            </p>
+                        </div>
                     </div>
                 )}
                 <ResponsiveContainer width="100%" height="100%">
